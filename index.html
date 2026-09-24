@@ -2263,11 +2263,17 @@ function fiAddFormHtml() {
   return `<div class="grid">\n    <div class="searchwrap" style="grid-column:span 3;"><input type="text" id="fi-add-search" placeholder="Search material or item name..."><div class="acdrop" id="fi-add-acdrop"></div></div>\n    ${qtyField}\n  </div>`;
 }
 
+// Picking a result from these search boxes adds the item straight away with
+// the Quantity (and Level) already in the form, so say so under the form.
+function qtyFirstNote(withLevel) {
+  return `<div class="capNote" style="margin-top:4px;">Set the Quantity${withLevel ? ' (and Level)' : ''} first: choosing an item from the search adds it right away.</div>`;
+}
+
 function renderFiForm(chr) {
   document.querySelectorAll('[data-fi-cat]').forEach(el => el.classList.toggle('active', el.dataset.fiCat === fiCategory));
   const formEl = document.getElementById('fi-add-form');
   if (!formEl) return;
-  formEl.innerHTML = fiAddFormHtml();
+  formEl.innerHTML = fiAddFormHtml() + qtyFirstNote(fiCategory === 'pt');
   bindFormState([ [ 'fi-qty', FI_FORM, 'qty' ], [ 'fi-add-lvl', FI_FORM, 'lvl' ], [ 'fi-add-unrevealed', FI_FORM, 'unrevealed' ], [ 'fi-add-cooked', FI_FORM, 'cooked' ] ]);
   const catType = fiCategory === 'pt' ? 'pt' : fiCategory === 'bp' ? 'bp' : fiCategory === 'msr' ? 'msr' : fiCategory === 'bst' ? 'bst' : 'item';
   wireAutocomplete(document.getElementById('fi-add-search'), document.getElementById('fi-add-acdrop'), catType, rec => {
@@ -3996,7 +4002,7 @@ function resizeStorageBox(target) {
 
 function renderSbForm() {
   document.querySelectorAll('[data-sb-cat]').forEach(el => el.classList.toggle('active', el.dataset.sbCat === sbCategory));
-  document.getElementById('sb-add-form').innerHTML = sbAddFormHtml();
+  document.getElementById('sb-add-form').innerHTML = sbAddFormHtml() + qtyFirstNote(sbCategory === 'pt');
   bindFormState([ [ 'sb-qty', SB_FORM, 'qty' ], [ 'sb-add-lvl', SB_FORM, 'lvl' ], [ 'sb-add-unrevealed', SB_FORM, 'unrevealed' ], [ 'sb-add-cooked', SB_FORM, 'cooked' ] ]);
   const addSearch = document.getElementById('sb-add-search');
   const catType = sbCategory === 'pt' ? 'pt' : sbCategory === 'bp' ? 'bp' : sbCategory === 'msr' ? 'msr' : sbCategory === 'bst' ? 'bst' : 'item';
@@ -4287,8 +4293,8 @@ function wireRewardBox() {
 }
 
 function renderRbForm() {
-  document.getElementById('rb-add-form').innerHTML = rbAddFormHtml();
   const isSearchType = [ 'ITEM', 'BP', 'MUSHROOM', 'BEAST', 'SKILL', 'PT' ].includes(rbType);
+  document.getElementById('rb-add-form').innerHTML = rbAddFormHtml() + (isSearchType ? qtyFirstNote(false) : '');
   bindFormState([ [ 'rb-num', RB_FORM, isSearchType ? 'searchNum' : 'amountNum' ], [ 'rb-add-unrevealed', RB_FORM, 'unrevealed' ] ]);
   const searchCat = rbType === 'ITEM' ? 'item' : rbType === 'BP' ? 'bp' : rbType === 'MUSHROOM' ? 'msr' : rbType === 'BEAST' ? 'bst' : rbType === 'SKILL' ? 'skl' : rbType === 'PT' ? 'pt' : null;
   if (searchCat) {
