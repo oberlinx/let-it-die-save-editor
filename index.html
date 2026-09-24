@@ -2342,8 +2342,11 @@ function newFighterRecord(name, body) {
 // Deleting a fighter, as the game's own delete does it (before/after saves):
 // the fighter record and its bodyuser row go, its hanger's cid becomes "",
 // its death bag becomes {}, every item it carried is deleted (parts,
-// mushrooms, beasts, items), equipped decals go, and
-// playlog.fighter.destory_fighter goes up by 1. The fighter you're playing
+// mushrooms, beasts, items), equipped decals come off (premium decals go
+// back to the decal stock +1, normal ones are lost), and
+// playlog.fighter.destory_fighter goes up by 1. The game also takes some
+// rank points and gives SPLithium; the amounts aren't known, so those are
+// left alone. The fighter you're playing
 // (USE), defense fighters (GUARD), DUMMY fighters and kidnapped ones are not
 // deletable here.
 let FIGHTER_DELETES = { root: null, cids: new Set, eids: new Set };
@@ -2368,6 +2371,17 @@ function deleteFighter(c) {
   SAVE.soul.chrs = SAVE.soul.chrs.filter(x => x !== c);
   for (const s of arr(SAVE.soul.chrslots)) if (s && s.cid === c.cid) s.cid = '';
   if (existed) {
+    // only decals the save itself had on this fighter (the editor's own
+    // equip doesn't take from stock, so those aren't given back)
+    const rawEq = arr(RAW_SAV_ROOT.soul && RAW_SAV_ROOT.soul.skl && RAW_SAV_ROOT.soul.skl.eqskl && RAW_SAV_ROOT.soul.skl.eqskl[RAW_SAV_MAIN_UID]).filter(e => e.cid === c.cid);
+    const still = new Set(arr(c.eqskls).map(e => e.id || e.sklid));
+    SAVE.soul.psskls = arr(SAVE.soul.psskls);
+    for (const e of rawEq) {
+      if (!still.has(e.sklid) || !(SKL_INDEX[e.sklid] && Number(SKL_INDEX[e.sklid].premium) === 1)) continue;
+      let st = SAVE.soul.psskls.find(x => x.id === e.sklid);
+      if (!st) SAVE.soul.psskls.push(st = { id: e.sklid, lvl: 1, cnt: 0, is_checked: 1 });
+      st.cnt = Math.min((st.cnt || 0) + 1, DECAL_CAP);
+    }
     const pl = SAVE.playlog && SAVE.playlog[0];
     if (pl && pl.fighter && typeof pl.fighter.destory_fighter === 'number') pl.fighter.destory_fighter++;
   }
@@ -2531,7 +2545,7 @@ function wireCharacters() {
     const why = fighterDeleteBlock(c);
     if (why) { toast(why, true); return; }
     const n = fighterItemCount(c) + arr(c.eqskls).length;
-    if (!confirm(`Delete ${c.name || 'this fighter'}?\n\nLike the game's own delete, everything they carry is deleted too (${fighterItemCount(c)} item${fighterItemCount(c) === 1 ? '' : 's'}) and their hanger becomes empty. You can undo by reloading the save before you download.`)) return;
+    if (!confirm(`Delete ${c.name || 'this fighter'}?\n\nLike the game's own delete, everything they carry is deleted too (${fighterItemCount(c)} item${fighterItemCount(c) === 1 ? '' : 's'}), premium decals go back to your decal stock, normal decals are lost, and their hanger becomes empty. You can undo by reloading the save before you download.`)) return;
     deleteFighter(c);
     runSaveCheck();
     renderAll();
