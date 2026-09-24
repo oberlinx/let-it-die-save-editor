@@ -2574,7 +2574,7 @@ function wireAutocomplete(input, dropEl, category, onPick, ptType) {
 }
 
 function blockBlueprints() {
-  return `<section class="block">\n    <div class="block-head">\n      <div><div class="eyebrow">Chokufunsha</div><h2>Research</h2></div>\n    </div>\n    <div class="block-body">\n      <div class="toolbar">\n        <input type="text" id="bp-filter" placeholder="Filter by name..." style="flex:1; max-width:320px; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);">\n        <button class="subtle" id="bp-max-all">Max all visible research</button>\n        <button class="subtle" id="bp-plus5-all">Set all visible research to 5</button>\n        <button class="subtle" id="bp-remove-all">Remove all</button>\n        <div class="count" id="bp-count"></div>\n      </div>\n      <div id="bp-suspicious-summary" style="font-size:12px; color:var(--warn); margin-bottom:8px;"></div>\n      <div class="tabbar" id="bp-subtabs" style="margin-bottom:12px;"></div>\n      <div id="bp-slot-content"></div>\n      ${stampBlockHtml()}\n    </div>\n  </section>`;
+  return `<section class="block">\n    <div class="block-head">\n      <div><div class="eyebrow">Chokufunsha</div><h2>Research</h2></div>\n    </div>\n    <div class="block-body">\n      <div class="toolbar">\n        <input type="text" id="bp-filter" placeholder="Filter by name..." style="flex:1; max-width:320px; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);">\n        <button class="subtle" id="bp-max-all">Max all visible research</button>\n        <button class="subtle" id="bp-plus5-all" title="In-game +5. Normal parts max out at +4; Uncap parts get +5. Earlier parts in the same chain are maxed.">Set all visible research to +5</button>\n        <button class="subtle" id="bp-remove-all">Remove all</button>\n        <div class="count" id="bp-count"></div>\n      </div>\n      <div id="bp-suspicious-summary" style="font-size:12px; color:var(--warn); margin-bottom:8px;"></div>\n      <div class="tabbar" id="bp-subtabs" style="margin-bottom:12px;"></div>\n      <div id="bp-slot-content"></div>\n      ${stampBlockHtml()}\n    </div>\n  </section>`;
 }
 
 function partFamily(p) {
@@ -2683,8 +2683,62 @@ function sortByChainOrder(list) {
   return result;
 }
 
+// The game keeps a "what can I research next" marker next to the FINISHED
+// ladder of each blueprint (seen in real saves):
+//   - not maxed yet : one LEVELUP entry at lvl = top + 1 (before = itself, top)
+//   - maxed         : no marker; instead the NEXT part in the chain gets a
+//                     REMODEL entry at lvl 1 (before = this part, its max)
+// Without these the game shows the research as finished and won't let you
+// upgrade it. This rebuilds the markers for every blueprint from the
+// FINISHED entries. It is only run after the editor changes research.
+function normalizeResearchMarkers(research) {
+  const MARKERS = new Set([ 'LEVELUP', 'REMODEL' ]);
+  const byPt = new Map;
+  for (const r of research) {
+    if (!byPt.has(r.ptid)) byPt.set(r.ptid, []);
+    byPt.get(r.ptid).push(r);
+  }
+  const topOf = ptid => {
+    let t = 0;
+    for (const r of byPt.get(ptid) || []) if (r.research_type === 'FINISHED' && r.lvl > t) t = r.lvl;
+    return t;
+  };
+  const researchable = new Set((AP.partresearch || []).map(p => p.ptid));
+  const want = new Map;
+  for (const ptid of researchable) {
+    const rec = PT_INDEX[ptid];
+    if (!rec) continue;
+    const max = maxPartLevel(rec) || 1;
+    const top = topOf(ptid);
+    if (top > 0 && top < max) {
+      want.set(ptid, { ptid, lvl: top + 1, research_type: 'LEVELUP', receive_type: 'UNKNOWN', is_announced: 0, is_checked: 1, before_ptid: ptid, before_lvl: top });
+    } else if (top === 0) {
+      const prev = prevPtid(ptid);
+      if (prev && researchable.has(prev) && PT_INDEX[prev]) {
+        const pmax = maxPartLevel(PT_INDEX[prev]) || 1;
+        if (topOf(prev) >= pmax) want.set(ptid, { ptid, lvl: 1, research_type: 'REMODEL', receive_type: 'UNKNOWN', is_announced: 0, is_checked: 1, before_ptid: prev, before_lvl: pmax });
+        else want.set(ptid, null);
+      }
+      // chain roots with nothing researched: leave whatever the game wrote
+    } else {
+      want.set(ptid, null);
+    }
+  }
+  let changed = 0;
+  for (const [ptid, w] of want) {
+    const cur = (byPt.get(ptid) || []).filter(r => MARKERS.has(r.research_type));
+    const same = w ? cur.length === 1 && cur[0].research_type === w.research_type && cur[0].lvl === w.lvl && cur[0].before_ptid === w.before_ptid && cur[0].before_lvl === w.before_lvl : cur.length === 0;
+    if (same) continue;
+    for (let i = research.length - 1; i >= 0; i--) if (research[i].ptid === ptid && MARKERS.has(research[i].research_type)) research.splice(i, 1);
+    if (w) research.push(w);
+    changed++;
+  }
+  return changed;
+}
+
 function wireBlueprints() {
   const research = SAVE.user_research;
+  let researchDirty = false;
   function entryFor(ptid) {
     let best = null;
     for (const r of research) {
@@ -2697,6 +2751,7 @@ function wireBlueprints() {
   }
   const STARTER_PTIDS = new Set([ 'PT_ARM_WP005_001', 'PT_ARM_WP006_001' ]);
   function removeEntry(ptid) {
+    researchDirty = true;
     for (let i = research.length - 1; i >= 0; i--) {
       if (research[i].ptid === ptid) research.splice(i, 1);
     }
@@ -2752,6 +2807,10 @@ function wireBlueprints() {
   const RESEARCH_SLOTS = [ 'Weapon', 'Head', 'Chest (TOPS)', 'Pants (BTM)' ];
   let researchSubTab = RESEARCH_SUBTAB_STATE.current || 'Weapon';
   function renderList(filter) {
+    if (researchDirty) {
+      normalizeResearchMarkers(research);
+      researchDirty = false;
+    }
     let parts = blueprintableParts().filter(p => !filter || norm(p.name).includes(norm(filter)));
     document.getElementById('bp-count').textContent = `${parts.length} shown / ${blueprintableParts().length} total`;
     const allSuspicious = blueprintableParts().filter(p => p.obtainable === false && isUnlocked(p.id));
@@ -2828,35 +2887,34 @@ function wireBlueprints() {
     toast(`Maxed ${parts.length} visible ${researchSubTab} research item${parts.length === 1 ? '' : 's'}${skipped ? ` (skipped ${skipped} PS-only / no blueprint)` : ''}`);
   });
   document.getElementById('bp-plus5-all').addEventListener('click', () => {
+    // "+5" is the in-game number. Normal parts top out at +4, so they are
+    // maxed; Uncap (limit break) parts are set to +5, their first level.
+    // Earlier parts in the same upgrade chain have to be maxed for the game to
+    // accept the later one, so they are maxed rather than set to +5.
     const filter = document.getElementById('bp-filter').value;
     const shown = blueprintableParts().filter(p => (!filter || norm(p.name).includes(norm(filter))) && partSlotLabel(p) === researchSubTab);
     const parts = shown.filter(p => isResearchAllowed(p.id));
-    const done = new Set;
-    let changed = 0;
-    let alreadyAbove = 0;
+    const targets = new Map;
     for (const p of parts) {
-      for (const id of chainOf(p.id)) {
-        if (!done.has(id) && isResearchAllowed(id)) {
-          const rec = PT_INDEX[id];
-          const cur = entryFor(id) ? entryFor(id).lvl : 0;
-          if (cur > 5) {
-            alreadyAbove++;
-          } else {
-            const target = Math.min(5, maxPartLevel(rec) || 1);
-            if (target !== cur) { writeLadder(id, target); changed++; }
-          }
-          done.add(id);
-        }
-        if (id === p.id) break;
-      }
+      const chain = chainOf(p.id);
+      const idx = chain.indexOf(p.id);
+      chain.slice(0, idx).forEach(id => { if (isResearchAllowed(id)) targets.set(id, maxPartLevel(PT_INDEX[id]) || 1); });
+      if (!targets.has(p.id)) targets.set(p.id, rawFromDisplay(PT_INDEX[p.id], 5));
+    }
+    let changed = 0, alreadyAbove = 0;
+    for (const [id, target] of targets) {
+      const cur = entryFor(id) ? entryFor(id).lvl : 0;
+      if (cur > target) { alreadyAbove++; continue; }
+      if (cur !== target) { writeLadder(id, target); changed++; }
     }
     syncStampFromResearch();
     renderList(filter);
     const skipped = shown.length - parts.length;
-    toast(`Set ${changed} visible ${researchSubTab} research item${changed === 1 ? '' : 's'} to level 5${alreadyAbove ? ` (left ${alreadyAbove} already above 5 untouched)` : ''}${skipped ? ` (skipped ${skipped} PS-only / no blueprint)` : ''}`);
+    toast(`Set ${changed} visible ${researchSubTab} research item${changed === 1 ? '' : 's'} to +5 (normal parts max out at +4)${alreadyAbove ? ` (left ${alreadyAbove} already higher untouched)` : ''}${skipped ? ` (skipped ${skipped} PS-only / no blueprint)` : ''}`);
   });
   document.getElementById('bp-remove-all').addEventListener('click', () => {
     research.length = 0;
+    researchDirty = true;
     syncStampFromResearch();
     renderList(document.getElementById('bp-filter').value);
     toast('All research removed');
