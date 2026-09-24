@@ -5464,22 +5464,41 @@ function boxPool(rarity) {
   const tot = rows.reduce((a, r) => a + r.freq, 0) || 1;
   return rows.map(r => ({ id: r.id, rwdid: r.rwdid, freq: r.freq, p: r.freq / tot, rw: rwdRow(r.rwdid), name: rewardName(r.rwdid) })).filter(x => x.rw);
 }
+// How the game itself writes a death box's reward (boxes it created, seen in
+// real saves): an ITEM reward is stored with the ITEM'S OWN TYPE (a blueprint
+// is type "ITTP_RMAP", not "ITEM") and num 0; a decal is "SKILL" with num 0.
+// Writing master_reward's "ITEM" / num 1 instead makes the game hand over the
+// item but show no icon for it (user report). boxGameType() gives the game's
+// type for a reward.
+function boxGameType(type, val0) {
+  if (type === 'ITEM') { const it = ITEM_INDEX[val0]; return (it && it.itemtype) || 'ITEM'; }
+  return type;
+}
 function boxApplyReward(box, rw) {
-  box.type = rw.type;
-  // the one death box seen in a real save stores num 0 for a decal; other
-  // types keep the reward's amount
-  box.num = rw.type === 'SKILL' ? 0 : Number(rw.num) || 0;
+  box.type = boxGameType(rw.type, rw.val0);
+  box.num = 0;
   box.val0 = rw.val0 || '';
   box.val1 = rw.val1 || '';
   box.val2 = rw.val2 || '';
   box.val3 = '';
 }
 function boxContentName(box) {
-  if (box.type === 'SKILL' && box.num === 0) return rewardLabel('SKILL', 1, box.val0);
-  return rewardLabel(box.type, box.num, box.val0);
+  const t = /^ITTP_/.test(box.type || '') ? 'ITEM' : box.type;
+  return rewardLabel(t, box.num || 1, box.val0);
 }
 function boxMatchPool(box) {
-  return boxPool(box.rarity).find(p => p.rw.type === box.type && (p.rw.val0 || '') === (box.val0 || '')) || null;
+  return boxPool(box.rarity).find(p => boxGameType(p.rw.type, p.rw.val0) === box.type && (p.rw.val0 || '') === (box.val0 || '')) || boxPool(box.rarity).find(p => p.rw.type === box.type && (p.rw.val0 || '') === (box.val0 || '')) || null;
+}
+// boxes written by earlier editor versions in master_reward's format
+function boxBadFormat(box) {
+  if (!box || !box.val0) return false;
+  if (box.type === 'ITEM') return true;
+  return (box.type === 'SKILL' || /^ITTP_/.test(box.type || '')) && Number(box.num) !== 0;
+}
+function fixBoxFormats(list) {
+  let n = 0;
+  for (const b of arr(list)) if (boxBadFormat(b)) { b.type = boxGameType(b.type, b.val0); b.num = 0; n++; }
+  return n;
 }
 
 function blockBoxes() {
@@ -5960,6 +5979,10 @@ function runSaveCheck() {
     const now = Math.floor(Date.now() / 1000);
     const ready = boxes.filter(x => !(x.opentime > now)).length;
     if (ready) add('note', `${ready} death box${ready === 1 ? ' is' : 'es are'} ready to open.`, 'boxes');
+    const bad = boxes.filter(boxBadFormat).length;
+    if (bad) add('warning', `${bad} death box${bad === 1 ? ' is' : 'es are'} stored in a format the game doesn't write (an older editor version), so the item shows without an icon when you open ${bad === 1 ? 'it' : 'them'}.`, 'boxes', {
+      label: 'Fix death boxes', run: () => { const k = fixBoxFormats(SAVE.soul.deathbox); return `Rewrote ${k} death box${k === 1 ? '' : 'es'} the way the game stores them.`; }
+    });
   });
   safe('lost bags', () => {
     const b = soul.mysterybag;
