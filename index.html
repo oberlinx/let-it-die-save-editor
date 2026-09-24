@@ -232,6 +232,15 @@
   .photoModal[hidden] { display: none; }
   .photoModalInner { background: var(--panel); border: 1px solid var(--panel-border-bright); padding: 12px; max-width: 95vw; text-align: center; }
   .photoModalInner img { width: min(768px, 85vw, 75vh); height: auto; image-rendering: pixelated; display: block; }
+  .healthPanel { border: 1px solid var(--panel-border); background: var(--panel); margin-bottom: 14px; }
+  .healthPanel > summary { display: flex; align-items: center; gap: 8px; padding: 9px 12px; cursor: pointer; font-size: 12.5px; }
+  .healthBody { padding: 4px 12px 12px; }
+  .healthRow { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-top: 1px solid rgba(255,255,255,0.05); font-size: 12px; flex-wrap: wrap; }
+  .healthText { flex: 1; min-width: 220px; }
+  .hcBadge { display: inline-block; width: 64px; text-align: center; padding: 1px 0; font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px; border: 1px solid; }
+  .hcProblem { color: var(--accent-bright); border-color: var(--accent-bright); }
+  .hcWarn { color: var(--warn); border-color: var(--warn); opacity: 0.85; }
+  .hcNote { color: var(--text-dim); border-color: var(--panel-border-bright); }
   .stewH { font-family: var(--display); font-size: 14px; margin: 10px 0 6px; }
   @media (max-width: 640px) { .stewAct { grid-template-columns: 1fr; gap: 4px; } }
   a.gitlink:hover { color: var(--accent-bright); }
@@ -1515,6 +1524,9 @@ document.getElementById('file-save').addEventListener('change', async e => {
         repaired++;
       }
     }
+    HEALTH_LOAD = { repairedChars: repairedChars, repairedFighters: repaired };
+    HEALTH.open = null;
+    try { runSaveCheck(); } catch (err) { console.warn('Save check failed:', err); }
     renderAll();
     if (repaired) setTimeout(() => toast(`Fixed decal/bag/rage values on ${repaired} fighter(s) left over from an older editor version`), 2700);
     markChip('chip-save', true);
@@ -1870,7 +1882,8 @@ function renderAll() {
   app.querySelectorAll('[id]').forEach(el => {
     if (el.scrollTop > 0) scrollStates[el.id] = el.scrollTop;
   });
-  app.innerHTML = `\n    <div class="tabbar">\n      ${TABS.map(t => `<button class="tabbtn ${activeTab === t.id ? 'active' : ''}" data-tab-btn="${t.id}">${t.label}</button>`).join('')}\n    </div>\n    <div class="tabpanel" data-tab-panel="account" style="display:${activeTab === 'account' ? 'block' : 'none'}">${blockCurrency()}</div>\n    <div class="tabpanel" data-tab-panel="fighters" style="display:${activeTab === 'fighters' ? 'block' : 'none'}">${blockCharacters()}</div>\n    <div class="tabpanel" data-tab-panel="research" style="display:${activeTab === 'research' ? 'block' : 'none'}">${blockBlueprints()}</div>\n    <div class="tabpanel" data-tab-panel="decals" style="display:${activeTab === 'decals' ? 'block' : 'none'}">${blockSkillDecals()}</div>\n    <div class="tabpanel" data-tab-panel="stews" style="display:${activeTab === 'stews' ? 'block' : 'none'}">${blockStews()}</div>\n    <div class="tabpanel" data-tab-panel="bags" style="display:${activeTab === 'bags' ? 'block' : 'none'}">${blockBags()}</div>\n    <div class="tabpanel" data-tab-panel="boxes" style="display:${activeTab === 'boxes' ? 'block' : 'none'}">${blockBoxes()}</div>\n    <div class="tabpanel" data-tab-panel="hub" style="display:${activeTab === 'hub' ? 'block' : 'none'}">${blockHub()}</div>\n    <div class="tabpanel" data-tab-panel="photos" style="display:${activeTab === 'photos' ? 'block' : 'none'}">${blockPhotos()}</div>\n    <div class="tabpanel" data-tab-panel="dates" style="display:${activeTab === 'dates' ? 'block' : 'none'}">${blockDates()}</div>\n    <div class="tabpanel" data-tab-panel="storage" style="display:${activeTab === 'storage' ? 'block' : 'none'}">${blockStorageBox()}</div>\n    <div class="tabpanel" data-tab-panel="rewards" style="display:${activeTab === 'rewards' ? 'block' : 'none'}">${blockRewardBox()}</div>\n    <div class="tabpanel" data-tab-panel="quests" style="display:${activeTab === 'quests' ? 'block' : 'none'}">${blockQuests()}</div>\n    <div class="tabpanel" data-tab-panel="vip" style="display:${activeTab === 'vip' ? 'block' : 'none'}">${blockVip()}</div>\n  `;
+  app.innerHTML = `\n    ${blockHealth()}\n    <div class="tabbar">\n      ${TABS.map(t => `<button class="tabbtn ${activeTab === t.id ? 'active' : ''}" data-tab-btn="${t.id}">${t.label}</button>`).join('')}\n    </div>\n    <div class="tabpanel" data-tab-panel="account" style="display:${activeTab === 'account' ? 'block' : 'none'}">${blockCurrency()}</div>\n    <div class="tabpanel" data-tab-panel="fighters" style="display:${activeTab === 'fighters' ? 'block' : 'none'}">${blockCharacters()}</div>\n    <div class="tabpanel" data-tab-panel="research" style="display:${activeTab === 'research' ? 'block' : 'none'}">${blockBlueprints()}</div>\n    <div class="tabpanel" data-tab-panel="decals" style="display:${activeTab === 'decals' ? 'block' : 'none'}">${blockSkillDecals()}</div>\n    <div class="tabpanel" data-tab-panel="stews" style="display:${activeTab === 'stews' ? 'block' : 'none'}">${blockStews()}</div>\n    <div class="tabpanel" data-tab-panel="bags" style="display:${activeTab === 'bags' ? 'block' : 'none'}">${blockBags()}</div>\n    <div class="tabpanel" data-tab-panel="boxes" style="display:${activeTab === 'boxes' ? 'block' : 'none'}">${blockBoxes()}</div>\n    <div class="tabpanel" data-tab-panel="hub" style="display:${activeTab === 'hub' ? 'block' : 'none'}">${blockHub()}</div>\n    <div class="tabpanel" data-tab-panel="photos" style="display:${activeTab === 'photos' ? 'block' : 'none'}">${blockPhotos()}</div>\n    <div class="tabpanel" data-tab-panel="dates" style="display:${activeTab === 'dates' ? 'block' : 'none'}">${blockDates()}</div>\n    <div class="tabpanel" data-tab-panel="storage" style="display:${activeTab === 'storage' ? 'block' : 'none'}">${blockStorageBox()}</div>\n    <div class="tabpanel" data-tab-panel="rewards" style="display:${activeTab === 'rewards' ? 'block' : 'none'}">${blockRewardBox()}</div>\n    <div class="tabpanel" data-tab-panel="quests" style="display:${activeTab === 'quests' ? 'block' : 'none'}">${blockQuests()}</div>\n    <div class="tabpanel" data-tab-panel="vip" style="display:${activeTab === 'vip' ? 'block' : 'none'}">${blockVip()}</div>\n  `;
+  wireHealth();
   wireCurrency();
   wireCharacters();
   wireBlueprints();
@@ -5220,6 +5233,201 @@ function renderPhotos() {
 }
 
 function wirePhotos() { if (activeTab === 'photos') renderPhotos(); }
+
+// ---------------------------------------------------------------------------
+// SAVE CHECK - runs when a save is loaded (and on "Re-check") and lists known
+// problems, each with a link to the tab that deals with it and, where the fix
+// is safe and well understood, a one-click fix. Results are cached so the panel
+// can be redrawn by renderAll without re-running the checks.
+// ---------------------------------------------------------------------------
+
+let HEALTH = { items: [], ranAt: 0, open: null };
+let HEALTH_LOAD = { repairedChars: 0, repairedFighters: 0 };
+
+function runSaveCheck() {
+  const out = [];
+  const add = (level, text, tab, fix) => out.push({ level, text, tab, fix });
+  if (!SAVE) { HEALTH = { items: [], ranAt: 0, open: HEALTH.open }; return; }
+  const soul = SAVE.soul || {};
+  const tabLabel = id => (TABS.find(t => t.id === id) || {}).label || id;
+  const safe = (name, fn) => { try { fn(); } catch (err) { console.warn('save check failed:', name, err); add('note', `Couldn't run the ${name} check (${err.message}).`); } };
+
+  // load-time repairs
+  if (HEALTH_LOAD.repairedChars) add('note', `${HEALTH_LOAD.repairedChars} broken character${HEALTH_LOAD.repairedChars === 1 ? '' : 's'} in text fields were repaired while loading. The rest of the save loaded normally.`);
+  if (HEALTH_LOAD.repairedFighters) add('note', `Decal slots, bag or rage were over the limit on ${HEALTH_LOAD.repairedFighters} fighter${HEALTH_LOAD.repairedFighters === 1 ? '' : 's'} and were brought back within range.`, 'fighters');
+
+  // dates
+  safe('dates', () => {
+    if (!RAW_SAV_ROOT) return;
+    const root = dtBuildRoot();
+    const ref = Math.floor(Date.now() / 1000);
+    const c = { future: 0, post2038: 0, wrapped: 0 };
+    for (const g of dtScan(root)) for (const e of g.entries) { const p = dtProblem(g, e.v, ref); if (p) c[p]++; }
+    const n = c.future + c.post2038 + c.wrapped;
+    if (n) {
+      const parts = [ c.wrapped && `${c.wrapped} overflowed (negative)`, c.post2038 && `${c.post2038} past the 2038 limit`, c.future && `${c.future} in the future` ].filter(Boolean).join(', ');
+      add(c.wrapped || c.post2038 ? 'problem' : 'warning', `${n} date${n === 1 ? '' : 's'} left by time jumping: ${parts}. These can crash the game.`, 'dates', {
+        label: 'Fix all dates', run: () => { DATE_RULES.push({ action: 'fix', pattern: '*', ref: Math.floor(Date.now() / 1000) }); return 'Bad dates will be set to now when you download.'; }
+      });
+    }
+  });
+
+  // research markers
+  safe('research', () => {
+    const research = arr(SAVE.user_research);
+    if (!research.length) return;
+    const n = normalizeResearchMarkers(JSON.parse(JSON.stringify(research)));
+    if (n) add('warning', `${n} researched part${n === 1 ? ' is' : 's are'} missing the "next level" marker, so the game may not let you upgrade ${n === 1 ? 'it' : 'them'} further.`, 'research', {
+      label: 'Fix markers', run: () => { const k = normalizeResearchMarkers(SAVE.user_research); return `Fixed the research markers on ${k} part${k === 1 ? '' : 's'}.`; }
+    });
+  });
+
+  // fighters: bag overflow, duplicate or unknown items
+  safe('fighters', () => {
+    const seen = new Map;
+    const note = (eid, where) => { if (!eid || eid === '-1') return; seen.set(eid, (seen.get(eid) || []).concat(where)); };
+    const unknown = [];
+    for (const c of arr(soul.chrs)) {
+      const name = c.name || 'a fighter';
+      const cap = deathBagCapacity(c), n = fighterItemCount(c);
+      if (cap && n > cap) add('warning', `${escapeHtml(name)} is carrying ${n} items but their Death Bag only holds ${cap}.`, 'fighters');
+      for (const p of arr(c.pspts)) { note(p.eptid, name); if (p.ptid && !PT_INDEX[p.ptid]) unknown.push(p.ptid); }
+      for (const m of arr(c.psmsrs)) { note(m.emsrid, name); if (m.msrid && !MSR_INDEX[m.msrid]) unknown.push(m.msrid); }
+      for (const b of arr(c.psbsts)) { note(b.ebstid, name); if (b.bstid && !BST_INDEX[b.bstid]) unknown.push(b.bstid); }
+      for (const it of arr(c.psitems)) { note(it.eitemid, name); if (it.itemId && !ITEM_INDEX[it.itemId]) unknown.push(it.itemId); }
+    }
+    const cl = SAVE.cl || {};
+    for (const s of arr(cl.slots)) for (const k of [ 'eptid', 'emsrid', 'ebstid', 'eitemid' ]) note(s[k], 'Storage Box');
+    for (const p of arr(cl.pts)) if (p.ptid && !PT_INDEX[p.ptid]) unknown.push(p.ptid);
+    for (const it of arr(cl.items)) if (it.itemId && !ITEM_INDEX[it.itemId]) unknown.push(it.itemId);
+    const dup = [ ...seen.entries() ].filter(([, w]) => w.length > 1);
+    if (dup.length) add('problem', `${dup.length} item${dup.length === 1 ? ' is' : 's are'} in two places at once (for example: ${escapeHtml([ ...new Set(dup[0][1]) ].join(' and '))}). The game expects each item to exist once.`, 'storage');
+    const u = [ ...new Set(unknown) ];
+    if (u.length) add('warning', `${u.length} item type${u.length === 1 ? '' : 's'} in your inventory ${u.length === 1 ? "isn't" : "aren't"} in this masters.db (${escapeHtml(u.slice(0, 3).join(', '))}${u.length > 3 ? ', ...' : ''}). They may come from another game version or a PlayStation save.`, 'storage');
+  });
+
+  // currencies over bank capacity
+  safe('bank', () => {
+    const rows = [ [ 'free_money', 'safe_level', 'Kill Coins' ], [ 'spirit', 'spirit_tank_level', 'SPLithium' ] ];
+    for (const [v, l, label] of rows) {
+      const cap = bankCapacityForLevel(soul[l] != null ? soul[l] : 1);
+      if (cap && (soul[v] || 0) > cap) add('warning', `${label} (${Number(soul[v]).toLocaleString()}) is over the bank limit for its level (${cap.toLocaleString()}).`, 'account');
+    }
+  });
+
+  // decals
+  safe('decals', () => {
+    // the game itself stores counts above the editor's 89 (up to 98 seen in a
+    // real save), so only flag values the game can't have produced
+    const neg = arr(soul.psskls).filter(e => (e.cnt || 0) < 0);
+    if (neg.length) add('problem', `${neg.length} decal count${neg.length === 1 ? ' is' : 's are'} negative.`, 'decals');
+    const over = arr(soul.psskls).filter(e => (e.cnt || 0) > 99);
+    if (over.length) add('warning', `${over.length} decal count${over.length === 1 ? ' is' : 's are'} above 99.`, 'decals');
+    const unk = arr(soul.psskls).filter(e => e.id && !SKL_INDEX[e.id]);
+    if (unk.length) add('note', `${unk.length} decal${unk.length === 1 ? '' : 's'} in your collection ${unk.length === 1 ? "isn't" : "aren't"} in this masters.db.`, 'decals');
+  });
+
+  // stews
+  safe('stews', () => {
+    const q = typeof stewQueue === 'function' ? stewQueue() : null;
+    if (q) {
+      const unk = q.filter(s => !SKL_INDEX[s]).length;
+      if (unk) add('warning', `${unk} queued stew result${unk === 1 ? '' : 's'} ${unk === 1 ? "isn't a decal" : "aren't decals"} this masters.db knows.`, 'stews');
+    }
+  });
+
+  // quests
+  safe('quests', () => {
+    const q = questData();
+    if (!q) return;
+    const M = questMeta();
+    const unk = q.ord.filter(o => !M.byId[o.qid]);
+    if (unk.length) add('warning', `${unk.length} current quest${unk.length === 1 ? ' is' : 's are'} not in this masters.db (${escapeHtml(unk.map(o => o.qid).slice(0, 3).join(', '))}).`, 'quests');
+    const done = q.ord.filter(o => o.prgmax > 0 && o.prgnow >= o.prgmax).length;
+    if (done) add('note', `${done} current quest${done === 1 ? ' is' : 's are'} complete and ready to report in game.`, 'quests');
+  });
+
+  // death boxes / lost bags
+  safe('death boxes', () => {
+    const boxes = arr(soul.deathbox);
+    const now = Math.floor(Date.now() / 1000);
+    const ready = boxes.filter(x => !(x.opentime > now)).length;
+    if (ready) add('note', `${ready} death box${ready === 1 ? ' is' : 'es are'} ready to open.`, 'boxes');
+  });
+  safe('lost bags', () => {
+    const b = soul.mysterybag;
+    if (!b || typeof b !== 'object') return;
+    const gen = bagGenIndex();
+    let unk = 0;
+    for (const k of Object.keys(b)) for (const e of arr(b[k])) if (!gen[e.cntgen]) unk++;
+    if (unk) add('warning', `${unk} upcoming Lost Bag reward${unk === 1 ? '' : 's'} ${unk === 1 ? "isn't" : "aren't"} in this masters.db.`, 'bags');
+  });
+
+  // waiting room: exactly one decoration in use per spot
+  safe('waiting room', () => {
+    const list = arr(soul.hubcustom);
+    if (!list.length) return;
+    const meta = hubMeta();
+    const bySite = {};
+    for (const e of list) { const s = (meta[e.cstmid] && meta[e.cstmid].site) || e.cstmid.split('_')[2]; (bySite[s] = bySite[s] || []).push(e); }
+    const bad = Object.entries(bySite).filter(([, es]) => es.filter(e => e.flg & 4).length !== 1).map(([s]) => hubSiteName(s));
+    if (bad.length) add('warning', `Waiting Room spot${bad.length === 1 ? '' : 's'} with no decoration (or more than one) in use: ${escapeHtml(bad.join(', '))}.`, 'hub');
+  });
+
+  const order = { problem: 0, warning: 1, note: 2 };
+  out.sort((a, b) => order[a.level] - order[b.level]);
+  for (const it of out) it.tabName = it.tab ? tabLabel(it.tab) : '';
+  HEALTH = { items: out, ranAt: Date.now(), open: HEALTH.open, lastMsg: '' };
+}
+
+function blockHealth() {
+  if (!SAVE) return '';
+  const items = HEALTH.items;
+  const n = { problem: 0, warning: 0, note: 0 };
+  for (const it of items) n[it.level]++;
+  const bad = n.problem + n.warning;
+  const open = HEALTH.open != null ? HEALTH.open : bad > 0;
+  const color = n.problem ? 'var(--accent-bright)' : n.warning ? 'var(--warn)' : 'var(--good-bright)';
+  const summary = !items.length ? 'No problems found' : [ n.problem && `${n.problem} problem${n.problem === 1 ? '' : 's'}`, n.warning && `${n.warning} warning${n.warning === 1 ? '' : 's'}`, n.note && `${n.note} note${n.note === 1 ? '' : 's'}` ].filter(Boolean).join(' · ');
+  const badge = { problem: '<span class="hcBadge hcProblem">Problem</span>', warning: '<span class="hcBadge hcWarn">Warning</span>', note: '<span class="hcBadge hcNote">Note</span>' };
+  return `<details class="healthPanel" id="health-panel" ${open ? 'open' : ''} style="border-color:${color};">
+    <summary><span style="color:${color}; font-weight:bold;">Save check:</span> ${summary}<span style="flex:1;"></span><button class="subtle" id="health-recheck">Re-check</button></summary>
+    <div class="healthBody">
+      ${HEALTH.lastMsg ? `<div class="stewLog" style="margin-bottom:8px;">${escapeHtml(HEALTH.lastMsg)}</div>` : ''}
+      ${items.length ? items.map((it, i) => `<div class="healthRow">${badge[it.level]}<div class="healthText">${it.text}</div>
+        ${it.fix ? `<button class="action" data-health-fix="${i}">${escapeHtml(it.fix.label)}</button>` : ''}
+        ${it.tab ? `<button class="subtle" data-health-go="${it.tab}">Open ${escapeHtml(it.tabName)}</button>` : ''}</div>`).join('') : '<div style="font-size:12px; color:var(--text-dim);">Nothing the editor knows to look for is wrong with this save.</div>'}
+      <div class="capNote" style="margin:6px 0 0;">Checked ${HEALTH.ranAt ? new Date(HEALTH.ranAt).toLocaleTimeString() : 'never'}. The check looks for problems the editor understands; it can't prove a save is perfect.</div>
+    </div>
+  </details>`;
+}
+
+function wireHealth() {
+  const panel = document.getElementById('health-panel');
+  if (!panel) return;
+  panel.addEventListener('toggle', () => { HEALTH.open = panel.open; });
+  document.getElementById('health-recheck').addEventListener('click', e => {
+    e.preventDefault();
+    runSaveCheck();
+    HEALTH.open = true;
+    renderAll();
+    toast('Save checked');
+  });
+  panel.querySelectorAll('[data-health-go]').forEach(b => b.addEventListener('click', () => {
+    const btn = document.querySelector(`[data-tab-btn="${b.dataset.healthGo}"]`);
+    if (btn) btn.click();
+  }));
+  panel.querySelectorAll('[data-health-fix]').forEach(b => b.addEventListener('click', () => {
+    const it = HEALTH.items[Number(b.dataset.healthFix)];
+    let msg = '';
+    try { msg = it.fix.run() || ''; } catch (err) { toast('Fix failed: ' + err.message, true); return; }
+    runSaveCheck();
+    HEALTH.lastMsg = msg;
+    HEALTH.open = true;
+    renderAll();
+    toast(msg || 'Fixed');
+  }));
+}
 
 function triggerDownload(data, filename, mime) {
   const blob = new Blob([ data ], {

@@ -38,6 +38,10 @@ PSN saves have to be decrypted first.
 | **Quests** | Current quests (progress, complete, drop), take a new quest, and quest history (times taken / cleared) |
 | VIP | VIP Express Pass status |
 
+### Save check
+
+When you load a save, a **Save check** panel above the tabs lists anything the editor knows to be wrong: dates damaged by time jumping, research missing its upgrade marker, items in two places, fighters over their Death Bag limit, currencies over the bank limit, IDs this masters.db doesn't know, and more. Each entry links to the tab that deals with it, and the safe ones (dates, research markers) have a one-click fix. Use **Re-check** after making changes.
+
 ### Stews
 
 Stew results are pre-rolled and stored in the save as a queue, and the game pulls from the end of that list. Changing odds in masters.db does nothing until the queue runs out. This tab edits the queue itself, so a change applies on your very next stew. It's a browser version of `tools/stew_luck_rarity.py`.
