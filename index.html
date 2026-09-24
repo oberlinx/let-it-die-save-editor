@@ -3812,7 +3812,7 @@ function blockStorageBox() {
   const cl = SAVE.cl;
   const cap = cl.slots.length;
   const occupied = cl.slots.filter(s => s.eptid && s.eptid !== '-1' || s.emsrid && s.emsrid !== '-1' || s.ebstid && s.ebstid !== '-1' || s.eitemid && s.eitemid !== '-1').length;
-  return `<section class="block">\n    <div class="block-head"><div><div class="eyebrow">Item Storage</div><h2>Storage Box</h2></div></div>\n    <div class="block-body">\n      <div class="grid" style="margin-bottom:6px;">\n        <div class="field"><label>Capacity (30-${STORAGE_BOX_MAX}, steps of 10)</label><input type="number" id="sb-capacity" min="${STORAGE_BOX_MIN}" max="${STORAGE_BOX_MAX}" step="10" value="${cap}"></div>\n        <div class="field" style="display:flex; align-items:end;"><button class="subtle" id="sb-max">Max (${STORAGE_BOX_MAX})</button></div>\n      </div>\n      <div class="capNote ${occupied >= cap ? 'over' : ''}">${occupied} / ${cap} slots occupied${occupied >= cap ? ' -- FULL, raise capacity to add more' : ''}. Changing capacity adds/removes empty slots at the end; it never deletes occupied ones.</div>\n\n      <div class="eyebrow" style="margin:12px 0 6px;">Bulk blueprints</div>\n      <div class="toolbar">\n        <button class="subtle" id="sb-add-legit-bp">+1 of every obtainable blueprint</button>\n        <button class="subtle" id="sb-add-ps-bp">+1 PlayStation-only blueprint</button>\n        <button class="subtle" id="sb-add-travis-bp">+1 Travis jacket, pants, sunglasses &amp; Beam Katana 1</button>\n        <button class="subtle" id="sb-add-tdm-bp">+1 every TDM blueprint</button>\n      </div>\n\n      <div class="eyebrow" style="margin:12px 0 6px;">Deposit item</div>\n      <div class="subTabs" id="sb-cat-tabs">\n        <div class="subTab active" data-sb-cat="bp">Blueprint</div>\n        <div class="subTab" data-sb-cat="msr">Mushroom</div>\n        <div class="subTab" data-sb-cat="bst">Beast</div>\n        <div class="subTab" data-sb-cat="item">Material / Other Item</div>\n      </div>\n      <div id="sb-add-form"></div>\n\n      <div class="eyebrow" style="margin:16px 0 8px;">Contents <button class="subtle" id="sb-clear-all" style="margin-left:8px;">Clear all</button></div>\n      <div class="listBlock" id="sb-list">\n        ${cl.slots.map((s, i) => storageSlotRow(s, i)).filter(Boolean).join('') || '<div style="padding:10px; color:var(--text-faint); font-size:12px;">No occupied slots.</div>'}\n      </div>\n    </div>\n  </section>`;
+  return `<section class="block">\n    <div class="block-head"><div><div class="eyebrow">Item Storage</div><h2>Storage Box</h2></div></div>\n    <div class="block-body">\n      <div class="grid" style="margin-bottom:6px;">\n        <div class="field"><label>Capacity (30-${STORAGE_BOX_MAX}, steps of 10)</label><input type="number" id="sb-capacity" min="${STORAGE_BOX_MIN}" max="${STORAGE_BOX_MAX}" step="10" value="${cap}"></div>\n        <div class="field" style="display:flex; align-items:end;"><button class="subtle" id="sb-max">Max (${STORAGE_BOX_MAX})</button></div>\n      </div>\n      <div class="capNote ${occupied >= cap ? 'over' : ''}">${occupied} / ${cap} slots occupied${occupied >= cap ? ' -- FULL, raise capacity to add more' : ''}. Changing capacity adds/removes empty slots at the end; it never deletes occupied ones.</div>\n\n      <div class="eyebrow" style="margin:12px 0 6px;">Bulk blueprints</div>\n      <div class="toolbar">\n        <button class="subtle" id="sb-add-legit-bp">+1 of every obtainable blueprint</button>\n        <button class="subtle" id="sb-add-ps-bp">+1 PlayStation-only blueprint</button>\n        <button class="subtle" id="sb-add-travis-bp">+1 Travis jacket, pants, sunglasses &amp; Beam Katana 1</button>\n        <button class="subtle" id="sb-add-tdm-bp">+1 every TDM blueprint</button>\n      </div>\n\n      <div class="eyebrow" style="margin:12px 0 6px;">Deposit item</div>\n      <div class="subTabs" id="sb-cat-tabs">\n        <div class="subTab active" data-sb-cat="bp">Blueprint</div>\n        <div class="subTab" data-sb-cat="msr">Mushroom</div>\n        <div class="subTab" data-sb-cat="bst">Beast</div>\n        <div class="subTab" data-sb-cat="item">Material / Other Item</div>\n      </div>\n      <div id="sb-add-form"></div>\n\n      <div class="eyebrow" style="margin:16px 0 8px;">Contents <button class="subtle" id="sb-clear-all" style="margin-left:8px;">Clear all</button></div>\n      <div class="toolbar" style="margin-bottom:6px;"><input type="text" id="sb-content-search" placeholder="Search contents: name, level, or weapon / armor / blueprint / mushroom / beast / material" value="${escapeHtml(SB_CONTENT_FILTER)}" style="flex:1; max-width:360px; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);"><span class="count" id="sb-content-count"></span></div>\n      <div class="listBlock" id="sb-list">\n        ${cl.slots.map((s, i) => storageSlotRow(s, i)).filter(Boolean).join('') || '<div style="padding:10px; color:var(--text-faint); font-size:12px;">No occupied slots.</div>'}\n      </div>\n    </div>\n  </section>`;
 }
 
 function itemDisplayName(itemId) {
@@ -3847,28 +3847,48 @@ function durabilityPct(inst, rec) {
 }
 
 function storageSlotRow(s, i) {
-  let label = null, sub = '';
+  let label = null, sub = '', kind = '';
   if (s.eptid && s.eptid !== '-1') {
     const inst = arr(SAVE.cl.pts).find(p => p.eptid === s.eptid);
     const rec = inst && PT_INDEX[inst.ptid];
     label = rec ? rec.name : inst ? inst.ptid : 'part (unresolved)';
     const pct = rec ? durabilityPct(inst, rec) : null;
     sub = rec ? `+${displayFromRaw(rec, inst.lvl)} · durability ${pct != null ? pct + '%' : '?'}` : '';
+    kind = rec ? (rec.type === 'PTTP_ARM' ? 'weapon' : 'armor ' + partSlotLabel(rec)) : 'part';
   } else if (s.eitemid && s.eitemid !== '-1') {
     const inst = arr(SAVE.cl.items).find(p => p.eitemid === s.eitemid);
     label = inst ? itemDisplayName(inst.itemId) : 'item (unresolved)';
+    kind = inst && String(inst.itemId).startsWith('ITMP_') ? 'blueprint' : 'material item';
   } else if (s.emsrid && s.emsrid !== '-1') {
     const inst = arr(SAVE.cl.msrs).find(m => m.emsrid === s.emsrid);
     label = inst ? msrDisplayName(inst.msrid, inst.cooked) : 'Mushroom';
+    kind = 'mushroom';
   } else if (s.ebstid && s.ebstid !== '-1') {
     const inst = arr(SAVE.cl.bsts).find(b => b.ebstid === s.ebstid);
     label = inst ? bstDisplayName(inst.bstid, inst.cooked) : 'Beast';
+    kind = 'beast';
   }
   if (!label) return '';
-  return `<div class="listRow"><div class="name">${escapeHtml(label)} ${sub}</div><div class="id">slot ${s.slot != null ? s.slot : i}</div><button class="subtle" data-sb-remove="${i}">✕</button></div>`;
+  return `<div class="listRow" data-sb-kind="${kind}"><div class="name">${escapeHtml(label)} ${sub}</div><div class="id">slot ${s.slot != null ? s.slot : i}</div><button class="subtle" data-sb-remove="${i}">✕</button></div>`;
 }
 
 let sbCategory = 'bp';
+// Storage contents search: filters the list in place (kept across re-renders)
+let SB_CONTENT_FILTER = '';
+function applyStorageContentFilter() {
+  const list = document.getElementById('sb-list');
+  if (!list) return;
+  const q = norm(SB_CONTENT_FILTER || '');
+  const rows = [ ...list.querySelectorAll('.listRow') ];
+  let shown = 0;
+  for (const r of rows) {
+    const hit = !q || norm(r.textContent + ' ' + (r.dataset.sbKind || '')).includes(q);
+    r.style.display = hit ? '' : 'none';
+    if (hit) shown++;
+  }
+  const c = document.getElementById('sb-content-count');
+  if (c) c.textContent = q ? `${shown} of ${rows.length} shown` : `${rows.length} item${rows.length === 1 ? '' : 's'}`;
+}
 
 function sbAddFormHtml() {
   const qtyField = `<div class="field"><label>Quantity</label><input type="number" id="sb-qty" min="1" value="${escapeHtml(SB_FORM.qty)}"></div>`;
@@ -3885,6 +3905,9 @@ function sbAddFormHtml() {
 }
 
 function wireStorageBox() {
+  const sbSearch = document.getElementById('sb-content-search');
+  if (sbSearch) sbSearch.addEventListener('input', () => { SB_CONTENT_FILTER = sbSearch.value; applyStorageContentFilter(); });
+  applyStorageContentFilter();
   document.getElementById('sb-capacity').addEventListener('change', e => {
     let target = parseInt(e.target.value, 10) || STORAGE_BOX_MIN;
     target = Math.round(target / 10) * 10;
