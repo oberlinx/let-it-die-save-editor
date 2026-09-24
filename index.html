@@ -603,6 +603,7 @@ async function buildBrgSav(rootObj) {
 }
 
 function adaptFullDumpToLegacyShape(root) {
+  RAW_EMPTY_SHAPES = captureEmptyShapes(root);
   const mainUid = String(root.soul && root.soul.uid || root.user && root.user.uid || '');
   const chrTable = root.soul && root.soul.chr || {};
   const chrs = arr(chrTable.chrs && chrTable.chrs[mainUid]);
@@ -2008,7 +2009,8 @@ function wireCurrency() {
       if (lvl > maxLvl) lvl = maxLvl;
       inp.value = lvl;
       SAVE.soul[inp.dataset.bankLevel] = lvl;
-      SAVE.soul[inp.dataset.bankLevel.replace('_level', '_limit')] = bankCapacityForLevel(lvl);
+      // the game stores only the level; a *_limit field is written only if the save already has one
+      { const lk = inp.dataset.bankLevel.replace('_level', '_limit'); if (lk in SAVE.soul) SAVE.soul[lk] = bankCapacityForLevel(lvl); }
       updateBankCapDisplay(inp.dataset.bankCapTarget);
     });
   });
@@ -2016,7 +2018,7 @@ function wireCurrency() {
     btn.addEventListener('click', () => {
       const maxLvl = bankMaxLevel();
       SAVE.soul[btn.dataset.bankMax] = maxLvl;
-      SAVE.soul[btn.dataset.bankMax.replace('_level', '_limit')] = bankCapacityForLevel(maxLvl);
+      { const lk = btn.dataset.bankMax.replace('_level', '_limit'); if (lk in SAVE.soul) SAVE.soul[lk] = bankCapacityForLevel(maxLvl); }
       SAVE.soul[btn.dataset.bankMaxValue] = bankCapacityForLevel(maxLvl);
       renderAll();
       toast(`Bank maxed to level ${maxLvl}`);
@@ -2047,7 +2049,7 @@ const CLASS_NAMES = {
   COL: 'Collector',
   SKI: 'Skill Master',
   LUK: 'Lucky Star',
-  BRE: 'Striker (inferred)',
+  BRE: 'Striker',
   OLD: 'OLD (legacy, unused)'
 };
 
@@ -6109,6 +6111,42 @@ function renderGraves() {
 
 function wireGraves() { if (activeTab === 'graves') renderGraves(); }
 
+// The game writes an empty collection as {} in most places (and [] in a
+// few). The editor works on arrays, so a collection that was empty when the
+// save was loaded and is still empty could come back in the other shape.
+// This puts every such spot back exactly the way the loaded save had it.
+// Shapes are recorded when the save is first read, because some tabs work
+// directly on the loaded objects.
+let RAW_EMPTY_SHAPES = null;
+function captureEmptyShapes(root) {
+  const out = [];
+  const walk = (o, path, depth) => {
+    if (!o || typeof o !== 'object' || Array.isArray(o) || depth > 8) return;
+    for (const k of Object.keys(o)) {
+      const v = o[k];
+      if (Array.isArray(v)) { if (!v.length) out.push({ path: path.concat(k), obj: false }); }
+      else if (v && typeof v === 'object') {
+        if (!Object.keys(v).length) out.push({ path: path.concat(k), obj: true });
+        else walk(v, path.concat(k), depth + 1);
+      }
+    }
+  };
+  walk(root, [], 0);
+  return { root, list: out };
+}
+function restoreEmptyShapes(built, raw) {
+  if (!RAW_EMPTY_SHAPES || RAW_EMPTY_SHAPES.root !== raw) return built;
+  for (const { path, obj } of RAW_EMPTY_SHAPES.list) {
+    let o = built;
+    for (let i = 0; i < path.length - 1 && o; i++) o = o[path[i]];
+    if (!o || typeof o !== 'object' || Array.isArray(o)) continue;
+    const k = path[path.length - 1], v = o[k];
+    if (obj && Array.isArray(v) && !v.length) o[k] = {};
+    else if (!obj && v && typeof v === 'object' && !Array.isArray(v) && !Object.keys(v).length) o[k] = [];
+  }
+  return built;
+}
+
 function triggerDownload(data, filename, mime) {
   const blob = new Blob([ data ], {
     type: mime
@@ -6131,7 +6169,7 @@ document.getElementById('btn-download-sav').addEventListener('click', async () =
   try {
     normalizePresents(SAVE.presents);
     questOrdForSave();
-    const root = applyDateRules(buildRawSavRootFromSave(SAVE, RAW_SAV_ROOT, RAW_SAV_MAIN_UID));
+    const root = restoreEmptyShapes(applyDateRules(buildRawSavRootFromSave(SAVE, RAW_SAV_ROOT, RAW_SAV_MAIN_UID)), RAW_SAV_ROOT);
     triggerDownload(await buildBrgSav(root), 'brggame.sav', 'application/octet-stream');
     toast('Downloaded brggame.sav');
   } catch (err) {
@@ -6147,7 +6185,7 @@ document.getElementById('btn-download-json').addEventListener('click', () => {
   try {
     normalizePresents(SAVE.presents);
     questOrdForSave();
-    const root = applyDateRules(buildRawSavRootFromSave(SAVE, RAW_SAV_ROOT, RAW_SAV_MAIN_UID));
+    const root = restoreEmptyShapes(applyDateRules(buildRawSavRootFromSave(SAVE, RAW_SAV_ROOT, RAW_SAV_MAIN_UID)), RAW_SAV_ROOT);
     triggerDownload(JSON.stringify(root), 'brggame.json', 'application/json');
     toast('Downloaded brggame.json');
   } catch (err) {
