@@ -2601,7 +2601,66 @@ function syncHeldWeapons(chr, held) {
     if (eid) chr.eqpts.push({ site: hand.site, eptid: eid, arm_slot: hand.base + held[hand.sel] });
   }
 }
+// What a fighter is allowed to equip. The game only lets a fighter equip a
+// part in its own slot type, and only when the fighter's stat meets the
+// part's requirement (master_part.lvllmttp / lvllmt, e.g. STR 100). The stat
+// value is master_bodylvl_status_value for the fighter's class, grade and
+// stat level. Checked against every weapon/armor fighters wear in the sample
+// saves (379 of 381 pass; the 2 exceptions were an edited save). Hand items
+// that aren't real weapons (first aid, food, sand), the "no mask / pants"
+// placeholders, gas masks and broken parts are never offered.
+const GEAR_SITE_TYPES = { EQSITE_ARMR: [ 'PTTP_ARM' ], EQSITE_ARML: [ 'PTTP_ARM' ], EQSITE_HEAD: [ 'PTTP_HEAD' ], EQSITE_BODY: [ 'PTTP_BODY' ], EQSITE_LEGS: [ 'PTTP_LEGS' ] };
+const GEAR_NEVER = /^PT_(ARM_(FirstAid|Food|Sand)$|NONE_|GAS_|MASK_|PANTS_)/;
+function fighterStatValue(chr, stat) {
+  const k = String(stat || '').toLowerCase();
+  const lvl = (chr.bodylvl || {})[k] || 1;
+  const type = chr.type || 'BAL', grade = chr.grade != null ? chr.grade : 1;
+  const row = (AP && AP.bodylvlsts || []).find(r => r.type === type && r.grade === grade && r.lvl === lvl);
+  return row && row[k] != null ? Number(row[k]) : null;
+}
+function gearProblem(chr, p, site) {
+  const rec = p && PT_INDEX[p.ptid];
+  if (!rec) return "unknown part (not in this masters.db)";
+  if (!(GEAR_SITE_TYPES[site] || []).includes(rec.type)) return "wrong slot for this part";
+  if (GEAR_NEVER.test(rec.id) || Number(rec.is_consume) === 1) return "not equippable";
+  if (p.dur != null && Number(p.dur) <= 0) return "broken";
+  const stat = rec.lvllmttp, need = Number(rec.lvllmt) || 0;
+  if (stat && need > 0) {
+    const have = fighterStatValue(chr, stat);
+    if (have == null) return `needs ${stat} ${need} (couldn't read this fighter's ${stat})`;
+    if (have < need) return `needs ${stat} ${need}, has ${have}`;
+  }
+  return null;
+}
+function gearProblems(chr) {
+  const out = [];
+  const byEid = {};
+  for (const p of arr(chr.pspts)) byEid[p.eptid] = p;
+  for (const e of arr(chr.eqpts)) {
+    const why = gearProblem(chr, byEid[e.eptid], e.site);
+    if (why) out.push({ eid: e.eptid, site: e.site, why });
+  }
+  for (const [k, eid] of Object.entries(chr.armslots || {})) {
+    if (!eid || arr(chr.eqpts).some(e => e.eptid === eid)) continue;
+    const why = gearProblem(chr, byEid[eid], Number(k) < 3 ? 'EQSITE_ARMR' : 'EQSITE_ARML');
+    if (why) out.push({ eid, site: '', slot: Number(k), why });
+  }
+  return out;
+}
+function unequipProblemGear(chr) {
+  const bad = gearProblems(chr);
+  for (const b of bad) {
+    for (const k of Object.keys(chr.armslots || {})) if (chr.armslots[k] === b.eid) delete chr.armslots[k];
+    chr.eqpts = arr(chr.eqpts).filter(e => e.eptid !== b.eid);
+  }
+  return bad.length;
+}
 function setWeaponSlot(chr, armSlot, eptid) {
+  if (eptid) {
+    const p = arr(chr.pspts).find(x => x.eptid === eptid);
+    const why = gearProblem(chr, p, armSlot < 3 ? 'EQSITE_ARMR' : 'EQSITE_ARML');
+    if (why) { toast(`Can't equip that: ${why}`, true); return false; }
+  }
   chr.armslots = chr.armslots || {};
   const held = HAND_SITES.map(h => heldIndex(chr, h));
   for (const k of Object.keys(chr.armslots)) if (chr.armslots[k] === eptid) delete chr.armslots[k];
@@ -2616,14 +2675,18 @@ function setHeldSlot(chr, handIdx, idx) {
   syncHeldWeapons(chr, held);
 }
 function setArmor(chr, site, eptid) {
+  if (eptid) {
+    const why = gearProblem(chr, arr(chr.pspts).find(x => x.eptid === eptid), site);
+    if (why) { toast(`Can't equip that: ${why}`, true); return false; }
+  }
   chr.eqpts = arr(chr.eqpts).filter(e => e.site !== site && e.eptid !== eptid);
   if (eptid) chr.eqpts.push({ site, eptid, arm_slot: -1 });
 }
 function equipEditor(chr) {
   if (!chr.armslots) chr.armslots = {};
   const weapons = arr(chr.pspts).filter(p => (PT_INDEX[p.ptid] || {}).type === 'PTTP_ARM');
-  const sel = (cur, list, attr) => `<select ${attr} style="width:100%; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:5px 6px; font-family:var(--mono); font-size:11.5px;">
-      <option value="">— empty —</option>${list.map(p => `<option value="${escapeHtml(p.eptid)}" ${p.eptid === cur ? 'selected' : ''}>${escapeHtml(gearLabel(p))}</option>`).join('')}</select>`;
+  const sel = (cur, list, attr, site) => `<select ${attr} style="width:100%; background:var(--bg); border:1px solid ${cur && gearProblem(chr, list.find(p => p.eptid === cur), site) ? 'var(--bad, #c33)' : 'var(--panel-border)'}; color:var(--text); padding:5px 6px; font-family:var(--mono); font-size:11.5px;">
+      <option value="">— empty —</option>${list.map(p => { const why = gearProblem(chr, p, site); return `<option value="${escapeHtml(p.eptid)}" ${p.eptid === cur ? 'selected' : ''} ${why && p.eptid !== cur ? 'disabled' : ''}>${escapeHtml(gearLabel(p))}${why ? ` — ✕ ${escapeHtml(why)}` : ''}</option>`; }).join('')}</select>`;
   let h = '<div class="grid" style="margin-bottom:6px; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));">';
   HAND_SITES.forEach((hand, hi) => {
     const held = heldIndex(chr, hand);
@@ -2632,23 +2695,27 @@ function equipEditor(chr) {
       const as = hand.base + i;
       h += `<div style="display:flex; gap:6px; align-items:center; margin-bottom:4px;">
         <label style="display:flex; align-items:center; gap:3px; font-size:11px; white-space:nowrap; text-transform:none; letter-spacing:0;" title="The weapon held in this hand"><input type="radio" name="held-${hi}" data-eq-held="${hi}:${i}" ${held === i ? 'checked' : ''}> in hand</label>
-        ${sel(chr.armslots[as] || '', weapons, `data-eq-arm="${as}"`)}</div>`;
+        ${sel(chr.armslots[as] || '', weapons, `data-eq-arm="${as}"`, hand.site)}</div>`;
     }
     h += '</div>';
   });
   h += '</div><div class="grid" style="margin-bottom:6px; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));">';
   for (const slot of SLOT_TYPES.filter(s => s.site !== 'EQSITE_ARMR' && s.site !== 'EQSITE_ARML')) {
     const cur = (arr(chr.eqpts).find(e => e.site === slot.site) || {}).eptid || '';
-    const list = arr(chr.pspts).filter(p => ptTypeOk(slot, PT_INDEX[p.ptid]));
-    h += `<div class="field"><label>${slot.label}</label>${sel(cur, list, `data-eq-armor="${slot.site}"`)}</div>`;
+    const list = arr(chr.pspts).filter(p => ptTypeOk(slot, PT_INDEX[p.ptid]) && (p.eptid === cur || !GEAR_NEVER.test(p.ptid)));
+    h += `<div class="field"><label>${slot.label}</label>${sel(cur, list, `data-eq-armor="${slot.site}"`, slot.site)}</div>`;
   }
-  h += '</div><div class="capNote" style="margin-top:0;">Pick from the gear this fighter is carrying (add gear to the Fighter Inventory below first). Each hand has 3 weapon slots; the ticked one is the weapon in hand. A weapon can only be in one slot.</div>';
+  const bad = gearProblems(chr);
+  if (bad.length) h += `</div><div class="warnNote" style="display:flex; gap:10px; align-items:center;"><div style="flex:1;">${escapeHtml(chr.name || 'This fighter')} has ${bad.length} piece${bad.length === 1 ? '' : 's'} of gear the game wouldn't let them equip: ${bad.map(b => escapeHtml(gearLabel(arr(chr.pspts).find(p => p.eptid === b.eid) || { ptid: '?' })) + ' (' + escapeHtml(b.why) + ')').join('; ')}.</div><button class="subtle" id="eq-unequip-bad">Unequip ${bad.length === 1 ? 'it' : 'them'}</button>`;
+  h += '</div><div class="capNote" style="margin-top:0;">Pick from the gear this fighter is carrying (add gear to the Fighter Inventory below first). Only gear this fighter can use is offered: the right slot type, not broken, and the fighter\'s stat meets the part\'s requirement (greyed-out entries show why). Each hand has 3 weapon slots; the ticked one is the weapon in hand. A weapon can only be in one slot.</div>';
   return h;
 }
 function wireEquipEditor(chr) {
   document.querySelectorAll('[data-eq-arm]').forEach(el => el.addEventListener('change', () => { setWeaponSlot(chr, Number(el.dataset.eqArm), el.value || null); renderAll(); }));
   document.querySelectorAll('[data-eq-held]').forEach(el => el.addEventListener('change', () => { const [hi, i] = el.dataset.eqHeld.split(':').map(Number); setHeldSlot(chr, hi, i); renderAll(); }));
   document.querySelectorAll('[data-eq-armor]').forEach(el => el.addEventListener('change', () => { setArmor(chr, el.dataset.eqArmor, el.value || null); renderAll(); }));
+  const ub = document.getElementById('eq-unequip-bad');
+  if (ub) ub.addEventListener('click', () => { const n = unequipProblemGear(chr); runSaveCheck(); renderAll(); toast(`Unequipped ${n} item${n === 1 ? '' : 's'}`); });
 }
 
 function skillChip(s, i) {
@@ -5657,6 +5724,12 @@ function runSaveCheck() {
       const name = c.name || 'a fighter';
       const cap = deathBagCapacity(c), n = fighterItemCount(c);
       if (cap && n > cap) add('warning', `${escapeHtml(name)} is carrying ${n} items but their Death Bag only holds ${cap}.`, 'fighters');
+      if (c.state !== 'DUMMY') {
+        const gp = gearProblems(c);
+        if (gp.length) add('warning', `${escapeHtml(name)} has ${gp.length} piece${gp.length === 1 ? '' : 's'} of gear equipped that the game wouldn't allow (${escapeHtml(gp[0].why)}${gp.length > 1 ? ', …' : ''}).`, 'fighters', {
+          label: `Unequip ${escapeHtml(name)}'s`, run: () => { const k = unequipProblemGear(c); return `Unequipped ${k} item${k === 1 ? '' : 's'} from ${name}.`; }
+        });
+      }
       for (const p of arr(c.pspts)) { note(p.eptid, name); if (p.ptid && !PT_INDEX[p.ptid]) unknown.push(p.ptid); }
       for (const m of arr(c.psmsrs)) { note(m.emsrid, name); if (m.msrid && !MSR_INDEX[m.msrid]) unknown.push(m.msrid); }
       for (const b of arr(c.psbsts)) { note(b.ebstid, name); if (b.bstid && !BST_INDEX[b.bstid]) unknown.push(b.bstid); }
