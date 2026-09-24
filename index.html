@@ -159,7 +159,7 @@
   .badge.current { border-color: var(--good); color: var(--good-bright); }
 
   .bankTable { display: flex; flex-direction: column; gap: 10px; margin-bottom: 6px; }
-  .bankRow { display: grid; grid-template-columns: 160px 1fr 1fr 160px; gap: 10px; align-items: end; padding: 8px; background: var(--bg); border: 1px solid var(--panel-border); }
+  .bankRow { display: grid; grid-template-columns: 140px 1fr 1fr 150px auto; gap: 10px; align-items: end; padding: 8px; background: var(--bg); border: 1px solid var(--panel-border); }
   .bankLabel { font-size: 12px; color: var(--text-dim); padding-bottom: 8px; }
   .bankCap { font-size: 11px; color: var(--text-faint); padding-bottom: 8px; }
   .bankCap.over { color: var(--accent-bright); font-weight: bold; }
@@ -1954,7 +1954,7 @@ function bankRow(soul, kind, label, levelField, valueField) {
   const cap = bankCapacityForLevel(level);
   const val = soul[valueField] != null ? soul[valueField] : 0;
   const over = val > cap;
-  return `<div class="bankRow">\n    <div class="bankLabel">${label}</div>\n    <div class="field"><label>Bank Level (1-${maxLvl})</label><input type="number" min="1" max="${maxLvl}" data-bank-level="${levelField}" data-bank-cap-target="${valueField}" value="${level}"></div>\n    <div class="field"><label>Held Amount</label><input type="text" inputmode="numeric" data-currency="${valueField}" value="${val.toLocaleString()}"></div>\n    <div class="bankCap ${over ? 'over' : ''}" data-bank-cap-display="${valueField}">cap: ${cap.toLocaleString()}${over ? ' -- OVER CAP' : ''}</div>\n    <button class="subtle" data-bank-max="${levelField}" data-bank-max-value="${valueField}">Max</button>\n  </div>`;
+  return `<div class="bankRow">\n    <div class="bankLabel">${label}</div>\n    <div class="field"><label>Bank Level (1-${maxLvl})</label><input type="number" min="1" max="${maxLvl}" data-bank-level="${levelField}" data-bank-cap-target="${valueField}" value="${level}"></div>\n    <div class="field"><label>Held Amount</label><input type="text" inputmode="numeric" data-currency="${valueField}" value="${val.toLocaleString()}"></div>\n    <div class="bankCap ${over ? 'over' : ''}" data-bank-cap-display="${valueField}">cap: ${cap.toLocaleString()}${over ? ' -- OVER CAP' : ''}</div>\n    <div style="display:flex; gap:6px; white-space:nowrap;"><button class="subtle" data-bank-fill="${valueField}" data-bank-fill-level="${levelField}" title="Fill to this bank level's cap without changing the level">Fill to cap</button>\n    <button class="subtle" data-bank-max="${levelField}" data-bank-max-value="${valueField}" title="Max the bank level and fill it">Max level + fill</button></div>\n  </div>`;
 }
 
 function blockCurrency() {
@@ -2012,6 +2012,14 @@ function wireCurrency() {
       // the game stores only the level; a *_limit field is written only if the save already has one
       { const lk = inp.dataset.bankLevel.replace('_level', '_limit'); if (lk in SAVE.soul) SAVE.soul[lk] = bankCapacityForLevel(lvl); }
       updateBankCapDisplay(inp.dataset.bankCapTarget);
+    });
+  });
+  document.querySelectorAll('[data-bank-fill]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const cap = bankCapacityForLevel(SAVE.soul[btn.dataset.bankFillLevel] || 1);
+      SAVE.soul[btn.dataset.bankFill] = cap;
+      renderAll();
+      toast(`Filled to ${cap.toLocaleString()} (cap at bank level ${SAVE.soul[btn.dataset.bankFillLevel] || 1})`);
     });
   });
   document.querySelectorAll('[data-bank-max]').forEach(btn => {
