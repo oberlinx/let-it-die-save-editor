@@ -2603,7 +2603,8 @@ function syncHeldWeapons(chr, held) {
 }
 // What a fighter is allowed to equip. The game only lets a fighter equip a
 // part in its own slot type, and only when the fighter's stat meets the
-// part's requirement (master_part.lvllmttp / lvllmt, e.g. STR 100). The stat
+// part's requirement (master_part.lvllmttp / lvllmt, e.g. STR 100, raised for
+// upgraded parts, see gearRequirement). The stat
 // value is master_bodylvl_status_value for the fighter's class, grade and
 // stat level. Checked against every weapon/armor fighters wear in the sample
 // saves (379 of 381 pass; the 2 exceptions were an edited save). Hand items
@@ -2618,17 +2619,24 @@ function fighterStatValue(chr, stat) {
   const row = (AP && AP.bodylvlsts || []).find(r => r.type === type && r.grade === grade && r.lvl === lvl);
   return row && row[k] != null ? Number(row[k]) : null;
 }
+// Requirement grows with the part's upgrade level: lvllmt × lvllmt_c^(lvl − 1)
+// (lvllmt_c is 1.01-1.02). Confirmed by the user in game; the saves rule out
+// scaling from lvl 0 (a +0 part at exactly its base requirement is worn).
+function gearRequirement(rec, lvl) {
+  const base = Number(rec.lvllmt) || 0, c = Number(rec.lvllmt_c) || 1;
+  return base * Math.pow(c, Math.max(1, Number(lvl) || 1) - 1);
+}
 function gearProblem(chr, p, site) {
   const rec = p && PT_INDEX[p.ptid];
   if (!rec) return "unknown part (not in this masters.db)";
   if (!(GEAR_SITE_TYPES[site] || []).includes(rec.type)) return "wrong slot for this part";
   if (GEAR_NEVER.test(rec.id) || Number(rec.is_consume) === 1) return "not equippable";
   if (p.dur != null && Number(p.dur) <= 0) return "broken";
-  const stat = rec.lvllmttp, need = Number(rec.lvllmt) || 0;
+  const stat = rec.lvllmttp, need = gearRequirement(rec, p.lvl);
   if (stat && need > 0) {
     const have = fighterStatValue(chr, stat);
-    if (have == null) return `needs ${stat} ${need} (couldn't read this fighter's ${stat})`;
-    if (have < need) return `needs ${stat} ${need}, has ${have}`;
+    if (have == null) return `needs ${stat} ${Math.ceil(need)} (couldn't read this fighter's ${stat})`;
+    if (have < need) return `needs ${stat} ${Math.ceil(need)}, has ${have}`;
   }
   return null;
 }
