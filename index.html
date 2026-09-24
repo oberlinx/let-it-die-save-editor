@@ -2632,27 +2632,27 @@ function gearRequirement(rec, lvl) {
 //   SKLTP_DISCOUNT_ALL         "All stat requirements … become #0%"      val0 = 80
 //   SKLTP_DISCOUNT_ALL_NMH     JEANE: "all equip requirements to #0%"    val0 = 90
 //   SKLTP_DISALL_ATKUP_HPDWN   "all stats required … become #1%"         val1 = 80
-// Only decals equipped on the fighter count. They stack (user confirmed in
-// game), including the normal and premium ("_P") copies of the same decal
-// (user confirmed). The editor multiplies them (e.g. Strength Discount 50%
-// with Everything's On Sale 80% = 40%); multiplying is the stricter of the
-// two likely rules (adding the reductions would give 30%).
+// How they combine, worked out from the user's in-game numbers for a
+// KAMAS-A1 Assault Rifle RE +4 (DEX 27 with no decals):
+//   Dexterity Discount + Dexterity Discount +            → 13  (27 × 50%)
+//   both DEX discounts + Everything's On Sale + One Way Ticket → 2 (27 × 10%)
+// So a stat discount counts once however many copies are worn (50% off), and
+// the reductions ADD: 50% + 20% + 20% = 90% off. The shown requirement is
+// rounded down. Only decals equipped on the fighter count.
 function gearDiscountPct(chr, stat) {
   const st = String(stat || '').toUpperCase();
-  const vals = [];
+  let statOff = 0;
+  const allOff = {};
   for (const e of arr(chr.eqskls)) {
     const rec = SKL_INDEX[e.id || e.sklid];
     if (!rec) continue;
-    let v = null;
-    if (rec.type === 'SKLTP_DISCOUNT_' + st) v = rec.val0;
-    else if (rec.type === 'SKLTP_DISCOUNT_ALL' || rec.type === 'SKLTP_DISCOUNT_ALL_NMH') v = rec.val0;
-    else if (rec.type === 'SKLTP_DISALL_ATKUP_HPDWN') v = rec.val1;
-    v = Number(v);
-    if (v > 0 && v < 100) vals.push(v);
+    if (rec.type === 'SKLTP_DISCOUNT_' + st) statOff = Math.max(statOff, 100 - Number(rec.val0));
+    else if (rec.type === 'SKLTP_DISCOUNT_ALL' || rec.type === 'SKLTP_DISCOUNT_ALL_NMH') allOff[rec.id] = 100 - Number(rec.val0);
+    else if (rec.type === 'SKLTP_DISALL_ATKUP_HPDWN') allOff[rec.id] = 100 - Number(rec.val1);
   }
-  let pct = 100;
-  for (const v of vals) pct = pct * v / 100;
-  return Math.round(pct * 100) / 100;
+  let off = statOff;
+  for (const v of Object.values(allOff)) if (v > 0 && v < 100) off += v;
+  return Math.max(0, 100 - off);
 }
 function gearProblem(chr, p, site) {
   const rec = p && PT_INDEX[p.ptid];
@@ -2661,12 +2661,13 @@ function gearProblem(chr, p, site) {
   if (GEAR_NEVER.test(rec.id) || Number(rec.is_consume) === 1) return "not equippable";
   if (p.dur != null && Number(p.dur) <= 0) return "broken";
   const stat = rec.lvllmttp, pct = stat ? gearDiscountPct(chr, stat) : 100;
-  const need = gearRequirement(rec, p.lvl) * pct / 100;
+  // the game shows (and checks) the requirement rounded down
+  const need = Math.floor(gearRequirement(rec, p.lvl) * pct / 100 + 1e-9);
   if (stat && need > 0) {
     const have = fighterStatValue(chr, stat);
-    const note = pct < 100 ? ` with decal discount to ${pct}%` : '';
-    if (have == null) return `needs ${stat} ${Math.ceil(need)}${note} (couldn't read this fighter's ${stat})`;
-    if (have < need) return `needs ${stat} ${Math.ceil(need)}${note}, has ${have}`;
+    const note = pct < 100 ? ` with decals (${100 - pct}% off)` : '';
+    if (have == null) return `needs ${stat} ${need}${note} (couldn't read this fighter's ${stat})`;
+    if (have < need) return `needs ${stat} ${need}${note}, has ${have}`;
   }
   return null;
 }
