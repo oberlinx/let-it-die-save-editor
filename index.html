@@ -3751,7 +3751,7 @@ function rewardRow(p, i) {
   } else if (p.type === 'PT' && p.val0) {
     const rec = PT_INDEX[p.val0];
     detail = `${rec ? rec.name : p.val0} x${p.num || 1}`;
-    if (rec) levelInput = `<input type="number" class="rb-pt-level" data-rb-idx="${i}" min="0" max="${maxPartLevel(rec)}" value="${Math.min(p.val1 || 0, maxPartLevel(rec))}" style="width:60px;" title="Raw save value, 0-${maxPartLevel(rec)}${rec.is_limitbreak ? ` -- shows as in-game +${maxDisplayLevel(rec)} at max` : ''}">`;
+    if (rec) levelInput = `<input type="number" class="rb-pt-level" data-rb-idx="${i}" min="0" max="${maxPartLevel(rec)}" value="${Math.min(Number(p.val1) || 0, maxPartLevel(rec))}" style="width:60px;" title="Raw save value, 0-${maxPartLevel(rec)}${rec.is_limitbreak ? ` -- shows as in-game +${maxDisplayLevel(rec)} at max` : ''}">`;
   } else if ([ 'PTTP_ARM', 'PTTP_HEAD', 'PTTP_BODY', 'PTTP_LEGS' ].includes(p.type) && p.val0) {
     const rec = PT_INDEX[p.val0];
     detail = `${rec ? rec.name : p.val0} (blueprint) x${p.num || 1}`;
@@ -3793,7 +3793,7 @@ function wireRewardBox() {
         toast(`Clamped to this tier's cap (+${v})`);
       }
       if (v < 0) v = 0;
-      SAVE.presents[parseInt(inp.dataset.rbIdx, 10)].val1 = v;
+      SAVE.presents[parseInt(inp.dataset.rbIdx, 10)].val1 = String(v);
       inp.value = v;
     });
   });
@@ -3825,10 +3825,58 @@ function renderRbForm() {
   }
 }
 
+// Reward Box entries exactly as the game writes them (from a real save):
+// {pid: lowercase UUID, from, type, created, num, fromval, kind, val0,
+//  val1..val4 as STRINGS}. Older editor versions added a "uid" field, a
+// non-UUID pid and numeric val1..val4; normalizePresents() repairs those.
+const PRESENT_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+function presentUuid() {
+  if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  const b = new Uint8Array(16);
+  (window.crypto || {}).getRandomValues ? crypto.getRandomValues(b) : b.forEach((_, i) => { b[i] = Math.floor(Math.random() * 256); });
+  b[6] = b[6] & 15 | 64; b[8] = b[8] & 63 | 128;
+  const x = [ ...b ].map(v => v.toString(16).padStart(2, '0')).join('');
+  return `${x.slice(0, 8)}-${x.slice(8, 12)}-${x.slice(12, 16)}-${x.slice(16, 20)}-${x.slice(20)}`;
+}
+function presentProblems(p) {
+  const bad = [];
+  if (!p || typeof p !== 'object') return [ 'not an object' ];
+  if ('uid' in p) bad.push('extra uid field');
+  if (typeof p.pid !== 'string' || !PRESENT_UUID_RE.test(p.pid)) bad.push('pid');
+  for (const k of [ 'val1', 'val2', 'val3', 'val4' ]) if (typeof p[k] !== 'string') bad.push(k);
+  for (const k of [ 'fromval', 'kind', 'val0' ]) if (typeof p[k] !== 'string') bad.push(k);
+  if (typeof p.num !== 'number') bad.push('num');
+  if (typeof p.created !== 'number') bad.push('created');
+  return bad;
+}
+function normalizePresents(list) {
+  let n = 0;
+  for (let i = 0; i < list.length; i++) {
+    const p = list[i];
+    if (!presentProblems(p).length) continue;
+    const s = v => v == null ? '' : String(v);
+    list[i] = {
+      pid: typeof p.pid === 'string' && PRESENT_UUID_RE.test(p.pid) ? p.pid : presentUuid(),
+      from: p.from || 'LOGIN',
+      type: p.type || '',
+      created: Number(p.created) || Math.floor(Date.now() / 1e3),
+      num: Number(p.num) || 0,
+      fromval: s(p.fromval),
+      kind: s(p.kind),
+      val0: s(p.val0),
+      val1: s(p.val1 != null && p.val1 !== '' ? p.val1 : 0),
+      val2: s(p.val2 != null && p.val2 !== '' ? p.val2 : 0),
+      val3: s(p.val3 != null && p.val3 !== '' ? p.val3 : 0),
+      val4: s(p.val4 != null && p.val4 !== '' ? p.val4 : 0)
+    };
+    n++;
+  }
+  return n;
+}
+
 function addPresent(type, num, val0, val1) {
   SAVE.presents.push({
-    pid: 'edit-' + Math.random().toString(16).slice(2),
-    uid: SAVE.soul.crntcid,
+    pid: presentUuid(),
     from: 'LOGIN',
     type: type,
     created: Math.floor(Date.now() / 1e3),
@@ -3836,10 +3884,10 @@ function addPresent(type, num, val0, val1) {
     fromval: '',
     kind: '',
     val0: val0 || '',
-    val1: val1 || 0,
-    val2: 0,
-    val3: 0,
-    val4: 0
+    val1: String(val1 || 0),
+    val2: '0',
+    val3: '0',
+    val4: '0'
   });
   toast(`Added ${type}${val0 ? ' (' + val0 + ')' : ''} x${num}`);
   renderAll();
@@ -4739,12 +4787,12 @@ function rewardLabel(type, num, v0) {
   } else if (PT_INDEX[v0]) nm = PT_INDEX[v0].name;
   return (nm || `${type} ${v0 || ''}`.trim()) + (type === 'MONEY' || type === 'SPIRIT' ? '' : n);
 }
-function rewardRow(rwdid) {
+function rwdRow(rwdid) {
   const r = questMeta().rwd[rwdid];
   return r || null;
 }
 function rewardName(rwdid) {
-  const r = rewardRow(rwdid);
+  const r = rwdRow(rwdid);
   if (!r) return rwdid || '?';
   if (r.type === 'MONEY' && /MEDAL/.test(rwdid)) return 'Death Metal';
   return rewardLabel(r.type, r.num, r.val0);
@@ -4895,7 +4943,7 @@ function boxSync() {
 function boxPool(rarity) {
   const rows = arr(AP && AP.boxGen).filter(r => r.rarity === rarity && r.freq > 0);
   const tot = rows.reduce((a, r) => a + r.freq, 0) || 1;
-  return rows.map(r => ({ id: r.id, rwdid: r.rwdid, freq: r.freq, p: r.freq / tot, rw: rewardRow(r.rwdid), name: rewardName(r.rwdid) })).filter(x => x.rw);
+  return rows.map(r => ({ id: r.id, rwdid: r.rwdid, freq: r.freq, p: r.freq / tot, rw: rwdRow(r.rwdid), name: rewardName(r.rwdid) })).filter(x => x.rw);
 }
 function boxApplyReward(box, rw) {
   box.type = rw.type;
@@ -5356,6 +5404,14 @@ function runSaveCheck() {
     if (done) add('note', `${done} current quest${done === 1 ? ' is' : 's are'} complete and ready to report in game.`, 'quests');
   });
 
+  // reward box entries in a format the game can read
+  safe('reward box', () => {
+    const bad = arr(SAVE.presents).filter(p => presentProblems(p).length);
+    if (bad.length) add('problem', `${bad.length} Reward Box item${bad.length === 1 ? ' is' : 's are'} in a format the game can't read (added by an older editor version). This can make the in-game Reward Box show as empty.`, 'rewards', {
+      label: 'Fix Reward Box', run: () => { const k = normalizePresents(SAVE.presents); return `Rewrote ${k} Reward Box item${k === 1 ? '' : 's'} in the game's format.`; }
+    });
+  });
+
   // death boxes / lost bags
   safe('death boxes', () => {
     const boxes = arr(soul.deathbox);
@@ -5600,6 +5656,7 @@ document.getElementById('btn-download-sav').addEventListener('click', async () =
     return;
   }
   try {
+    normalizePresents(SAVE.presents);
     const root = applyDateRules(buildRawSavRootFromSave(SAVE, RAW_SAV_ROOT, RAW_SAV_MAIN_UID));
     triggerDownload(await buildBrgSav(root), 'brggame.sav', 'application/octet-stream');
     toast('Downloaded brggame.sav');
@@ -5614,6 +5671,7 @@ document.getElementById('btn-download-json').addEventListener('click', () => {
     return;
   }
   try {
+    normalizePresents(SAVE.presents);
     const root = applyDateRules(buildRawSavRootFromSave(SAVE, RAW_SAV_ROOT, RAW_SAV_MAIN_UID));
     triggerDownload(JSON.stringify(root), 'brggame.json', 'application/json');
     toast('Downloaded brggame.json');
