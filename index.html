@@ -625,7 +625,9 @@ function adaptFullDumpToLegacyShape(root) {
   function buildFighterInventory(cid) {
     const slots = arr(deathbagByCid[cid]);
     const pspts = [], eqpts = [], psmsrs = [], psbsts = [], psitems = [];
+    const armslots = {};
     for (const s of slots) {
+      if (s.type === 0 && s.eid && s.arm_slot != null && s.arm_slot >= 0 && s.arm_slot <= 5 && ptInstByEid[s.eid]) armslots[s.arm_slot] = s.eid;
       if (s.type === 0 && s.eid) {
         const inst = ptInstByEid[s.eid];
         if (inst) pspts.push({
@@ -674,7 +676,8 @@ function adaptFullDumpToLegacyShape(root) {
       eqpts: eqpts,
       psmsrs: psmsrs,
       psbsts: psbsts,
-      psitems: psitems
+      psitems: psitems,
+      armslots: armslots
     };
   }
   const mergedChrs = chrs.map(c => {
@@ -711,6 +714,7 @@ function adaptFullDumpToLegacyShape(root) {
       psmsrs: inv.psmsrs,
       psbsts: inv.psbsts,
       psitems: inv.psitems,
+      armslots: inv.armslots,
       eqskls: eqskls
     });
   });
@@ -841,6 +845,7 @@ function buildRawSavRootFromSave(SAVE, rawRoot, mainUid) {
       delete c2.psbsts;
       delete c2.psitems;
       delete c2.eqskls;
+      delete c2.armslots;
       return c2;
     })
   });
@@ -944,12 +949,18 @@ function buildRawSavRootFromSave(SAVE, rawRoot, mainUid) {
   for (const c of SAVE.soul.chrs) {
     const slots = [];
     const eqBySite = {}, armSlotByEptid = {};
-    for (const s of arr(oldDeathbagByCid[c.cid])) {
-      if (s && s.type === 0 && s.eid && !s.site && s.arm_slot != null) armSlotByEptid[s.eid] = s.arm_slot;
-    }
-    for (const e of c.eqpts || []) {
-      eqBySite[e.eptid] = e.site;
-      armSlotByEptid[e.eptid] = e.arm_slot != null ? e.arm_slot : -1;
+    if (c.armslots && typeof c.armslots === 'object') {
+      // weapon quick slots are managed by the editor (arm_slot 0-2 right hand, 3-5 left)
+      for (const e of c.eqpts || []) { eqBySite[e.eptid] = e.site; armSlotByEptid[e.eptid] = -1; }
+      for (const [k, eid] of Object.entries(c.armslots)) if (eid) armSlotByEptid[eid] = Number(k);
+    } else {
+      for (const s of arr(oldDeathbagByCid[c.cid])) {
+        if (s && s.type === 0 && s.eid && !s.site && s.arm_slot != null) armSlotByEptid[s.eid] = s.arm_slot;
+      }
+      for (const e of c.eqpts || []) {
+        eqBySite[e.eptid] = e.site;
+        armSlotByEptid[e.eptid] = e.arm_slot != null ? e.arm_slot : -1;
+      }
     }
     for (const p of c.pspts || []) {
       pushInst(newPts, oldPtsByEid, p.eptid, {
@@ -2515,7 +2526,7 @@ function blockCharacters() {
   const rageTotal = rageTotalFor(chr, R);
   const rageLocked = R.rageFloor === R.rageCap;
   const combat = combatStatsFor(chr, type, grade);
-  return `<section class="block">\n    <div class="block-head">\n      <div><div class="eyebrow">Fighters</div><h2>Fighter Freezer</h2></div>\n      <div style="display:flex; gap:6px; align-items:center;">\n        <span style="font-size:11px; color:var(--text-dim);">${FZ.slots} hangers · ${freeHangers().length} empty</span>\n        <select id="new-char-body" ${atCap ? 'disabled' : ''} title="Body for the new fighter" style="background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:4px 6px; font-family:var(--mono); font-size:11.5px;">${arr(AP && AP.bodies).map(b => `<option value="${b.id}">${b.gender === 'GENDER_MALE' ? 'Male' : 'Female'} ${String(b.id).slice(-1)}</option>`).join('')}</select>\n        <button class="subtle" id="btn-add-char" ${atCap ? 'disabled title="No empty hanger in the freezer."' : 'title="Adds a fighter the same way the Fighter Depot does, into the first empty hanger."'}>+ Add Fighter</button>\n        <button class="subtle" id="btn-del-char" ${fighterDeleteBlock(chr) ? `disabled title="${escapeHtml(fighterDeleteBlock(chr))}"` : 'title="Delete the selected fighter, the way the game does"'}>Delete ${escapeHtml(chr ? chr.name || 'fighter' : 'fighter')}</button>\n      </div>\n    </div>\n    <div class="block-body">\n      <div class="grid" style="margin-bottom:12px;">\n        <div class="field"><label>Freezer Level</label><select id="freezer-level" style="width:100%; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);">${FZ.level == null ? `<option selected>? (${FZ.slots} hangers)</option>` : ''}${arr(AP && AP.freezer).map(r => `<option value="${r.number}" ${r.number === FZ.level ? 'selected' : ''}>Level ${r.number} (${r.count} hangers)</option>`).join('')}</select></div>\n        <div class="field" style="display:flex; align-items:end;"><button class="subtle" id="freezer-max" ${FZ.slots >= FZ.max ? 'disabled' : ''}>Max (${FZ.max} hangers)</button></div>\n      </div>\n      <div class="capNote" style="margin-top:0;">Your freezer has ${FZ.slots} hangers, ${freeHangers().length} empty. ${atCap ? 'Every hanger is in use, so a fighter can\'t be added.' : 'New fighters are added the way the Fighter Depot adds them: grade 1 All-rounder at level 1, into the first empty hanger. Change their class, grade and stats below after adding.'} Raising the freezer level adds empty hangers; it can only go down if the hangers it removes are empty.</div>\n      <div class="charTabs">\n        ${chrs.map((c, i) => `<div class="charTab ${i === activeCharIdx ? 'active' : ''}" data-char-idx="${i}">${c.cid === SAVE.soul.crntcid ? '★ ' : ''}${c.state === 'ENEMY' ? '☠ ' : ''}${escapeHtml(c.name || '#' + i)} · Lv${c.lvl != null ? c.lvl : '?'}</div>`).join('')}\n      </div>\n      <div class="grid" style="margin-bottom:10px;">\n        <div class="field"><label>Name</label><input type="text" id="chr-name" value="${escapeHtml(chr.name || '')}"></div>\n        <div class="field"><label>Class</label>\n          <select id="chr-type" style="width:100%; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);">\n            ${Object.keys(CLASS_NAMES).filter(k => k !== 'OLD').map(k => `<option value="${k}" ${k === type ? 'selected' : ''}>${CLASS_NAMES[k]}</option>`).join('')}\n          </select>\n        </div>\n        <div class="field"><label>Grade (1-6)</label><input type="number" id="chr-grade" min="1" max="6" value="${grade}"></div>\n        <div class="field"><label>Limit Break (0-${maxLb})</label><input type="number" id="chr-lb" min="0" max="${maxLb}" value="${lb}"></div>\n        <div class="field"><label>Level (follows stats, max ${R.levelMax})</label><input type="number" id="chr-lvl" min="1" max="${R.levelMax}" value="${chr.lvl != null ? chr.lvl : 1}"></div>\n      </div>\n      <div style="margin-bottom:16px;">\n        ${isCurrent ? '<span class="badge current">★ CURRENTLY SELECTED FIGHTER</span>' : ''}\n      </div>\n      ${chr.state === 'ENEMY' ? fighterDeadNote(chr) : ''}\n\n      <div class="eyebrow" style="margin-bottom:8px;">Stats (individually editable) <button class="subtle" id="stat-max" style="margin-left:8px;">Max for this grade/limit break</button></div>\n      <div class="grid" style="margin-bottom:8px;">\n        ${[ 'hp', 'str', 'dex', 'vit', 'stm', 'luk' ].map(k => `\n          <div class="field"><label>${k.toUpperCase()} (${statFloor}-${statCap})</label>\n          <input type="number" class="chr-stat" data-stat="${k}" data-floor="${statFloor}" data-cap="${statCap}" value="${Math.min(Math.max(chr.bodylvl[k] != null ? chr.bodylvl[k] : statFloor, statFloor), statCap)}"></div>`).join('')}\n        <div class="field"><label>Decal Slots (${R.skillFloor}-${R.skillCap})</label><input type="number" class="chr-stat" data-stat="skill" data-base="${R.skillBase}" data-floor="${R.skillFloor}" data-cap="${R.skillCap}" value="${skillTotal}"></div>\n        <div class="field"><label>Death Bag (${R.bagFloor}-${R.bagCap})</label><input type="number" class="chr-stat" data-stat="bag" data-base="${R.bagBase}" data-floor="${R.bagFloor}" data-cap="${R.bagCap}" value="${bagTotal}"></div>\n        <div class="field"><label>Rage Bars (${rageLocked ? R.rageCap + ', fixed' : R.rageFloor + '-' + R.rageCap})</label><input type="number" id="chr-rage" data-base="${R.rageBase}" min="${R.rageFloor}" max="${R.rageCap}" value="${rageTotal}" ${rageLocked ? 'disabled' : ''}></div>\n      </div>\n      ${combat ? `<div class="listBlock" style="margin-bottom:16px;"><div class="listRow"><div class="name">Combat stats</div></div>\n        <div class="listRow"><div class="name">${combat}</div></div></div>` : ''}\n\n      <div class="eyebrow" style="margin-bottom:8px;">Currently wearing</div>\n      ${SLOT_TYPES.map(slot => equipViewRow(chr, slot)).join('')}\n\n      <div class="toolbar" style="margin:16px 0 8px;"><div class="eyebrow" style="margin:0;">Skill Decals</div><div class="count">${arr(chr.eqskls).length} / ${skillTotal} slots</div></div>\n      ${arr(chr.eqskls).length > skillTotal ? `<div class="warnNote">More decals equipped than this fighter has slots (${skillTotal}). Remove some or raise Decal Slots above.</div>` : ''}\n      <div class="searchwrap">\n        <input type="text" id="skill-search" placeholder="Search skill decal name, e.g. &quot;Living on the Edge&quot;...">\n        <div class="acdrop" id="skill-acdrop"></div>\n      </div>\n      <div class="chipRow" id="skill-chips">\n        ${arr(chr.eqskls).map((s, i) => skillChip(s, i)).join('')}\n      </div>\n\n      <div class="toolbar" style="margin:16px 0 8px;"><div class="eyebrow" style="margin:0;">Fighter Inventory (Death Bag contents, incl. equipped gear)</div><button class="subtle" id="fi-clear-all">Clear all</button><div class="count">${fighterItemCount(chr)} / ${deathBagCapacity(chr)} slots</div></div>\n      ${fighterItemCount(chr) > deathBagCapacity(chr) ? `<div class="warnNote">Over this fighter's Death Bag capacity (${deathBagCapacity(chr)}). Remove items or raise Death Bag above.</div>` : ''}\n      <div class="subTabs" id="fi-cat-tabs">\n        <div class="subTab active" data-fi-cat="pt">Weapon/Armor</div>\n        <div class="subTab" data-fi-cat="bp">Blueprint</div>\n        <div class="subTab" data-fi-cat="msr">Mushroom</div>\n        <div class="subTab" data-fi-cat="bst">Beast</div>\n        <div class="subTab" data-fi-cat="item">Material / Other</div>\n      </div>\n      <div id="fi-add-form"></div>\n      <div class="listBlock" id="fi-list">\n        ${fighterInventoryRows(chr).join('') || '<div style="padding:10px; color:var(--text-faint); font-size:12px;">Empty.</div>'}\n      </div>\n    </div>\n  </section>`;
+  return `<section class="block">\n    <div class="block-head">\n      <div><div class="eyebrow">Fighters</div><h2>Fighter Freezer</h2></div>\n      <div style="display:flex; gap:6px; align-items:center;">\n        <span style="font-size:11px; color:var(--text-dim);">${FZ.slots} hangers · ${freeHangers().length} empty</span>\n        <select id="new-char-body" ${atCap ? 'disabled' : ''} title="Body for the new fighter" style="background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:4px 6px; font-family:var(--mono); font-size:11.5px;">${arr(AP && AP.bodies).map(b => `<option value="${b.id}">${b.gender === 'GENDER_MALE' ? 'Male' : 'Female'} ${String(b.id).slice(-1)}</option>`).join('')}</select>\n        <button class="subtle" id="btn-add-char" ${atCap ? 'disabled title="No empty hanger in the freezer."' : 'title="Adds a fighter the same way the Fighter Depot does, into the first empty hanger."'}>+ Add Fighter</button>\n        <button class="subtle" id="btn-del-char" ${fighterDeleteBlock(chr) ? `disabled title="${escapeHtml(fighterDeleteBlock(chr))}"` : 'title="Delete the selected fighter, the way the game does"'}>Delete ${escapeHtml(chr ? chr.name || 'fighter' : 'fighter')}</button>\n      </div>\n    </div>\n    <div class="block-body">\n      <div class="grid" style="margin-bottom:12px;">\n        <div class="field"><label>Freezer Level</label><select id="freezer-level" style="width:100%; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);">${FZ.level == null ? `<option selected>? (${FZ.slots} hangers)</option>` : ''}${arr(AP && AP.freezer).map(r => `<option value="${r.number}" ${r.number === FZ.level ? 'selected' : ''}>Level ${r.number} (${r.count} hangers)</option>`).join('')}</select></div>\n        <div class="field" style="display:flex; align-items:end;"><button class="subtle" id="freezer-max" ${FZ.slots >= FZ.max ? 'disabled' : ''}>Max (${FZ.max} hangers)</button></div>\n      </div>\n      <div class="capNote" style="margin-top:0;">Your freezer has ${FZ.slots} hangers, ${freeHangers().length} empty. ${atCap ? 'Every hanger is in use, so a fighter can\'t be added.' : 'New fighters are added the way the Fighter Depot adds them: grade 1 All-rounder at level 1, into the first empty hanger. Change their class, grade and stats below after adding.'} Raising the freezer level adds empty hangers; it can only go down if the hangers it removes are empty.</div>\n      <div class="charTabs">\n        ${chrs.map((c, i) => `<div class="charTab ${i === activeCharIdx ? 'active' : ''}" data-char-idx="${i}">${c.cid === SAVE.soul.crntcid ? '★ ' : ''}${c.state === 'ENEMY' ? '☠ ' : ''}${escapeHtml(c.name || '#' + i)} · Lv${c.lvl != null ? c.lvl : '?'}</div>`).join('')}\n      </div>\n      <div class="grid" style="margin-bottom:10px;">\n        <div class="field"><label>Name</label><input type="text" id="chr-name" value="${escapeHtml(chr.name || '')}"></div>\n        <div class="field"><label>Class</label>\n          <select id="chr-type" style="width:100%; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);">\n            ${Object.keys(CLASS_NAMES).filter(k => k !== 'OLD').map(k => `<option value="${k}" ${k === type ? 'selected' : ''}>${CLASS_NAMES[k]}</option>`).join('')}\n          </select>\n        </div>\n        <div class="field"><label>Grade (1-6)</label><input type="number" id="chr-grade" min="1" max="6" value="${grade}"></div>\n        <div class="field"><label>Limit Break (0-${maxLb})</label><input type="number" id="chr-lb" min="0" max="${maxLb}" value="${lb}"></div>\n        <div class="field"><label>Level (follows stats, max ${R.levelMax})</label><input type="number" id="chr-lvl" min="1" max="${R.levelMax}" value="${chr.lvl != null ? chr.lvl : 1}"></div>\n      </div>\n      <div style="margin-bottom:16px;">\n        ${isCurrent ? '<span class="badge current">★ CURRENTLY SELECTED FIGHTER</span>' : ''}\n      </div>\n      ${chr.state === 'ENEMY' ? fighterDeadNote(chr) : ''}\n\n      <div class="eyebrow" style="margin-bottom:8px;">Stats (individually editable) <button class="subtle" id="stat-max" style="margin-left:8px;">Max for this grade/limit break</button></div>\n      <div class="grid" style="margin-bottom:8px;">\n        ${[ 'hp', 'str', 'dex', 'vit', 'stm', 'luk' ].map(k => `\n          <div class="field"><label>${k.toUpperCase()} (${statFloor}-${statCap})</label>\n          <input type="number" class="chr-stat" data-stat="${k}" data-floor="${statFloor}" data-cap="${statCap}" value="${Math.min(Math.max(chr.bodylvl[k] != null ? chr.bodylvl[k] : statFloor, statFloor), statCap)}"></div>`).join('')}\n        <div class="field"><label>Decal Slots (${R.skillFloor}-${R.skillCap})</label><input type="number" class="chr-stat" data-stat="skill" data-base="${R.skillBase}" data-floor="${R.skillFloor}" data-cap="${R.skillCap}" value="${skillTotal}"></div>\n        <div class="field"><label>Death Bag (${R.bagFloor}-${R.bagCap})</label><input type="number" class="chr-stat" data-stat="bag" data-base="${R.bagBase}" data-floor="${R.bagFloor}" data-cap="${R.bagCap}" value="${bagTotal}"></div>\n        <div class="field"><label>Rage Bars (${rageLocked ? R.rageCap + ', fixed' : R.rageFloor + '-' + R.rageCap})</label><input type="number" id="chr-rage" data-base="${R.rageBase}" min="${R.rageFloor}" max="${R.rageCap}" value="${rageTotal}" ${rageLocked ? 'disabled' : ''}></div>\n      </div>\n      ${combat ? `<div class="listBlock" style="margin-bottom:16px;"><div class="listRow"><div class="name">Combat stats</div></div>\n        <div class="listRow"><div class="name">${combat}</div></div></div>` : ''}\n\n      <div class="eyebrow" style="margin-bottom:8px;">Currently wearing</div>\n      ${equipEditor(chr)}\n\n      <div class="toolbar" style="margin:16px 0 8px;"><div class="eyebrow" style="margin:0;">Skill Decals</div><div class="count">${arr(chr.eqskls).length} / ${skillTotal} slots</div></div>\n      ${arr(chr.eqskls).length > skillTotal ? `<div class="warnNote">More decals equipped than this fighter has slots (${skillTotal}). Remove some or raise Decal Slots above.</div>` : ''}\n      <div class="searchwrap">\n        <input type="text" id="skill-search" placeholder="Search skill decal name, e.g. &quot;Living on the Edge&quot;...">\n        <div class="acdrop" id="skill-acdrop"></div>\n      </div>\n      <div class="chipRow" id="skill-chips">\n        ${arr(chr.eqskls).map((s, i) => skillChip(s, i)).join('')}\n      </div>\n\n      <div class="toolbar" style="margin:16px 0 8px;"><div class="eyebrow" style="margin:0;">Fighter Inventory (Death Bag contents, incl. equipped gear)</div><button class="subtle" id="fi-clear-all">Clear all</button><div class="count">${fighterItemCount(chr)} / ${deathBagCapacity(chr)} slots</div></div>\n      ${fighterItemCount(chr) > deathBagCapacity(chr) ? `<div class="warnNote">Over this fighter's Death Bag capacity (${deathBagCapacity(chr)}). Remove items or raise Death Bag above.</div>` : ''}\n      <div class="subTabs" id="fi-cat-tabs">\n        <div class="subTab active" data-fi-cat="pt">Weapon/Armor</div>\n        <div class="subTab" data-fi-cat="bp">Blueprint</div>\n        <div class="subTab" data-fi-cat="msr">Mushroom</div>\n        <div class="subTab" data-fi-cat="bst">Beast</div>\n        <div class="subTab" data-fi-cat="item">Material / Other</div>\n      </div>\n      <div id="fi-add-form"></div>\n      <div class="listBlock" id="fi-list">\n        ${fighterInventoryRows(chr).join('') || '<div style="padding:10px; color:var(--text-faint); font-size:12px;">Empty.</div>'}\n      </div>\n    </div>\n  </section>`;
 }
 
 function combatStatsFor(chr, type, grade) {
@@ -2530,11 +2541,11 @@ function combatStatsFor(chr, type, grade) {
 
 function fighterInventoryRows(chr) {
   const rows = [];
-  const equippedEptids = new Set(arr(chr.eqpts).map(e => e.eptid));
+  const equippedEptids = new Set(arr(chr.eqpts).map(e => e.eptid).concat(Object.values(chr.armslots || {})));
   arr(chr.pspts).forEach((p, i) => {
     const rec = PT_INDEX[p.ptid];
     if (equippedEptids.has(p.eptid)) {
-      rows.push(`<div class="listRow"><div class="name">${escapeHtml(rec ? rec.name : p.ptid)}${rec ? ` · +${displayFromRaw(rec, p.lvl)}` : ''}</div><span class="badge current">EQUIPPED</span></div>`);
+      rows.push(`<div class="listRow"><div class="name">${escapeHtml(rec ? rec.name : p.ptid)}${rec ? ` · +${displayFromRaw(rec, p.lvl)}` : ''}</div><span class="badge current">${arr(chr.eqpts).some(e => e.eptid === p.eptid) ? 'EQUIPPED' : 'WEAPON SLOT'}</span></div>`);
       return;
     }
     const name = rec ? rec.name : p.ptid;
@@ -2556,6 +2567,88 @@ function equipViewRow(chr, slot) {
   const rec = inst ? PT_INDEX[inst.ptid] : null;
   const name = rec ? rec.name : inst ? inst.ptid : null;
   return `<div class="eqRow">\n    <div class="slotname">${slot.label}</div>\n    <div class="${name ? '' : 'empty'}">${name ? escapeHtml(name) : 'Nothing equipped'}</div>\n    <div>${rec ? `<span class="badge ${rec.is_limitbreak ? 'lb' : ''}">+${displayFromRaw(rec, inst.lvl)}</span>` : ''}</div>\n  </div>`;
+}
+
+// ---- Equipped gear editing -------------------------------------------------
+// From real saves: every weapon a fighter has in a quick slot has arm_slot
+// 0-2 (right hand) or 3-5 (left hand) on its death bag entry; the one being
+// held in each hand also has site EQSITE_ARMR / EQSITE_ARML. Armor has site
+// EQSITE_HEAD / BODY / LEGS and arm_slot -1. chr.select_arm_slots is
+// "right,left" (the quick slot index 0-2 held in each hand; "" = never
+// changed). The site entries are what decides what's held.
+const HAND_SITES = [ { site: 'EQSITE_ARMR', label: 'Right hand', base: 0, sel: 0 }, { site: 'EQSITE_ARML', label: 'Left hand', base: 3, sel: 1 } ];
+function ptTypeOk(slot, rec) {
+  const t = Array.isArray(slot.ptType) ? slot.ptType : [ slot.ptType ];
+  return !!rec && t.includes(rec.type);
+}
+function gearLabel(p) {
+  const rec = PT_INDEX[p.ptid];
+  if (!rec) return p.ptid;
+  const pct = durabilityPct(p, rec);
+  return `${rec.name} +${displayFromRaw(rec, p.lvl)}${pct != null ? ` (${pct}%)` : ''}`;
+}
+function heldIndex(chr, hand) {
+  const eq = arr(chr.eqpts).find(e => e.site === hand.site);
+  if (eq && chr.armslots) for (let i = 0; i < 3; i++) if (chr.armslots[hand.base + i] === eq.eptid) return i;
+  const sel = String(chr.select_arm_slots || '').split(',').map(n => parseInt(n, 10));
+  const v = sel[hand.sel];
+  return v >= 0 && v <= 2 ? v : 0;
+}
+function syncHeldWeapons(chr, held) {
+  chr.eqpts = arr(chr.eqpts).filter(e => e.site !== 'EQSITE_ARMR' && e.site !== 'EQSITE_ARML');
+  for (const hand of HAND_SITES) {
+    const eid = chr.armslots[hand.base + held[hand.sel]];
+    if (eid) chr.eqpts.push({ site: hand.site, eptid: eid, arm_slot: hand.base + held[hand.sel] });
+  }
+}
+function setWeaponSlot(chr, armSlot, eptid) {
+  chr.armslots = chr.armslots || {};
+  const held = HAND_SITES.map(h => heldIndex(chr, h));
+  for (const k of Object.keys(chr.armslots)) if (chr.armslots[k] === eptid) delete chr.armslots[k];
+  if (eptid) chr.armslots[armSlot] = eptid; else delete chr.armslots[armSlot];
+  syncHeldWeapons(chr, held);
+}
+function setHeldSlot(chr, handIdx, idx) {
+  chr.armslots = chr.armslots || {};
+  const held = HAND_SITES.map(h => heldIndex(chr, h));
+  held[handIdx] = idx;
+  chr.select_arm_slots = `${held[0]},${held[1]}`;
+  syncHeldWeapons(chr, held);
+}
+function setArmor(chr, site, eptid) {
+  chr.eqpts = arr(chr.eqpts).filter(e => e.site !== site && e.eptid !== eptid);
+  if (eptid) chr.eqpts.push({ site, eptid, arm_slot: -1 });
+}
+function equipEditor(chr) {
+  if (!chr.armslots) chr.armslots = {};
+  const weapons = arr(chr.pspts).filter(p => (PT_INDEX[p.ptid] || {}).type === 'PTTP_ARM');
+  const sel = (cur, list, attr) => `<select ${attr} style="width:100%; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:5px 6px; font-family:var(--mono); font-size:11.5px;">
+      <option value="">— empty —</option>${list.map(p => `<option value="${escapeHtml(p.eptid)}" ${p.eptid === cur ? 'selected' : ''}>${escapeHtml(gearLabel(p))}</option>`).join('')}</select>`;
+  let h = '<div class="grid" style="margin-bottom:6px; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));">';
+  HAND_SITES.forEach((hand, hi) => {
+    const held = heldIndex(chr, hand);
+    h += `<div class="field"><label>${hand.label} (weapon slots)</label>`;
+    for (let i = 0; i < 3; i++) {
+      const as = hand.base + i;
+      h += `<div style="display:flex; gap:6px; align-items:center; margin-bottom:4px;">
+        <label style="display:flex; align-items:center; gap:3px; font-size:11px; white-space:nowrap; text-transform:none; letter-spacing:0;" title="The weapon held in this hand"><input type="radio" name="held-${hi}" data-eq-held="${hi}:${i}" ${held === i ? 'checked' : ''}> in hand</label>
+        ${sel(chr.armslots[as] || '', weapons, `data-eq-arm="${as}"`)}</div>`;
+    }
+    h += '</div>';
+  });
+  h += '</div><div class="grid" style="margin-bottom:6px; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));">';
+  for (const slot of SLOT_TYPES.filter(s => s.site !== 'EQSITE_ARMR' && s.site !== 'EQSITE_ARML')) {
+    const cur = (arr(chr.eqpts).find(e => e.site === slot.site) || {}).eptid || '';
+    const list = arr(chr.pspts).filter(p => ptTypeOk(slot, PT_INDEX[p.ptid]));
+    h += `<div class="field"><label>${slot.label}</label>${sel(cur, list, `data-eq-armor="${slot.site}"`)}</div>`;
+  }
+  h += '</div><div class="capNote" style="margin-top:0;">Pick from the gear this fighter is carrying (add gear to the Fighter Inventory below first). Each hand has 3 weapon slots; the ticked one is the weapon in hand. A weapon can only be in one slot.</div>';
+  return h;
+}
+function wireEquipEditor(chr) {
+  document.querySelectorAll('[data-eq-arm]').forEach(el => el.addEventListener('change', () => { setWeaponSlot(chr, Number(el.dataset.eqArm), el.value || null); renderAll(); }));
+  document.querySelectorAll('[data-eq-held]').forEach(el => el.addEventListener('change', () => { const [hi, i] = el.dataset.eqHeld.split(':').map(Number); setHeldSlot(chr, hi, i); renderAll(); }));
+  document.querySelectorAll('[data-eq-armor]').forEach(el => el.addEventListener('change', () => { setArmor(chr, el.dataset.eqArmor, el.value || null); renderAll(); }));
 }
 
 function skillChip(s, i) {
@@ -2727,7 +2820,7 @@ function wireCharacters() {
   });
   document.getElementById('fi-clear-all').addEventListener('click', () => {
     const total = arr(chr.pspts).length + arr(chr.psmsrs).length + arr(chr.psbsts).length + arr(chr.psitems).length;
-    const worn = new Set(arr(chr.eqpts).map(e => e.eptid));
+    const worn = new Set(arr(chr.eqpts).map(e => e.eptid).concat(Object.values(chr.armslots || {})));
     if (!confirm(`Delete all ${total - arr(chr.pspts).filter(p => worn.has(p.eptid)).length} unequipped items in ${chr.name}'s Fighter Inventory? Equipped gear is kept. This can't be undone.`)) return;
     chr.pspts = arr(chr.pspts).filter(p => worn.has(p.eptid));
     chr.psmsrs = [];
@@ -2737,6 +2830,7 @@ function wireCharacters() {
     toast('Fighter Inventory cleared');
   });
   renderFiForm(chr);
+  wireEquipEditor(chr);
   const skillInput = document.getElementById('skill-search');
   wireAutocomplete(skillInput, document.getElementById('skill-acdrop'), 'skl', rec => {
     chr.eqskls = arr(chr.eqskls);
