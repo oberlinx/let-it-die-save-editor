@@ -2632,26 +2632,27 @@ function gearRequirement(rec, lvl) {
 //   SKLTP_DISCOUNT_ALL         "All stat requirements … become #0%"      val0 = 80
 //   SKLTP_DISCOUNT_ALL_NMH     JEANE: "all equip requirements to #0%"    val0 = 90
 //   SKLTP_DISALL_ATKUP_HPDWN   "all stats required … become #1%"         val1 = 80
-// How they combine, worked out from the user's in-game numbers for a
-// KAMAS-A1 Assault Rifle RE +4 (DEX 27 with no decals):
-//   Dexterity Discount + Dexterity Discount +            → 13  (27 × 50%)
-//   both DEX discounts + Everything's On Sale + One Way Ticket → 2 (27 × 10%)
-// So a stat discount counts once however many copies are worn (50% off), and
-// the reductions ADD: 50% + 20% + 20% = 90% off. The shown requirement is
+// How they combine, from the user's in-game numbers for a KAMAS-A1 Assault
+// Rifle RE +4 (DEX 27 with no decals):
+//   Dexterity Discount alone → 13, both Dexterity Discounts → 0,
+//   Everything's On Sale alone → 21, One Way Ticket alone → 21,
+//   one Dexterity Discount + Everything's On Sale + One Way Ticket → 2.
+// Every equipped decal's reduction ADDS (50 + 50 = 100% off → 0;
+// 50 + 20 + 20 = 90% off → 2.7), never below 0, and the requirement is
 // rounded down. Only decals equipped on the fighter count.
 function gearDiscountPct(chr, stat) {
   const st = String(stat || '').toUpperCase();
-  let statOff = 0;
-  const allOff = {};
+  let off = 0;
   for (const e of arr(chr.eqskls)) {
     const rec = SKL_INDEX[e.id || e.sklid];
     if (!rec) continue;
-    if (rec.type === 'SKLTP_DISCOUNT_' + st) statOff = Math.max(statOff, 100 - Number(rec.val0));
-    else if (rec.type === 'SKLTP_DISCOUNT_ALL' || rec.type === 'SKLTP_DISCOUNT_ALL_NMH') allOff[rec.id] = 100 - Number(rec.val0);
-    else if (rec.type === 'SKLTP_DISALL_ATKUP_HPDWN') allOff[rec.id] = 100 - Number(rec.val1);
+    let v = null;
+    if (rec.type === 'SKLTP_DISCOUNT_' + st) v = rec.val0;
+    else if (rec.type === 'SKLTP_DISCOUNT_ALL' || rec.type === 'SKLTP_DISCOUNT_ALL_NMH') v = rec.val0;
+    else if (rec.type === 'SKLTP_DISALL_ATKUP_HPDWN') v = rec.val1;
+    v = Number(v);
+    if (v > 0 && v < 100) off += 100 - v;
   }
-  let off = statOff;
-  for (const v of Object.values(allOff)) if (v > 0 && v < 100) off += v;
   return Math.max(0, 100 - off);
 }
 function gearProblem(chr, p, site) {
