@@ -1314,7 +1314,7 @@ async function loadMastersBuffer(buf) {
       atkattr: all('SELECT * FROM master_part_atkattr'),
       bodydetail: all('SELECT * FROM master_body_detail')
     };
-    for (const [key, sql] of [['questParamText', 'SELECT qid, no, val FROM master_quest_param_text'], ['questParamDesc', 'SELECT qid, no, val FROM master_quest_param_desc_text'], ['rewards', 'SELECT * FROM master_reward'], ['questCats', 'SELECT * FROM master_quest_category']]) {
+    for (const [key, sql] of [['questParamText', 'SELECT qid, no, val FROM master_quest_param_text'], ['questParamDesc', 'SELECT qid, no, val FROM master_quest_param_desc_text'], ['rewards', 'SELECT * FROM master_reward'], ['questCats', 'SELECT * FROM master_quest_category'], ['bagGen', 'SELECT * FROM master_mysterybag_content_gen'], ['bagGenOdds', "SELECT * FROM master_mysterybag_content_gen_odds WHERE odds_id = (SELECT odds_id FROM master_mysterybag_content_odds ORDER BY expires DESC LIMIT 1)"], ['boxGen', 'SELECT * FROM master_deathbox_content_gen']]) {
       try { AP[key] = all(sql); } catch (err) { AP[key] = []; console.warn(`${key} not available in this masters.db:`, err); }
     }
     AP.stewOdds = [];
@@ -1825,6 +1825,12 @@ const TABS = [ {
   id: 'stews',
   label: 'Stews'
 }, {
+  id: 'bags',
+  label: 'Mystery Bags'
+}, {
+  id: 'boxes',
+  label: 'Death Boxes'
+}, {
   id: 'dates',
   label: 'Dates'
 }, {
@@ -1850,12 +1856,14 @@ function renderAll() {
   app.querySelectorAll('[id]').forEach(el => {
     if (el.scrollTop > 0) scrollStates[el.id] = el.scrollTop;
   });
-  app.innerHTML = `\n    <div class="tabbar">\n      ${TABS.map(t => `<button class="tabbtn ${activeTab === t.id ? 'active' : ''}" data-tab-btn="${t.id}">${t.label}</button>`).join('')}\n    </div>\n    <div class="tabpanel" data-tab-panel="account" style="display:${activeTab === 'account' ? 'block' : 'none'}">${blockCurrency()}</div>\n    <div class="tabpanel" data-tab-panel="fighters" style="display:${activeTab === 'fighters' ? 'block' : 'none'}">${blockCharacters()}</div>\n    <div class="tabpanel" data-tab-panel="research" style="display:${activeTab === 'research' ? 'block' : 'none'}">${blockBlueprints()}</div>\n    <div class="tabpanel" data-tab-panel="decals" style="display:${activeTab === 'decals' ? 'block' : 'none'}">${blockSkillDecals()}</div>\n    <div class="tabpanel" data-tab-panel="stews" style="display:${activeTab === 'stews' ? 'block' : 'none'}">${blockStews()}</div>\n    <div class="tabpanel" data-tab-panel="dates" style="display:${activeTab === 'dates' ? 'block' : 'none'}">${blockDates()}</div>\n    <div class="tabpanel" data-tab-panel="storage" style="display:${activeTab === 'storage' ? 'block' : 'none'}">${blockStorageBox()}</div>\n    <div class="tabpanel" data-tab-panel="rewards" style="display:${activeTab === 'rewards' ? 'block' : 'none'}">${blockRewardBox()}</div>\n    <div class="tabpanel" data-tab-panel="quests" style="display:${activeTab === 'quests' ? 'block' : 'none'}">${blockQuests()}</div>\n    <div class="tabpanel" data-tab-panel="vip" style="display:${activeTab === 'vip' ? 'block' : 'none'}">${blockVip()}</div>\n  `;
+  app.innerHTML = `\n    <div class="tabbar">\n      ${TABS.map(t => `<button class="tabbtn ${activeTab === t.id ? 'active' : ''}" data-tab-btn="${t.id}">${t.label}</button>`).join('')}\n    </div>\n    <div class="tabpanel" data-tab-panel="account" style="display:${activeTab === 'account' ? 'block' : 'none'}">${blockCurrency()}</div>\n    <div class="tabpanel" data-tab-panel="fighters" style="display:${activeTab === 'fighters' ? 'block' : 'none'}">${blockCharacters()}</div>\n    <div class="tabpanel" data-tab-panel="research" style="display:${activeTab === 'research' ? 'block' : 'none'}">${blockBlueprints()}</div>\n    <div class="tabpanel" data-tab-panel="decals" style="display:${activeTab === 'decals' ? 'block' : 'none'}">${blockSkillDecals()}</div>\n    <div class="tabpanel" data-tab-panel="stews" style="display:${activeTab === 'stews' ? 'block' : 'none'}">${blockStews()}</div>\n    <div class="tabpanel" data-tab-panel="bags" style="display:${activeTab === 'bags' ? 'block' : 'none'}">${blockBags()}</div>\n    <div class="tabpanel" data-tab-panel="boxes" style="display:${activeTab === 'boxes' ? 'block' : 'none'}">${blockBoxes()}</div>\n    <div class="tabpanel" data-tab-panel="dates" style="display:${activeTab === 'dates' ? 'block' : 'none'}">${blockDates()}</div>\n    <div class="tabpanel" data-tab-panel="storage" style="display:${activeTab === 'storage' ? 'block' : 'none'}">${blockStorageBox()}</div>\n    <div class="tabpanel" data-tab-panel="rewards" style="display:${activeTab === 'rewards' ? 'block' : 'none'}">${blockRewardBox()}</div>\n    <div class="tabpanel" data-tab-panel="quests" style="display:${activeTab === 'quests' ? 'block' : 'none'}">${blockQuests()}</div>\n    <div class="tabpanel" data-tab-panel="vip" style="display:${activeTab === 'vip' ? 'block' : 'none'}">${blockVip()}</div>\n  `;
   wireCurrency();
   wireCharacters();
   wireBlueprints();
   wireSkillDecals();
   wireStews();
+  wireBags();
+  wireBoxes();
   wireDates();
   wireStorageBox();
   wireRewardBox();
@@ -1871,6 +1879,8 @@ function renderAll() {
       if (activeTab === 'stews') renderStewReport();
       if (activeTab === 'dates') renderDates();
       if (activeTab === 'quests') renderQuests();
+      if (activeTab === 'bags') renderBags();
+      if (activeTab === 'boxes') renderBoxes();
       window.scrollTo(0, 0);
     });
   });
@@ -4649,6 +4659,337 @@ function renderDates() {
 function wireDates() {
   if (activeTab === 'dates') renderDates();
 }
+
+// ---------------------------------------------------------------------------
+// LOST BAGS (soul.mysterybag) and DEATH BOXES (soul.deathbox)
+// Lost Bags (earned from Tokyo Death Metro attacks/defenses) are pre-rolled
+// like stews: soul.mysterybag holds, per rarity, a list of content ids
+// (MYSTERYBAG_GEN_*) that master_mysterybag_content_gen[_odds] maps to a
+// master_reward. Death boxes are stored with their contents already filled in
+// ({rarity, type, num, val0.., created, opentime}); the pool for each rarity
+// is master_deathbox_content_gen -> master_reward.
+// SAVE.soul.mysterybag / SAVE.soul.deathbox are the objects the save is
+// rebuilt from, so edits here ship with Download .sav.
+// ---------------------------------------------------------------------------
+
+const BAG_RARITIES = [ 'RAINBOW', 'PLATINUM', 'GOLD', 'SILVER', 'COPPER' ];
+const BAG_COLORS = { RAINBOW: '#e6b422', PLATINUM: '#b07cf0', GOLD: '#d9a520', SILVER: '#b8c0c8', COPPER: '#c47a44', BLUE: '#4ea3ef' };
+const BOX_RARITIES = [ 'GOLD', 'SILVER', 'COPPER', 'BLUE' ];
+let BAG_STATE = { root: null, original: null, lastMsg: '' };
+let BOX_STATE = { root: null, original: null, lastMsg: '' };
+const BAG_FORM = { open: {}, fill: {} };
+const BOX_FORM = { addRarity: 'GOLD', addContent: '' };
+
+function bagTitle(r) { return r.charAt(0) + r.slice(1).toLowerCase(); }
+function bagChip(r) { return `<span class="badge" style="border-color:${BAG_COLORS[r] || 'var(--panel-border-bright)'}; color:${BAG_COLORS[r] || 'var(--text)'};">${bagTitle(r)}</span>`; }
+
+// reward -> readable name (shared by both tabs)
+function rewardLabel(type, num, v0) {
+  const n = num > 1 ? ` ×${Number(num).toLocaleString()}` : '';
+  if (type === 'MONEY') return `${Number(num).toLocaleString()} Kill Coins`;
+  if (type === 'SPIRIT') return `${Number(num).toLocaleString()} SPLithium`;
+  let nm = null;
+  if (type === 'SKILL') nm = SKL_INDEX[v0] && `Decal: ${SKL_INDEX[v0].name}`;
+  else if (type === 'MUSHROOM') nm = MSR_INDEX[v0] && `Mushroom: ${MSR_INDEX[v0].name}`;
+  else if (type === 'BEAST') nm = BST_INDEX[v0] && `Beast: ${BST_INDEX[v0].name}`;
+  else if (ITEM_INDEX[v0]) {
+    const bp = String(v0).startsWith('ITMP_') && PT_INDEX[String(v0).replace(/^ITMP_/, 'PT_')];
+    nm = bp ? `Blueprint: ${bp.name}` : ITEM_INDEX[v0].name;
+  } else if (PT_INDEX[v0]) nm = PT_INDEX[v0].name;
+  return (nm || `${type} ${v0 || ''}`.trim()) + (type === 'MONEY' || type === 'SPIRIT' ? '' : n);
+}
+function rewardRow(rwdid) {
+  const r = questMeta().rwd[rwdid];
+  return r || null;
+}
+function rewardName(rwdid) {
+  const r = rewardRow(rwdid);
+  if (!r) return rwdid || '?';
+  if (r.type === 'MONEY' && /MEDAL/.test(rwdid)) return 'Death Metal';
+  return rewardLabel(r.type, r.num, r.val0);
+}
+
+// ---------------- Lost Bags ----------------
+function bagData() {
+  const s = SAVE && SAVE.soul;
+  if (!s || !s.mysterybag || typeof s.mysterybag !== 'object' || Array.isArray(s.mysterybag)) return null;
+  return s.mysterybag;
+}
+function bagSync() {
+  if (BAG_STATE.root !== RAW_SAV_ROOT) {
+    const b = bagData();
+    BAG_STATE = { root: RAW_SAV_ROOT, original: b ? JSON.parse(JSON.stringify(b)) : null, lastMsg: '' };
+  }
+}
+// every content id we know about -> {id, rarity, freq, rwdid}
+function bagGenIndex() {
+  const idx = {};
+  for (const r of arr(AP && AP.bagGen)) idx[r.id] = r;
+  for (const r of arr(AP && AP.bagGenOdds)) idx[r.id] = Object.assign({}, idx[r.id] || {}, r);
+  return idx;
+}
+// the pool the game rolls from: the offline odds table, else the base table
+function bagPool(rarity) {
+  const odds = arr(AP && AP.bagGenOdds).filter(r => r.rarity === rarity && r.freq > 0);
+  const rows = odds.length ? odds : arr(AP && AP.bagGen).filter(r => r.rarity === rarity && r.freq > 0);
+  const tot = rows.reduce((a, r) => a + r.freq, 0) || 1;
+  return rows.map(r => ({ id: r.id, rwdid: r.rwdid, freq: r.freq, p: r.freq / tot, name: rewardName(r.rwdid) }));
+}
+function bagRoll(pool, n, rng) {
+  const tot = pool.reduce((a, r) => a + r.freq, 0);
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    let x = rng() * tot, pick = pool[pool.length - 1];
+    for (const r of pool) { x -= r.freq; if (x < 0) { pick = r; break; } }
+    out.push(pick.id);
+  }
+  return out;
+}
+
+function blockBags() {
+  return `<section class="block">
+    <div class="block-head"><div><div class="eyebrow">Mystery bags · Tokyo Death Metro</div><h2>Lost Bags</h2></div></div>
+    <div class="block-body">
+      <div class="capNote" style="margin-top:0;">What each Lost Bag rarity will give is rolled in advance and stored in your save, a short list per rarity. The list is shown next-bag-first on the assumption that the game uses it the same way as the stew queue (from the end); that hasn't been confirmed for Lost Bags. "Fill with" and "Reroll" change every slot, so the order doesn't matter for them. Keep a copy of your save.</div>
+      <div id="bag-body"></div>
+    </div>
+  </section>`;
+}
+
+function renderBags() {
+  const host = document.getElementById('bag-body');
+  if (!host || !SAVE) return;
+  bagSync();
+  const b = bagData();
+  if (!b) { host.innerHTML = '<div class="warnNote">This save has no Lost Bag data (soul.mysterybag).</div>'; return; }
+  const gen = bagGenIndex();
+  const changed = JSON.stringify(b) !== JSON.stringify(BAG_STATE.original);
+  let h = '';
+  if (changed) h += `<div class="warnNote" style="display:flex; gap:10px; align-items:center; border-color:var(--good); color:var(--good-bright);"><div style="flex:1;">Lost Bags changed. Download the .sav to keep it.</div><button class="subtle" id="bag-undo">Undo all Lost Bag changes</button></div>`;
+  if (BAG_STATE.lastMsg) h += `<pre class="stewLog">${escapeHtml(BAG_STATE.lastMsg)}</pre>`;
+  const rars = BAG_RARITIES.filter(r => r in b).concat(Object.keys(b).filter(r => !BAG_RARITIES.includes(r)));
+  for (const r of rars) {
+    const list = arr(b[r]);
+    const pool = bagPool(r);
+    const order = list.map((e, i) => ({ e, i })).reverse();
+    const fillSel = BAG_FORM.fill[r] || (pool[0] && pool[0].id) || '';
+    h += `<div class="subDetails" style="padding:10px; margin-bottom:12px;">
+      <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:8px;">
+        <b style="color:${BAG_COLORS[r] || 'var(--text)'}; font-size:14px;">${bagTitle(r)} Lost Bag</b>
+        <span class="id">${list.length} pre-rolled</span>
+        <span style="flex:1;"></span>
+        <select data-bag-fillsel="${r}" style="max-width:320px; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:5px 6px; font-family:var(--mono); font-size:11.5px;">
+          ${pool.slice().sort((a, b) => a.name.localeCompare(b.name)).map(p => `<option value="${p.id}" ${p.id === fillSel ? 'selected' : ''}>${escapeHtml(p.name)} (${(100 * p.p).toFixed(1)}%)</option>`).join('')}
+        </select>
+        <button class="subtle" data-bag-fill="${r}" ${pool.length ? '' : 'disabled'}>Fill all with this</button>
+        <button class="subtle" data-bag-reroll="${r}" ${pool.length ? '' : 'disabled'}>Fair reroll</button>
+      </div>
+      <div class="listBlock" style="max-height:none;">`;
+    h += order.map((x, k) => {
+      const g = gen[x.e.cntgen];
+      const nm = g ? rewardName(g.rwdid) : x.e.cntgen;
+      const p = pool.find(pp => pp.id === x.e.cntgen);
+      return `<div class="listRow"><span style="width:34px; color:var(--text-faint);">${k + 1}.</span>
+        <div class="name">${escapeHtml(nm)}${p ? '' : ' <span class="badge" title="Not in the current offline pool">not in pool</span>'}</div>
+        <select data-bag-slot="${r}:${x.i}" style="max-width:260px; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:3px 6px; font-family:var(--mono); font-size:11px;">
+          ${p ? '' : `<option value="${escapeHtml(x.e.cntgen)}" selected>${escapeHtml(nm)}</option>`}
+          ${pool.slice().sort((a, b) => a.name.localeCompare(b.name)).map(pp => `<option value="${pp.id}" ${pp.id === x.e.cntgen ? 'selected' : ''}>${escapeHtml(pp.name)}</option>`).join('')}
+        </select>
+        <div class="id" style="width:190px; text-align:right;">${escapeHtml(x.e.cntgen)}</div></div>`;
+    }).join('') || '<div style="padding:8px; color:var(--text-faint); font-size:12px;">Empty. The game rolls a new list when needed.</div>';
+    h += '</div>';
+    const open = !!BAG_FORM.open[r];
+    h += `<details class="subDetails" data-bag-odds="${r}" style="margin:8px 0 0;" ${open ? 'open' : ''}><summary>▸ ${bagTitle(r)} pool (${pool.length} possible rewards)</summary><div class="subDetailsBody"><table class="stewTable"><tbody>`;
+    h += pool.slice().sort((a, b) => a.p - b.p).map(p => `<tr><td>${escapeHtml(p.name)}</td><td>${(100 * p.p).toFixed(2)}%</td><td class="dtRel">${p.id}</td></tr>`).join('');
+    h += '</tbody></table></div></details></div>';
+  }
+  host.innerHTML = h;
+
+  const redo = msg => { BAG_STATE.lastMsg = msg || ''; renderBags(); if (msg) toast(msg.split('\n')[0]); };
+  const undo = document.getElementById('bag-undo');
+  if (undo) undo.addEventListener('click', () => {
+    const o = JSON.parse(JSON.stringify(BAG_STATE.original));
+    for (const k of Object.keys(b)) delete b[k];
+    Object.assign(b, o);
+    redo('Lost Bags restored to how they were when you loaded the save.');
+  });
+  host.querySelectorAll('[data-bag-fillsel]').forEach(s => s.addEventListener('change', () => { BAG_FORM.fill[s.dataset.bagFillsel] = s.value; }));
+  host.querySelectorAll('[data-bag-fill]').forEach(btn => btn.addEventListener('click', () => {
+    const r = btn.dataset.bagFill;
+    const sel = host.querySelector(`[data-bag-fillsel="${r}"]`);
+    const id = sel && sel.value;
+    if (!id) return;
+    const n = arr(b[r]).length || 10;
+    b[r] = Array.from({ length: n }, () => ({ rarity: r, cntgen: id }));
+    redo(`Filled all ${n} ${bagTitle(r)} Lost Bags with ${rewardName(gen[id] && gen[id].rwdid)}.`);
+  }));
+  host.querySelectorAll('[data-bag-reroll]').forEach(btn => btn.addEventListener('click', () => {
+    const r = btn.dataset.bagReroll;
+    const n = arr(b[r]).length || 10;
+    b[r] = bagRoll(bagPool(r), n, Math.random).map(id => ({ rarity: r, cntgen: id }));
+    redo(`Rerolled ${n} ${bagTitle(r)} Lost Bags from the game's odds.`);
+  }));
+  host.querySelectorAll('[data-bag-slot]').forEach(s => s.addEventListener('change', () => {
+    const [r, i] = s.dataset.bagSlot.split(':');
+    const e = b[r][Number(i)];
+    e.cntgen = s.value;
+    redo(`${bagTitle(r)} slot set to ${rewardName(gen[s.value] && gen[s.value].rwdid)}.`);
+  }));
+  host.querySelectorAll('[data-bag-odds]').forEach(d => d.addEventListener('toggle', () => { BAG_FORM.open[d.dataset.bagOdds] = d.open; }));
+}
+
+// ---------------- Death Boxes ----------------
+function boxData() {
+  const s = SAVE && SAVE.soul;
+  if (!s) return null;
+  if (!Array.isArray(s.deathbox)) return null;
+  return s.deathbox;
+}
+function boxSync() {
+  if (BOX_STATE.root !== RAW_SAV_ROOT) {
+    const b = boxData();
+    BOX_STATE = { root: RAW_SAV_ROOT, original: b ? JSON.parse(JSON.stringify(b)) : null, lastMsg: '' };
+  }
+}
+function boxPool(rarity) {
+  const rows = arr(AP && AP.boxGen).filter(r => r.rarity === rarity && r.freq > 0);
+  const tot = rows.reduce((a, r) => a + r.freq, 0) || 1;
+  return rows.map(r => ({ id: r.id, rwdid: r.rwdid, freq: r.freq, p: r.freq / tot, rw: rewardRow(r.rwdid), name: rewardName(r.rwdid) })).filter(x => x.rw);
+}
+function boxApplyReward(box, rw) {
+  box.type = rw.type;
+  // the one death box seen in a real save stores num 0 for a decal; other
+  // types keep the reward's amount
+  box.num = rw.type === 'SKILL' ? 0 : Number(rw.num) || 0;
+  box.val0 = rw.val0 || '';
+  box.val1 = rw.val1 || '';
+  box.val2 = rw.val2 || '';
+  box.val3 = '';
+}
+function boxContentName(box) {
+  if (box.type === 'SKILL' && box.num === 0) return rewardLabel('SKILL', 1, box.val0);
+  return rewardLabel(box.type, box.num, box.val0);
+}
+function boxMatchPool(box) {
+  return boxPool(box.rarity).find(p => p.rw.type === box.type && (p.rw.val0 || '') === (box.val0 || '')) || null;
+}
+
+function blockBoxes() {
+  return `<section class="block">
+    <div class="block-head"><div><div class="eyebrow">Rewards</div><h2>Death Boxes</h2></div></div>
+    <div class="block-body">
+      <div class="capNote" style="margin-top:0;">Death boxes already hold their reward and unlock at a set time. You can open a box now, or change what's inside to anything from that rarity's pool. Adding new boxes hasn't been tested in game; try it on a copy of your save.</div>
+      <div id="box-body"></div>
+    </div>
+  </section>`;
+}
+
+function renderBoxes() {
+  const host = document.getElementById('box-body');
+  if (!host || !SAVE) return;
+  boxSync();
+  if (!Array.isArray(SAVE.soul.deathbox)) SAVE.soul.deathbox = [];
+  const boxes = boxData();
+  const now = Math.floor(Date.now() / 1000);
+  const changed = JSON.stringify(boxes) !== JSON.stringify(BOX_STATE.original || []);
+  let h = '';
+  if (changed) h += `<div class="warnNote" style="display:flex; gap:10px; align-items:center; border-color:var(--good); color:var(--good-bright);"><div style="flex:1;">Death boxes changed. Download the .sav to keep it.</div><button class="subtle" id="box-undo">Undo all death box changes</button></div>`;
+  if (BOX_STATE.lastMsg) h += `<pre class="stewLog">${escapeHtml(BOX_STATE.lastMsg)}</pre>`;
+  const locked = boxes.filter(x => x.opentime > now).length;
+  h += `<div class="toolbar"><span style="font-size:12px;">${boxes.length} death box${boxes.length === 1 ? '' : 'es'}, ${locked} still locked</span><span style="flex:1;"></span><button class="action" id="box-open-all" ${locked ? '' : 'disabled'}>Open all now</button></div>`;
+  h += '<div class="listBlock" style="max-height:none;">';
+  h += boxes.map((x, i) => {
+    const pool = boxPool(x.rarity);
+    const cur = boxMatchPool(x);
+    const ready = !(x.opentime > now);
+    return `<div class="listRow" style="flex-direction:column; align-items:stretch; padding:10px; gap:6px;">
+      <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+        ${bagChip(x.rarity)} <div class="name"><b>${escapeHtml(boxContentName(x))}</b></div>
+        ${ready ? '<span class="badge current">READY</span>' : `<span class="badge">opens ${escapeHtml(dtRel(x.opentime, now))}</span>`}
+      </div>
+      <div style="font-size:11px; color:var(--text-dim);">Received ${escapeHtml(dtFmt(x.created))} · opens ${escapeHtml(dtFmt(x.opentime))}</div>
+      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+        <select data-box-rar="${i}" style="background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:4px 6px; font-family:var(--mono); font-size:11.5px;">
+          ${BOX_RARITIES.map(r => `<option value="${r}" ${r === x.rarity ? 'selected' : ''}>${bagTitle(r)}</option>`).join('')}${BOX_RARITIES.includes(x.rarity) ? '' : `<option selected>${escapeHtml(x.rarity)}</option>`}
+        </select>
+        <select data-box-content="${i}" style="max-width:340px; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:4px 6px; font-family:var(--mono); font-size:11.5px;">
+          ${cur ? '' : `<option selected>${escapeHtml(boxContentName(x))} (current)</option>`}
+          ${pool.slice().sort((a, b) => a.name.localeCompare(b.name)).map(p => `<option value="${p.id}" ${cur && cur.id === p.id ? 'selected' : ''}>${escapeHtml(p.name)} (${(100 * p.p).toFixed(1)}%)</option>`).join('')}
+        </select>
+        <button class="subtle" data-box-reroll="${i}">Reroll</button>
+        <button class="action" data-box-open="${i}" ${ready ? 'disabled' : ''}>Open now</button>
+        <button class="subtle" data-box-del="${i}">Remove</button>
+      </div>
+    </div>`;
+  }).join('') || '<div style="padding:10px; color:var(--text-faint); font-size:12px;">No death boxes in this save.</div>';
+  h += '</div>';
+  const addPool = boxPool(BOX_FORM.addRarity);
+  if (!addPool.find(p => p.id === BOX_FORM.addContent)) BOX_FORM.addContent = addPool[0] ? addPool[0].id : '';
+  h += `<div class="toolbar" style="margin-top:12px;"><span style="font-size:11.5px; color:var(--text-dim);">Add a box:</span>
+    <select id="box-add-rar" style="background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:5px 6px; font-family:var(--mono); font-size:11.5px;">${BOX_RARITIES.map(r => `<option value="${r}" ${r === BOX_FORM.addRarity ? 'selected' : ''}>${bagTitle(r)}</option>`).join('')}</select>
+    <select id="box-add-content" style="max-width:340px; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:5px 6px; font-family:var(--mono); font-size:11.5px;">${addPool.slice().sort((a, b) => a.name.localeCompare(b.name)).map(p => `<option value="${p.id}" ${p.id === BOX_FORM.addContent ? 'selected' : ''}>${escapeHtml(p.name)}</option>`).join('')}</select>
+    <button class="subtle" id="box-add">Add (ready to open)</button></div>`;
+  host.innerHTML = h;
+
+  const redo = msg => { BOX_STATE.lastMsg = msg || ''; renderBoxes(); if (msg) toast(msg.split('\n')[0]); };
+  const undo = document.getElementById('box-undo');
+  if (undo) undo.addEventListener('click', () => {
+    boxes.length = 0;
+    for (const x of JSON.parse(JSON.stringify(BOX_STATE.original || []))) boxes.push(x);
+    redo('Death boxes restored to how they were when you loaded the save.');
+  });
+  const openNow = x => { const t = Math.floor(Date.now() / 1000) - 60; x.opentime = Math.max(Math.min(t, x.opentime), x.created || 0); };
+  document.getElementById('box-open-all').addEventListener('click', () => {
+    let n = 0;
+    for (const x of boxes) if (x.opentime > Math.floor(Date.now() / 1000)) { openNow(x); n++; }
+    redo(`Opened ${n} death box${n === 1 ? '' : 'es'}. Collect them in game.`);
+  });
+  host.querySelectorAll('[data-box-open]').forEach(b => b.addEventListener('click', () => {
+    const x = boxes[Number(b.dataset.boxOpen)];
+    openNow(x);
+    redo(`${bagTitle(x.rarity)} death box can be opened now.`);
+  }));
+  host.querySelectorAll('[data-box-content]').forEach(s => s.addEventListener('change', () => {
+    const x = boxes[Number(s.dataset.boxContent)];
+    const p = boxPool(x.rarity).find(pp => pp.id === s.value);
+    if (!p) return;
+    boxApplyReward(x, p.rw);
+    redo(`Death box now holds ${boxContentName(x)}.`);
+  }));
+  host.querySelectorAll('[data-box-rar]').forEach(s => s.addEventListener('change', () => {
+    const x = boxes[Number(s.dataset.boxRar)];
+    x.rarity = s.value;
+    const pool = boxPool(x.rarity);
+    if (!boxMatchPool(x) && pool.length) boxApplyReward(x, bagRoll(pool, 1, Math.random).map(id => pool.find(p => p.id === id))[0].rw);
+    redo(`Death box changed to ${bagTitle(x.rarity)}: ${boxContentName(x)}.`);
+  }));
+  host.querySelectorAll('[data-box-reroll]').forEach(b => b.addEventListener('click', () => {
+    const x = boxes[Number(b.dataset.boxReroll)];
+    const pool = boxPool(x.rarity);
+    if (!pool.length) return;
+    const id = bagRoll(pool, 1, Math.random)[0];
+    boxApplyReward(x, pool.find(p => p.id === id).rw);
+    redo(`Rerolled: ${boxContentName(x)}.`);
+  }));
+  host.querySelectorAll('[data-box-del]').forEach(b => b.addEventListener('click', () => {
+    const [x] = boxes.splice(Number(b.dataset.boxDel), 1);
+    redo(`Removed the ${bagTitle(x.rarity)} death box (${boxContentName(x)}).`);
+  }));
+  document.getElementById('box-add-rar').addEventListener('change', e => { BOX_FORM.addRarity = e.target.value; renderBoxes(); });
+  document.getElementById('box-add-content').addEventListener('change', e => { BOX_FORM.addContent = e.target.value; });
+  document.getElementById('box-add').addEventListener('click', () => {
+    const p = boxPool(BOX_FORM.addRarity).find(pp => pp.id === BOX_FORM.addContent);
+    if (!p) return;
+    const t = Math.floor(Date.now() / 1000) - 60;
+    const x = { bid: '', rarity: BOX_FORM.addRarity, type: '', created: t, opentime: t, num: 0, val0: '', val1: '', val2: '', val3: '' };
+    boxApplyReward(x, p.rw);
+    boxes.push(x);
+    redo(`Added a ${bagTitle(x.rarity)} death box with ${boxContentName(x)}.`);
+  });
+}
+
+function wireBags() { if (activeTab === 'bags') renderBags(); }
+function wireBoxes() { if (activeTab === 'boxes') renderBoxes(); }
 
 function triggerDownload(data, filename, mime) {
   const blob = new Blob([ data ], {
