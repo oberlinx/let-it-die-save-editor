@@ -3262,7 +3262,9 @@ function blockSkillDecals() {
   return `<section class="block">\n    <div class="block-head"><div><div class="eyebrow">Account</div><h2>Skill Decals</h2></div></div>\n    <div class="block-body">\n      <div class="toolbar"><input type="text" id="decal-filter" placeholder="Filter by name..." style="flex:1; max-width:280px; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);"><div class="count" id="decal-count"></div></div>\n      <div class="listBlock" id="decal-list" style="max-height:360px;"></div>\n    </div>\n  </section>`;
 }
 
-const DECAL_CAP = 89;
+// The game itself stores counts up to at least 98 (seen in a real save), so
+// the editor allows up to 99.
+const DECAL_CAP = 99;
 
 function blockSkillDecals() {
   return `<section class="block">\n    <div class="block-head"><div><div class="eyebrow">Account</div><h2>Skill Decals</h2></div></div>\n    <div class="block-body">\n      <div class="toolbar">\n        <input type="text" id="decal-filter" placeholder="Filter by name..." style="flex:1; max-width:280px; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);">\n        <button class="subtle" id="decal-max-all">Max all (${DECAL_CAP})</button>\n        <input type="number" id="decal-apply-val" min="0" max="${DECAL_CAP}" value="${DECAL_CAP}" style="width:60px; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:6px;">\n        <button class="subtle" id="decal-apply-all">Apply to all filtered</button>\n        <div class="count" id="decal-count"></div>\n      </div>\n      <div class="listBlock" id="decal-list" style="max-height:360px;"></div>\n    </div>\n  </section>`;
@@ -5317,12 +5319,11 @@ function runSaveCheck() {
 
   // decals
   safe('decals', () => {
-    // the game itself stores counts above the editor's 89 (up to 98 seen in a
-    // real save), so only flag values the game can't have produced
+    // flag values outside what the Decals tab allows (0 to DECAL_CAP)
     const neg = arr(soul.psskls).filter(e => (e.cnt || 0) < 0);
     if (neg.length) add('problem', `${neg.length} decal count${neg.length === 1 ? ' is' : 's are'} negative.`, 'decals');
-    const over = arr(soul.psskls).filter(e => (e.cnt || 0) > 99);
-    if (over.length) add('warning', `${over.length} decal count${over.length === 1 ? ' is' : 's are'} above 99.`, 'decals');
+    const over = arr(soul.psskls).filter(e => (e.cnt || 0) > DECAL_CAP);
+    if (over.length) add('warning', `${over.length} decal count${over.length === 1 ? ' is' : 's are'} above ${DECAL_CAP}.`, 'decals');
     const unk = arr(soul.psskls).filter(e => e.id && !SKL_INDEX[e.id]);
     if (unk.length) add('note', `${unk.length} decal${unk.length === 1 ? '' : 's'} in your collection ${unk.length === 1 ? "isn't" : "aren't"} in this masters.db.`, 'decals');
   });
