@@ -3143,6 +3143,12 @@ function questData() {
   return q;
 }
 
+// The game writes an empty quest list as {} (a list with quests as [...]);
+// the tab works on an array, so put {} back before a download.
+function questOrdForSave() {
+  const q = SAVE && SAVE.soul && SAVE.soul.quest;
+  if (q && Array.isArray(q.ord) && !q.ord.length) q.ord = {};
+}
 function questSyncState() {
   if (QUEST_STATE.root !== RAW_SAV_ROOT) {
     const q = questData();
@@ -5821,6 +5827,7 @@ document.getElementById('btn-download-sav').addEventListener('click', async () =
   }
   try {
     normalizePresents(SAVE.presents);
+    questOrdForSave();
     const root = applyDateRules(buildRawSavRootFromSave(SAVE, RAW_SAV_ROOT, RAW_SAV_MAIN_UID));
     triggerDownload(await buildBrgSav(root), 'brggame.sav', 'application/octet-stream');
     toast('Downloaded brggame.sav');
@@ -5836,6 +5843,7 @@ document.getElementById('btn-download-json').addEventListener('click', () => {
   }
   try {
     normalizePresents(SAVE.presents);
+    questOrdForSave();
     const root = applyDateRules(buildRawSavRootFromSave(SAVE, RAW_SAV_ROOT, RAW_SAV_MAIN_UID));
     triggerDownload(JSON.stringify(root), 'brggame.json', 'application/json');
     toast('Downloaded brggame.json');
