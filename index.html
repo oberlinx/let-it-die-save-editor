@@ -1314,7 +1314,7 @@ async function loadMastersBuffer(buf) {
       atkattr: all('SELECT * FROM master_part_atkattr'),
       bodydetail: all('SELECT * FROM master_body_detail')
     };
-    for (const [key, sql] of [['questParamText', 'SELECT qid, no, val FROM master_quest_param_text'], ['questParamDesc', 'SELECT qid, no, val FROM master_quest_param_desc_text'], ['rewards', 'SELECT * FROM master_reward'], ['questCats', 'SELECT * FROM master_quest_category'], ['bagGen', 'SELECT * FROM master_mysterybag_content_gen'], ['bagGenOdds', "SELECT * FROM master_mysterybag_content_gen_odds WHERE odds_id = (SELECT odds_id FROM master_mysterybag_content_odds ORDER BY expires DESC LIMIT 1)"], ['boxGen', 'SELECT * FROM master_deathbox_content_gen']]) {
+    for (const [key, sql] of [['questParamText', 'SELECT qid, no, val FROM master_quest_param_text'], ['questParamDesc', 'SELECT qid, no, val FROM master_quest_param_desc_text'], ['rewards', 'SELECT * FROM master_reward'], ['questCats', 'SELECT * FROM master_quest_category'], ['bagGen', 'SELECT * FROM master_mysterybag_content_gen'], ['bagGenOdds', "SELECT * FROM master_mysterybag_content_gen_odds WHERE odds_id = (SELECT odds_id FROM master_mysterybag_content_odds ORDER BY expires DESC LIMIT 1)"], ['boxGen', 'SELECT * FROM master_deathbox_content_gen'], ['hubCustom', 'SELECT * FROM master_hubcustomize']]) {
       try { AP[key] = all(sql); } catch (err) { AP[key] = []; console.warn(`${key} not available in this masters.db:`, err); }
     }
     AP.stewOdds = [];
@@ -1831,6 +1831,9 @@ const TABS = [ {
   id: 'boxes',
   label: 'Death Boxes'
 }, {
+  id: 'hub',
+  label: 'Waiting Room'
+}, {
   id: 'dates',
   label: 'Dates'
 }, {
@@ -1856,7 +1859,7 @@ function renderAll() {
   app.querySelectorAll('[id]').forEach(el => {
     if (el.scrollTop > 0) scrollStates[el.id] = el.scrollTop;
   });
-  app.innerHTML = `\n    <div class="tabbar">\n      ${TABS.map(t => `<button class="tabbtn ${activeTab === t.id ? 'active' : ''}" data-tab-btn="${t.id}">${t.label}</button>`).join('')}\n    </div>\n    <div class="tabpanel" data-tab-panel="account" style="display:${activeTab === 'account' ? 'block' : 'none'}">${blockCurrency()}</div>\n    <div class="tabpanel" data-tab-panel="fighters" style="display:${activeTab === 'fighters' ? 'block' : 'none'}">${blockCharacters()}</div>\n    <div class="tabpanel" data-tab-panel="research" style="display:${activeTab === 'research' ? 'block' : 'none'}">${blockBlueprints()}</div>\n    <div class="tabpanel" data-tab-panel="decals" style="display:${activeTab === 'decals' ? 'block' : 'none'}">${blockSkillDecals()}</div>\n    <div class="tabpanel" data-tab-panel="stews" style="display:${activeTab === 'stews' ? 'block' : 'none'}">${blockStews()}</div>\n    <div class="tabpanel" data-tab-panel="bags" style="display:${activeTab === 'bags' ? 'block' : 'none'}">${blockBags()}</div>\n    <div class="tabpanel" data-tab-panel="boxes" style="display:${activeTab === 'boxes' ? 'block' : 'none'}">${blockBoxes()}</div>\n    <div class="tabpanel" data-tab-panel="dates" style="display:${activeTab === 'dates' ? 'block' : 'none'}">${blockDates()}</div>\n    <div class="tabpanel" data-tab-panel="storage" style="display:${activeTab === 'storage' ? 'block' : 'none'}">${blockStorageBox()}</div>\n    <div class="tabpanel" data-tab-panel="rewards" style="display:${activeTab === 'rewards' ? 'block' : 'none'}">${blockRewardBox()}</div>\n    <div class="tabpanel" data-tab-panel="quests" style="display:${activeTab === 'quests' ? 'block' : 'none'}">${blockQuests()}</div>\n    <div class="tabpanel" data-tab-panel="vip" style="display:${activeTab === 'vip' ? 'block' : 'none'}">${blockVip()}</div>\n  `;
+  app.innerHTML = `\n    <div class="tabbar">\n      ${TABS.map(t => `<button class="tabbtn ${activeTab === t.id ? 'active' : ''}" data-tab-btn="${t.id}">${t.label}</button>`).join('')}\n    </div>\n    <div class="tabpanel" data-tab-panel="account" style="display:${activeTab === 'account' ? 'block' : 'none'}">${blockCurrency()}</div>\n    <div class="tabpanel" data-tab-panel="fighters" style="display:${activeTab === 'fighters' ? 'block' : 'none'}">${blockCharacters()}</div>\n    <div class="tabpanel" data-tab-panel="research" style="display:${activeTab === 'research' ? 'block' : 'none'}">${blockBlueprints()}</div>\n    <div class="tabpanel" data-tab-panel="decals" style="display:${activeTab === 'decals' ? 'block' : 'none'}">${blockSkillDecals()}</div>\n    <div class="tabpanel" data-tab-panel="stews" style="display:${activeTab === 'stews' ? 'block' : 'none'}">${blockStews()}</div>\n    <div class="tabpanel" data-tab-panel="bags" style="display:${activeTab === 'bags' ? 'block' : 'none'}">${blockBags()}</div>\n    <div class="tabpanel" data-tab-panel="boxes" style="display:${activeTab === 'boxes' ? 'block' : 'none'}">${blockBoxes()}</div>\n    <div class="tabpanel" data-tab-panel="hub" style="display:${activeTab === 'hub' ? 'block' : 'none'}">${blockHub()}</div>\n    <div class="tabpanel" data-tab-panel="dates" style="display:${activeTab === 'dates' ? 'block' : 'none'}">${blockDates()}</div>\n    <div class="tabpanel" data-tab-panel="storage" style="display:${activeTab === 'storage' ? 'block' : 'none'}">${blockStorageBox()}</div>\n    <div class="tabpanel" data-tab-panel="rewards" style="display:${activeTab === 'rewards' ? 'block' : 'none'}">${blockRewardBox()}</div>\n    <div class="tabpanel" data-tab-panel="quests" style="display:${activeTab === 'quests' ? 'block' : 'none'}">${blockQuests()}</div>\n    <div class="tabpanel" data-tab-panel="vip" style="display:${activeTab === 'vip' ? 'block' : 'none'}">${blockVip()}</div>\n  `;
   wireCurrency();
   wireCharacters();
   wireBlueprints();
@@ -1864,6 +1867,7 @@ function renderAll() {
   wireStews();
   wireBags();
   wireBoxes();
+  wireHub();
   wireDates();
   wireStorageBox();
   wireRewardBox();
@@ -1881,6 +1885,7 @@ function renderAll() {
       if (activeTab === 'quests') renderQuests();
       if (activeTab === 'bags') renderBags();
       if (activeTab === 'boxes') renderBoxes();
+      if (activeTab === 'hub') renderHub();
       window.scrollTo(0, 0);
     });
   });
@@ -4990,6 +4995,139 @@ function renderBoxes() {
 
 function wireBags() { if (activeTab === 'bags') renderBags(); }
 function wireBoxes() { if (activeTab === 'boxes') renderBoxes(); }
+
+// ---------------------------------------------------------------------------
+// WAITING ROOM customization (soul.hubcustom)
+// Each decoration is {cstmid, flg}. From real saves: flg 0 = not owned; any
+// non-zero = owned; bit 4 = the one currently shown for that spot (exactly one
+// per spot). Owned items appear as 1 or 2 (probably "new" vs "seen"); free
+// defaults are 2, so unlocking here writes 2. master_hubcustomize gives the
+// spot (site), order and name; platform 1 = World of Tanks items that were
+// PlayStation-only.
+// ---------------------------------------------------------------------------
+
+const HUB_SITES = [
+  [ 'WAL', 'Wall' ], [ 'FLR', 'Floor' ], [ 'PLR', 'Pillar' ], [ 'FNT', 'Fountain' ], [ 'FLG', 'Flag' ],
+  [ 'PST', 'Poster' ], [ 'OBJ', 'Giant Object' ], [ 'ILM', 'Neon' ], [ 'PLT', 'Potted Plant' ], [ 'ET0', 'RC Car' ]
+];
+const HUB_SITE_TEXT = { WAL: 'TXT_DECO_WALL', FLR: 'TXT_DECO_FLOOR', PLR: 'TXT_DECO_PILLAR', FNT: 'TXT_DECO_FOUNTAIN', FLG: 'TXT_DECO_FLAG', PST: 'TXT_DECO_POSTER', OBJ: 'TXT_DECO_DECORATION1', ILM: 'TXT_DECO_DECORATION2', PLT: 'TXT_DECO_DECORATION3', ET0: 'TXT_DECO_DECORATION4' };
+let HUB_STATE = { root: null, original: null, lastMsg: '' };
+const HUB_FORM = { includePs: false };
+
+function hubData() {
+  const s = SAVE && SAVE.soul;
+  return s && Array.isArray(s.hubcustom) ? s.hubcustom : null;
+}
+function hubSync() {
+  if (HUB_STATE.root !== RAW_SAV_ROOT) {
+    const h = hubData();
+    HUB_STATE = { root: RAW_SAV_ROOT, original: h ? JSON.parse(JSON.stringify(h)) : null, lastMsg: '' };
+  }
+}
+function hubMeta() {
+  const m = {};
+  for (const r of arr(AP && AP.hubCustom)) m[r.id] = r;
+  return m;
+}
+function hubSiteName(site) {
+  const t = HUB_SITE_TEXT[site] && resolveName('DECORATION.' + HUB_SITE_TEXT[site]);
+  const d = HUB_SITES.find(s => s[0] === site);
+  return t || (d ? d[1] : site);
+}
+
+function blockHub() {
+  return `<section class="block">
+    <div class="block-head"><div><div class="eyebrow">Remodel</div><h2>Waiting Room</h2></div></div>
+    <div class="block-body">
+      <div class="capNote" style="margin-top:0;">Unlock Waiting Room decorations and choose which one each spot shows. One decoration per spot is in use. World of Tanks items were PlayStation-only and are hidden unless you tick the box. Try it on a copy of your save first.</div>
+      <div id="hub-body"></div>
+    </div>
+  </section>`;
+}
+
+function renderHub() {
+  const host = document.getElementById('hub-body');
+  if (!host || !SAVE) return;
+  hubSync();
+  const list = hubData();
+  if (!list) { host.innerHTML = '<div class="warnNote">This save has no Waiting Room data (soul.hubcustom).</div>'; return; }
+  const meta = hubMeta();
+  // decorations the game knows about but the save has no entry for yet are
+  // shown as locked; they're only added to the save if you unlock or use one
+  const byId = {};
+  for (const e of list) byId[e.cstmid] = e;
+  const virtual = Object.keys(meta).filter(id => !byId[id]).map(id => ({ cstmid: id, flg: 0 }));
+  for (const e of virtual) byId[e.cstmid] = e;
+  const all = list.concat(virtual);
+  const ensure = e => { if (!list.includes(e)) list.push(e); return e; };
+  const changed = JSON.stringify(list) !== JSON.stringify(HUB_STATE.original);
+  const siteOf = e => (meta[e.cstmid] && meta[e.cstmid].site) || e.cstmid.split('_')[2];
+  const visible = e => HUB_FORM.includePs || !(meta[e.cstmid] && meta[e.cstmid].platform === 1) || e.flg;
+  const owned = all.filter(e => e.flg).length;
+  const lockedVisible = all.filter(e => !e.flg && visible(e)).length;
+  let h = '';
+  if (changed) h += `<div class="warnNote" style="display:flex; gap:10px; align-items:center; border-color:var(--good); color:var(--good-bright);"><div style="flex:1;">Waiting Room changed. Download the .sav to keep it.</div><button class="subtle" id="hub-undo">Undo all Waiting Room changes</button></div>`;
+  if (HUB_STATE.lastMsg) h += `<pre class="stewLog">${escapeHtml(HUB_STATE.lastMsg)}</pre>`;
+  h += `<div class="toolbar"><span style="font-size:12px;">${owned} of ${all.length} decorations owned</span>
+    <label class="stewHlOnly"><input type="checkbox" id="hub-ps" ${HUB_FORM.includePs ? 'checked' : ''}> Include PlayStation-only (World of Tanks)</label>
+    <span style="flex:1;"></span><button class="action" id="hub-unlock-all" ${lockedVisible ? '' : 'disabled'}>Unlock all shown (${lockedVisible})</button></div>`;
+  const sites = HUB_SITES.map(s => s[0]).concat([ ...new Set(all.map(siteOf)) ].filter(s => !HUB_SITES.some(x => x[0] === s)));
+  for (const site of sites) {
+    const items = all.filter(e => siteOf(e) === site && visible(e)).sort((a, b) => ((meta[a.cstmid] || {}).sort || 0) - ((meta[b.cstmid] || {}).sort || 0));
+    if (!items.length) continue;
+    const inUse = items.find(e => e.flg & 4);
+    h += `<div class="subDetails" style="padding:10px; margin-bottom:10px;">
+      <div style="display:flex; gap:10px; align-items:center; margin-bottom:6px;"><b style="font-size:14px;">${escapeHtml(hubSiteName(site))}</b><span class="id">showing: ${escapeHtml(inUse ? (resolveName((meta[inUse.cstmid] || {}).name) || inUse.cstmid) : 'nothing')}</span><span style="flex:1;"></span><span class="id">${items.filter(e => e.flg).length} / ${items.length} owned</span></div>
+      <div class="listBlock" style="max-height:none;">`;
+    h += items.map(e => {
+      const m = meta[e.cstmid] || {};
+      const nm = resolveName(m.name) || e.cstmid;
+      const use = !!(e.flg & 4);
+      const isDefault = /_NONE$/.test(e.cstmid);
+      return `<div class="listRow"><div class="name">${escapeHtml(nm)} ${m.platform === 1 ? '<span class="badge">PS only</span>' : ''}</div>
+        ${use ? '<span class="badge current">IN USE</span>' : e.flg ? '<span class="badge">owned</span>' : '<span class="badge" style="opacity:0.5;">locked</span>'}
+        <span class="id" style="width:28px; text-align:right;" title="raw flag">${e.flg}</span>
+        ${e.flg ? '' : `<button class="subtle" data-hub-unlock="${e.cstmid}">Unlock</button>`}
+        ${use ? '' : `<button class="subtle" data-hub-use="${e.cstmid}">Use</button>`}
+        ${e.flg && !use && !isDefault ? `<button class="subtle" data-hub-lock="${e.cstmid}">Lock</button>` : ''}
+      </div>`;
+    }).join('');
+    h += '</div></div>';
+  }
+  host.innerHTML = h;
+
+  const name = id => resolveName((meta[id] || {}).name) || id;
+  const redo = msg => { HUB_STATE.lastMsg = msg || ''; renderHub(); if (msg) toast(msg.split('\n')[0]); };
+  const undo = document.getElementById('hub-undo');
+  if (undo) undo.addEventListener('click', () => {
+    list.length = 0;
+    for (const e of JSON.parse(JSON.stringify(HUB_STATE.original))) list.push(e);
+    redo('Waiting Room restored to how it was when you loaded the save.');
+  });
+  document.getElementById('hub-ps').addEventListener('change', e => { HUB_FORM.includePs = e.target.checked; renderHub(); });
+  document.getElementById('hub-unlock-all').addEventListener('click', () => {
+    let n = 0;
+    for (const e of all) if (!e.flg && visible(e)) { ensure(e).flg = 2; n++; }
+    redo(`Unlocked ${n} decoration${n === 1 ? '' : 's'}.`);
+  });
+  host.querySelectorAll('[data-hub-unlock]').forEach(b => b.addEventListener('click', () => {
+    ensure(byId[b.dataset.hubUnlock]).flg = 2;
+    redo(`Unlocked ${name(b.dataset.hubUnlock)}.`);
+  }));
+  host.querySelectorAll('[data-hub-use]').forEach(b => b.addEventListener('click', () => {
+    const e = ensure(byId[b.dataset.hubUse]);
+    const site = siteOf(e);
+    for (const o of list) if (o !== e && siteOf(o) === site && (o.flg & 4)) o.flg = (o.flg & ~4) || 2;
+    e.flg = (e.flg || 2) | 4;
+    redo(`${hubSiteName(site)} now shows ${name(e.cstmid)}.`);
+  }));
+  host.querySelectorAll('[data-hub-lock]').forEach(b => b.addEventListener('click', () => {
+    byId[b.dataset.hubLock].flg = 0;
+    redo(`Locked ${name(b.dataset.hubLock)}.`);
+  }));
+}
+
+function wireHub() { if (activeTab === 'hub') renderHub(); }
 
 function triggerDownload(data, filename, mime) {
   const blob = new Blob([ data ], {

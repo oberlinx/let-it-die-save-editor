@@ -30,6 +30,7 @@ PSN saves have to be decrypted first.
 | **Stews** | Mushroom Stew decal queue: see upcoming pulls, dedupe, move a rarity to the front, stack, reroll, clear, undo |
 | **Mystery Bags** | Lost Bags from Tokyo Death Metro: see what each rarity will give, set any slot, fill all, or reroll from the game's odds |
 | **Death Boxes** | See each box's reward and unlock time, open now, change or reroll the reward, add or remove boxes |
+| **Waiting Room** | Unlock Waiting Room decorations (wall, floor, pillar, fountain, flag, poster, giant object, neon, potted plant, RC car) and choose which one each spot shows |
 | **Dates** | Every date in the save, with fixes for time-jump damage (future dates, dates past 2038, overflowed negative dates) |
 | Storage | Storage Box contents and capacity |
 | Rewards | Reward Box items |
