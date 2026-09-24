@@ -2626,17 +2626,47 @@ function gearRequirement(rec, lvl) {
   const base = Number(rec.lvllmt) || 0, c = Number(rec.lvllmt_c) || 1;
   return base * Math.pow(c, Math.max(1, Number(lvl) || 1) - 1);
 }
+// Decals that lower equip requirements (master_skill type + value, text from
+// the game's own decal descriptions):
+//   SKLTP_DISCOUNT_<STAT>      "Halves the <STAT> necessary to equip"   val0 = 50 (%)
+//   SKLTP_DISCOUNT_ALL         "All stat requirements … become #0%"      val0 = 80
+//   SKLTP_DISCOUNT_ALL_NMH     JEANE: "all equip requirements to #0%"    val0 = 90
+//   SKLTP_DISALL_ATKUP_HPDWN   "all stats required … become #1%"         val1 = 80
+// Only decals equipped on the fighter count. They stack (user confirmed in
+// game), including the normal and premium ("_P") copies of the same decal
+// (user confirmed). The editor multiplies them (e.g. Strength Discount 50%
+// with Everything's On Sale 80% = 40%); multiplying is the stricter of the
+// two likely rules (adding the reductions would give 30%).
+function gearDiscountPct(chr, stat) {
+  const st = String(stat || '').toUpperCase();
+  const vals = [];
+  for (const e of arr(chr.eqskls)) {
+    const rec = SKL_INDEX[e.id || e.sklid];
+    if (!rec) continue;
+    let v = null;
+    if (rec.type === 'SKLTP_DISCOUNT_' + st) v = rec.val0;
+    else if (rec.type === 'SKLTP_DISCOUNT_ALL' || rec.type === 'SKLTP_DISCOUNT_ALL_NMH') v = rec.val0;
+    else if (rec.type === 'SKLTP_DISALL_ATKUP_HPDWN') v = rec.val1;
+    v = Number(v);
+    if (v > 0 && v < 100) vals.push(v);
+  }
+  let pct = 100;
+  for (const v of vals) pct = pct * v / 100;
+  return Math.round(pct * 100) / 100;
+}
 function gearProblem(chr, p, site) {
   const rec = p && PT_INDEX[p.ptid];
   if (!rec) return "unknown part (not in this masters.db)";
   if (!(GEAR_SITE_TYPES[site] || []).includes(rec.type)) return "wrong slot for this part";
   if (GEAR_NEVER.test(rec.id) || Number(rec.is_consume) === 1) return "not equippable";
   if (p.dur != null && Number(p.dur) <= 0) return "broken";
-  const stat = rec.lvllmttp, need = gearRequirement(rec, p.lvl);
+  const stat = rec.lvllmttp, pct = stat ? gearDiscountPct(chr, stat) : 100;
+  const need = gearRequirement(rec, p.lvl) * pct / 100;
   if (stat && need > 0) {
     const have = fighterStatValue(chr, stat);
-    if (have == null) return `needs ${stat} ${Math.ceil(need)} (couldn't read this fighter's ${stat})`;
-    if (have < need) return `needs ${stat} ${Math.ceil(need)}, has ${have}`;
+    const note = pct < 100 ? ` with decal discount to ${pct}%` : '';
+    if (have == null) return `needs ${stat} ${Math.ceil(need)}${note} (couldn't read this fighter's ${stat})`;
+    if (have < need) return `needs ${stat} ${Math.ceil(need)}${note}, has ${have}`;
   }
   return null;
 }
@@ -2715,7 +2745,7 @@ function equipEditor(chr) {
   }
   const bad = gearProblems(chr);
   if (bad.length) h += `</div><div class="warnNote" style="display:flex; gap:10px; align-items:center;"><div style="flex:1;">${escapeHtml(chr.name || 'This fighter')} has ${bad.length} piece${bad.length === 1 ? '' : 's'} of gear the game wouldn't let them equip: ${bad.map(b => escapeHtml(gearLabel(arr(chr.pspts).find(p => p.eptid === b.eid) || { ptid: '?' })) + ' (' + escapeHtml(b.why) + ')').join('; ')}.</div><button class="subtle" id="eq-unequip-bad">Unequip ${bad.length === 1 ? 'it' : 'them'}</button>`;
-  h += '</div><div class="capNote" style="margin-top:0;">Pick from the gear this fighter is carrying (add gear to the Fighter Inventory below first). Only gear this fighter can use is offered: the right slot type, not broken, and the fighter\'s stat meets the part\'s requirement (greyed-out entries show why). Each hand has 3 weapon slots; the ticked one is the weapon in hand. A weapon can only be in one slot.</div>';
+  h += '</div><div class="capNote" style="margin-top:0;">Pick from the gear this fighter is carrying (add gear to the Fighter Inventory below first). Only gear this fighter can use is offered: the right slot type, not broken, and the fighter\'s stat meets the part\'s requirement, which rises with each upgrade and is lowered by requirement decals like Strength Discount or Everything\'s On Sale equipped on this fighter (greyed-out entries show why). Each hand has 3 weapon slots; the ticked one is the weapon in hand. A weapon can only be in one slot.</div>';
   return h;
 }
 function wireEquipEditor(chr) {
