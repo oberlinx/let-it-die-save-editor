@@ -3029,7 +3029,7 @@ function wireAutocomplete(input, dropEl, category, onPick, ptType) {
 }
 
 function blockBlueprints() {
-  return `<section class="block">\n    <div class="block-head">\n      <div><div class="eyebrow">Chokufunsha</div><h2>Research</h2></div>\n    </div>\n    <div class="block-body">\n      <div class="toolbar">\n        <input type="text" id="bp-filter" placeholder="Filter by name..." style="flex:1; max-width:320px; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);">\n        <button class="subtle" id="bp-max-all">Max all visible research</button>\n        <button class="subtle" id="bp-plus5-all" title="In-game +5. Normal parts max out at +4; Uncap parts get +5. Earlier parts in the same chain are maxed.">Set all visible research to +5</button>\n        <button class="subtle" id="bp-remove-all">Remove all</button>\n        <div class="count" id="bp-count"></div>\n      </div>\n      <div id="bp-suspicious-summary" style="font-size:12px; color:var(--warn); margin-bottom:8px;"></div>\n      <div class="tabbar" id="bp-subtabs" style="margin-bottom:12px;"></div>\n      <div id="bp-slot-content"></div>\n      ${stampBlockHtml()}\n    </div>\n  </section>`;
+  return `<section class="block">\n    <div class="block-head">\n      <div><div class="eyebrow">Chokufunsha</div><h2>Research</h2></div>\n    </div>\n    <div class="block-body">\n      <div class="toolbar">\n        <input type="text" id="bp-filter" placeholder="Filter by name..." style="flex:1; max-width:320px; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);">\n        <button class="subtle" id="bp-max-all">Max all visible research</button>\n        <button class="subtle" id="bp-plus5-all" title="In-game +5. Normal parts max out at +4; Uncap parts get +5. Earlier parts in the same chain are maxed.">Set all visible research to +5</button>\n        <button class="subtle" id="bp-remove-all">Remove all</button>\n        <label style="display:flex; align-items:center; gap:4px; font-size:11.5px;" title="PlayStation-only blueprints (master_part.platform 1). A PC game only has them if it has been modded to include them."><input type="checkbox" id="bp-include-ps"> Include PS-only (modded PC games)</label>\n        <div class="count" id="bp-count"></div>\n      </div>\n      <div id="bp-suspicious-summary" style="font-size:12px; color:var(--warn); margin-bottom:8px;"></div>\n      <div class="tabbar" id="bp-subtabs" style="margin-bottom:12px;"></div>\n      <div id="bp-slot-content"></div>\n      ${stampBlockHtml()}\n    </div>\n  </section>`;
 }
 
 function partFamily(p) {
@@ -3090,6 +3090,20 @@ function buildAllowedResearchSet() {
 function isResearchAllowed(ptid) {
   if (!ALLOWED_RESEARCH_SET) ALLOWED_RESEARCH_SET = buildAllowedResearchSet();
   return ALLOWED_RESEARCH_SET.has(ptid);
+}
+
+// PlayStation-only blueprints (platform 1). PC players can mod them into the
+// game, so the Research tab's bulk buttons can include them on request.
+const RESEARCH_FORM = { includePs: false };
+function isPsOnlyPart(ptid) {
+  const p = PT_INDEX[ptid];
+  return !!p && Number(p.platform) === 1;
+}
+function isResearchBulkAllowed(ptid) {
+  if (isResearchAllowed(ptid)) return true;
+  if (!RESEARCH_FORM.includePs || !isPsOnlyPart(ptid) || RESEARCH_BLOCKLIST.has(ptid)) return false;
+  const researchable = (AP.partresearch || []).some(r => r.ptid === ptid);
+  return researchable && !hasNoBlueprint(ptid);
 }
 
 const BLUEPRINT_BLOCKLIST = new Set([ 'PT_ARM_WP023_001', 'PT_ARM_WP025_0A4' ]);
@@ -3208,6 +3222,9 @@ function wireBlueprints() {
     return !!entryFor(ptid);
   }
   const STARTER_PTIDS = new Set([ 'PT_ARM_WP005_001', 'PT_ARM_WP006_001' ]);
+  // blueprints every new game starts with (master_part_research.is_initial)
+  const INITIAL_PTIDS = new Set((AP.partresearch || []).filter(r => Number(r.is_initial) === 1).map(r => r.ptid));
+  if (!INITIAL_PTIDS.size) for (const id of STARTER_PTIDS) INITIAL_PTIDS.add(id);
   function removeEntry(ptid) {
     researchDirty = true;
     for (let i = research.length - 1; i >= 0; i--) {
@@ -3255,12 +3272,24 @@ function wireBlueprints() {
         if (i < idx) writeLadder(chain[i], maxPartLevel(PT_INDEX[chain[i]])); else if (!isUnlocked(chain[i])) writeLadder(chain[i], 1);
       }
     } else {
-      for (let i = idx; i < chain.length; i++) removeEntry(chain[i]);
+      for (let i = idx; i < chain.length; i++) {
+        // starting blueprints are never removed; they go back to their first level
+        if (INITIAL_PTIDS.has(chain[i])) writeLadder(chain[i], 1); else removeEntry(chain[i]);
+      }
+      if (INITIAL_PTIDS.has(ptid)) toast(`${(PT_INDEX[ptid] || {}).name || ptid} is a starting blueprint, so it was reset to +0 instead of removed.`);
     }
   }
   function setLevel(ptid, lvl) {
-    if (!isUnlocked(ptid)) return;
+    if (!isUnlocked(ptid)) return null;
+    const rec = PT_INDEX[ptid], max = maxPartLevel(rec) || 1;
+    if (lvl < max) {
+      // the next part in the upgrade chain can only be researched from a maxed part
+      const chain = chainOf(ptid);
+      const later = chain.slice(chain.indexOf(ptid) + 1).find(id => isUnlocked(id));
+      if (later) return `${rec.name} has to stay maxed while ${(PT_INDEX[later] || {}).name || later} (the next part in its upgrade chain) is researched. Untick that first.`;
+    }
     writeLadder(ptid, lvl);
+    return null;
   }
   const RESEARCH_SLOTS = [ 'Weapon', 'Head', 'Chest (TOPS)', 'Pants (BTM)' ];
   let researchSubTab = RESEARCH_SUBTAB_STATE.current || 'Weapon';
@@ -3290,7 +3319,7 @@ function wireBlueprints() {
         const e = entryFor(p.id);
         const maxLvl = maxPartLevel(p);
         const dispMax = maxDisplayLevel(p);
-        return `<div class="listRow">\n                  <input type="checkbox" data-bp="${p.id}" ${unlocked ? 'checked' : ''}>\n                  <div class="name">${escapeHtml(p.name)} ${p.is_limitbreak ? '<span class="badge lb">Uncap · in-game +' + dispMax + '</span>' : `<span class="badge">in-game +${dispMax}</span>`} ${hasNoBlueprint(p.id) ? '<span class="badge" style="background:var(--accent); color:#fff;">(THIS HAS NO BLUEPRINT)</span>' : ''}</div>\n                  ${unlocked ? `<input type="number" class="bp-level" data-bp-level="${p.id}" min="0" max="${maxLvl}" value="${e ? Math.min(e.lvl, maxLvl) : 0}" style="width:60px;" title="Raw save value, 0-${maxLvl}${p.is_limitbreak ? ` -- shows as in-game +${dispMax} at max` : ''}">` : ''}\n                  <div class="id">${p.id}</div>\n                </div>`;
+        return `<div class="listRow">\n                  <input type="checkbox" data-bp="${p.id}" ${unlocked ? 'checked' : ''}>\n                  <div class="name">${escapeHtml(p.name)} ${p.is_limitbreak ? '<span class="badge lb">Uncap · in-game +' + dispMax + '</span>' : `<span class="badge">in-game +${dispMax}</span>`} ${isPsOnlyPart(p.id) ? '<span class="badge" title="PlayStation-only; a PC game needs to be modded to have it">PS only</span>' : ''} ${hasNoBlueprint(p.id) ? '<span class="badge" style="background:var(--accent); color:#fff;">(THIS HAS NO BLUEPRINT)</span>' : ''}</div>\n                  ${unlocked ? `<span style="font-size:11px; color:var(--text-dim);">+</span><input type="number" class="bp-level" data-bp-level="${p.id}" min="${minDisplayLevel(p)}" max="${dispMax}" value="${displayFromRaw(p, e ? e.lvl : 1)}" style="width:60px;" title="In-game level, +${minDisplayLevel(p)} to +${dispMax}">` : ''}\n                  <div class="id">${p.id}</div>\n                </div>`;
       }).join('')}\n            </div>\n          </div>`).join('');
     }
     document.getElementById('bp-slot-content').innerHTML = renderSlotGroup(researchSubTab);
@@ -3310,29 +3339,36 @@ function wireBlueprints() {
     });
     document.querySelectorAll('[data-bp-level]').forEach(inp => {
       inp.addEventListener('change', () => {
-        let v = parseInt(inp.value, 10) || 0;
-        const capAttr = inp.getAttribute('max');
-        if (capAttr && v > parseInt(capAttr, 10)) {
-          v = parseInt(capAttr, 10);
-          toast(`Clamped to this tier's cap (+${v})`);
-        }
-        if (v < 0) v = 0;
-        inp.value = v;
-        setLevel(inp.dataset.bpLevel, v);
+        // the box shows the in-game level (+n); the save stores the raw level
+        const rec = PT_INDEX[inp.dataset.bpLevel];
+        const lo = minDisplayLevel(rec), hi = maxDisplayLevel(rec);
+        let v = parseInt(inp.value, 10);
+        if (isNaN(v)) v = lo;
+        if (v > hi) toast(`Clamped to this part's max (+${hi})`);
+        if (v < lo) toast(`Clamped to this part's lowest level (+${lo})`);
+        v = Math.max(lo, Math.min(hi, v));
+        const err = setLevel(inp.dataset.bpLevel, rawFromDisplay(rec, v));
+        if (err) toast(err, true);
+        // re-render so the "next level" markers and research stamps follow
+        syncStampFromResearch();
+        renderList(document.getElementById('bp-filter').value);
       });
     });
   }
   renderList('');
   wireStamp();
   document.getElementById('bp-filter').addEventListener('input', e => renderList(e.target.value));
+  const psBox = document.getElementById('bp-include-ps');
+  psBox.checked = RESEARCH_FORM.includePs;
+  psBox.addEventListener('change', () => { RESEARCH_FORM.includePs = psBox.checked; toast(psBox.checked ? 'Max all / +5 now include PS-only blueprints (only for PC games modded to have them)' : 'Max all / +5 skip PS-only blueprints again'); });
   document.getElementById('bp-max-all').addEventListener('click', () => {
     const filter = document.getElementById('bp-filter').value;
     const shown = blueprintableParts().filter(p => (!filter || norm(p.name).includes(norm(filter))) && partSlotLabel(p) === researchSubTab);
-    const parts = shown.filter(p => isResearchAllowed(p.id));
+    const parts = shown.filter(p => isResearchBulkAllowed(p.id));
     const done = new Set;
     for (const p of parts) {
       for (const id of chainOf(p.id)) {
-        if (!done.has(id) && isResearchAllowed(id)) {
+        if (!done.has(id) && isResearchBulkAllowed(id)) {
           writeLadder(id, maxPartLevel(PT_INDEX[id]));
           done.add(id);
         }
@@ -3342,7 +3378,7 @@ function wireBlueprints() {
     syncStampFromResearch();
     renderList(filter);
     const skipped = shown.length - parts.length;
-    toast(`Maxed ${parts.length} visible ${researchSubTab} research item${parts.length === 1 ? '' : 's'}${skipped ? ` (skipped ${skipped} PS-only / no blueprint)` : ''}`);
+    toast(`Maxed ${parts.length} visible ${researchSubTab} research item${parts.length === 1 ? '' : 's'}${skipped ? ` (skipped ${skipped} ${RESEARCH_FORM.includePs ? 'with no blueprint' : 'PS-only / no blueprint'})` : ''}`);
   });
   document.getElementById('bp-plus5-all').addEventListener('click', () => {
     // "+5" is the in-game number. Normal parts top out at +4, so they are
@@ -3351,12 +3387,12 @@ function wireBlueprints() {
     // accept the later one, so they are maxed rather than set to +5.
     const filter = document.getElementById('bp-filter').value;
     const shown = blueprintableParts().filter(p => (!filter || norm(p.name).includes(norm(filter))) && partSlotLabel(p) === researchSubTab);
-    const parts = shown.filter(p => isResearchAllowed(p.id));
+    const parts = shown.filter(p => isResearchBulkAllowed(p.id));
     const targets = new Map;
     for (const p of parts) {
       const chain = chainOf(p.id);
       const idx = chain.indexOf(p.id);
-      chain.slice(0, idx).forEach(id => { if (isResearchAllowed(id)) targets.set(id, maxPartLevel(PT_INDEX[id]) || 1); });
+      chain.slice(0, idx).forEach(id => { if (isResearchBulkAllowed(id)) targets.set(id, maxPartLevel(PT_INDEX[id]) || 1); });
       if (!targets.has(p.id)) targets.set(p.id, rawFromDisplay(PT_INDEX[p.id], 5));
     }
     let changed = 0, alreadyAbove = 0;
@@ -3368,14 +3404,16 @@ function wireBlueprints() {
     syncStampFromResearch();
     renderList(filter);
     const skipped = shown.length - parts.length;
-    toast(`Set ${changed} visible ${researchSubTab} research item${changed === 1 ? '' : 's'} to +5 (normal parts max out at +4)${alreadyAbove ? ` (left ${alreadyAbove} already higher untouched)` : ''}${skipped ? ` (skipped ${skipped} PS-only / no blueprint)` : ''}`);
+    toast(`Set ${changed} visible ${researchSubTab} research item${changed === 1 ? '' : 's'} to +5 (normal parts max out at +4)${alreadyAbove ? ` (left ${alreadyAbove} already higher untouched)` : ''}${skipped ? ` (skipped ${skipped} ${RESEARCH_FORM.includePs ? 'with no blueprint' : 'PS-only / no blueprint'})` : ''}`);
   });
   document.getElementById('bp-remove-all').addEventListener('click', () => {
     research.length = 0;
+    // every new game starts with these researched; keep them at their first level
+    for (const id of INITIAL_PTIDS) if (PT_INDEX[id]) writeLadder(id, 1);
     researchDirty = true;
     syncStampFromResearch();
     renderList(document.getElementById('bp-filter').value);
-    toast('All research removed');
+    toast(`All research removed (starting blueprints kept at +0)`);
   });
 }
 
