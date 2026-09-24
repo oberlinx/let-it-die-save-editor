@@ -4478,7 +4478,7 @@ function blockVip() {
   const vip = SAVE.soul.vip;
   const expiresDate = vip.expired_time ? new Date(vip.expired_time * 1e3) : null;
   const expiresStr = expiresDate ? `${expiresDate.getMonth() + 1}/${expiresDate.getDate()}/${expiresDate.getFullYear()}` : '';
-  return `<section class="block">\n    <div class="block-head"><div><div class="eyebrow">Direct Hell Insurance</div><h2>VIP Express Pass</h2></div></div>\n    <div class="block-body">\n      <div class="grid">\n        <div class="field"><label>VIP Active (0/1)</label><input type="number" min="0" max="1" data-vip="vip_flag" value="${vip.vip_flag || 0}"></div>\n        <div class="field"><label>VIP Type</label><input type="number" data-vip="vip_type" value="${vip.vip_type || 0}"></div>\n        <div class="field"><label>Multi-day Passes Held</label><input type="number" data-vip="vip_pass_num" value="${vip.vip_pass_num || 0}"></div>\n        <div class="field"><label>One-day Passes Held</label><input type="number" data-vip="oneday_vip_pass_num" value="${vip.oneday_vip_pass_num || 0}"></div>\n        <div class="field"><label>Expires (month/day/year)</label><input type="text" id="vip-expires-date" placeholder="MM/DD/YYYY" value="${expiresStr}"></div>\n        <div class="field"><label>Auto-renew (0/1)</label><input type="number" min="0" max="1" data-vip="automatic_renewal" value="${vip.automatic_renewal || 0}"></div>\n      </div>\n      <button class="subtle" id="vip-30days" style="margin-top:10px;">Set expiry 30 days from now</button>\n    </div>\n  </section>`;
+  return `<section class="block">\n    <div class="block-head"><div><div class="eyebrow">Direct Hell Insurance</div><h2>VIP Express Pass</h2></div></div>\n    <div class="block-body">\n      <div class="grid">\n        <div class="field"><label>VIP Active (0/1)</label><input type="number" min="0" max="1" data-vip="vip_flag" value="${vip.vip_flag || 0}"></div>\n        <div class="field"><label>Membership Type</label><select id="vip-type" style="width:100%; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);">${[[1, '30-day Express Pass'], [0, '1-Day Express / none']].concat([0, 1].includes(vip.vip_type || 0) ? [] : [[vip.vip_type, `Other (${vip.vip_type})`]]).map(([v, l]) => `<option value="${v}" ${(vip.vip_type || 0) === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>\n        <div class="field"><label>Multi-day Passes Held</label><input type="number" data-vip="vip_pass_num" value="${vip.vip_pass_num || 0}"></div>\n        <div class="field"><label>One-day Passes Held</label><input type="number" data-vip="oneday_vip_pass_num" value="${vip.oneday_vip_pass_num || 0}"></div>\n        <div class="field"><label>Expires (month/day/year)</label><input type="text" id="vip-expires-date" placeholder="MM/DD/YYYY" value="${expiresStr}"></div>\n        <div class="field"><label>Auto-renew (0/1)</label><input type="number" min="0" max="1" data-vip="automatic_renewal" value="${vip.automatic_renewal || 0}"></div>\n      </div>\n      <button class="subtle" id="vip-30days" style="margin-top:10px;">Set expiry 30 days from now</button>\n    </div>\n  </section>`;
 }
 
 function wireVip() {
@@ -4486,6 +4486,17 @@ function wireVip() {
     inp.addEventListener('change', () => {
       SAVE.soul.vip[inp.dataset.vip] = parseInt(inp.value, 10) || 0;
     });
+  });
+  // soul.vip.type: 1 = 30-day Express Pass (the user's active membership),
+  // 0 = 1-Day Express / none (fresh game) -- inferred from saves, not named in
+  // the game data. user.vip_level has matched the type in every save seen, so
+  // it's kept in step when it currently matches.
+  document.getElementById('vip-type').addEventListener('change', e => {
+    const v = parseInt(e.target.value, 10) || 0;
+    const old = SAVE.soul.vip.vip_type || 0;
+    SAVE.soul.vip.vip_type = v;
+    if (SAVE.user && (SAVE.user.vip_level || 0) === old) SAVE.user.vip_level = v;
+    toast(v === 1 ? 'Membership type: 30-day Express Pass' : 'Membership type: 1-Day Express / none');
   });
   document.getElementById('vip-expires-date').addEventListener('change', e => {
     const m = e.target.value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
@@ -5545,10 +5556,12 @@ function wireBoxes() { if (activeTab === 'boxes') renderBoxes(); }
 
 // ---------------------------------------------------------------------------
 // WAITING ROOM customization (soul.hubcustom)
-// Each decoration is {cstmid, flg}. From real saves: flg 0 = not owned; any
-// non-zero = owned; bit 4 = the one currently shown for that spot (exactly one
-// per spot). Owned items appear as 1 or 2 (probably "new" vs "seen"); free
-// defaults are 2, so unlocking here writes 2. master_hubcustomize gives the
+// Each decoration is {cstmid, flg}, a bit set (from real saves, incl. a fresh
+// game where all 103 non-default decorations are 1 and the 10 defaults are 6):
+//   1 = NOT owned, marked "new" in the shop   0 = not owned (seen)
+//   2 = owned                                  4 = the one shown for that spot
+// Defaults are 6 (owned + shown); bought decorations in use are 4. So owned =
+// bit 2 or 4 (flg & 6). Unlocking writes 2 (confirmed working in game). master_hubcustomize gives the
 // spot (site), order and name; platform 1 = World of Tanks items that were
 // PlayStation-only.
 // ---------------------------------------------------------------------------
@@ -5561,6 +5574,7 @@ const HUB_SITE_TEXT = { WAL: 'TXT_DECO_WALL', FLR: 'TXT_DECO_FLOOR', PLR: 'TXT_D
 let HUB_STATE = { root: null, original: null, lastMsg: '' };
 const HUB_FORM = { includePs: false };
 
+const hubOwned = e => !!e && ((Number(e.flg) || 0) & 6) !== 0;
 function hubData() {
   const s = SAVE && SAVE.soul;
   return s && Array.isArray(s.hubcustom) ? s.hubcustom : null;
@@ -5609,9 +5623,9 @@ function renderHub() {
   const ensure = e => { if (!list.includes(e)) list.push(e); return e; };
   const changed = JSON.stringify(list) !== JSON.stringify(HUB_STATE.original);
   const siteOf = e => (meta[e.cstmid] && meta[e.cstmid].site) || e.cstmid.split('_')[2];
-  const visible = e => HUB_FORM.includePs || !(meta[e.cstmid] && meta[e.cstmid].platform === 1) || e.flg;
-  const owned = all.filter(e => e.flg).length;
-  const lockedVisible = all.filter(e => !e.flg && visible(e)).length;
+  const visible = e => HUB_FORM.includePs || !(meta[e.cstmid] && meta[e.cstmid].platform === 1) || hubOwned(e);
+  const owned = all.filter(hubOwned).length;
+  const lockedVisible = all.filter(e => !hubOwned(e) && visible(e)).length;
   let h = '';
   if (changed) h += `<div class="warnNote" style="display:flex; gap:10px; align-items:center; border-color:var(--good); color:var(--good-bright);"><div style="flex:1;">Waiting Room changed. Download the .sav to keep it.</div><button class="subtle" id="hub-undo">Undo all Waiting Room changes</button></div>`;
   if (HUB_STATE.lastMsg) h += `<pre class="stewLog">${escapeHtml(HUB_STATE.lastMsg)}</pre>`;
@@ -5624,7 +5638,7 @@ function renderHub() {
     if (!items.length) continue;
     const inUse = items.find(e => e.flg & 4);
     h += `<div class="subDetails" style="padding:10px; margin-bottom:10px;">
-      <div style="display:flex; gap:10px; align-items:center; margin-bottom:6px;"><b style="font-size:14px;">${escapeHtml(hubSiteName(site))}</b><span class="id">showing: ${escapeHtml(inUse ? (resolveName((meta[inUse.cstmid] || {}).name) || inUse.cstmid) : 'nothing')}</span><span style="flex:1;"></span><span class="id">${items.filter(e => e.flg).length} / ${items.length} owned</span></div>
+      <div style="display:flex; gap:10px; align-items:center; margin-bottom:6px;"><b style="font-size:14px;">${escapeHtml(hubSiteName(site))}</b><span class="id">showing: ${escapeHtml(inUse ? (resolveName((meta[inUse.cstmid] || {}).name) || inUse.cstmid) : 'nothing')}</span><span style="flex:1;"></span><span class="id">${items.filter(hubOwned).length} / ${items.length} owned</span></div>
       <div class="listBlock" style="max-height:none;">`;
     h += items.map(e => {
       const m = meta[e.cstmid] || {};
@@ -5632,11 +5646,11 @@ function renderHub() {
       const use = !!(e.flg & 4);
       const isDefault = /_NONE$/.test(e.cstmid);
       return `<div class="listRow"><div class="name">${escapeHtml(nm)} ${m.platform === 1 ? '<span class="badge">PS only</span>' : ''}</div>
-        ${use ? '<span class="badge current">IN USE</span>' : e.flg ? '<span class="badge">owned</span>' : '<span class="badge" style="opacity:0.5;">locked</span>'}
+        ${use ? '<span class="badge current">IN USE</span>' : hubOwned(e) ? '<span class="badge">owned</span>' : '<span class="badge" style="opacity:0.5;">locked</span>'}
         <span class="id" style="width:28px; text-align:right;" title="raw flag">${e.flg}</span>
-        ${e.flg ? '' : `<button class="subtle" data-hub-unlock="${e.cstmid}">Unlock</button>`}
+        ${hubOwned(e) ? '' : `<button class="subtle" data-hub-unlock="${e.cstmid}">Unlock</button>`}
         ${use ? '' : `<button class="subtle" data-hub-use="${e.cstmid}">Use</button>`}
-        ${e.flg && !use && !isDefault ? `<button class="subtle" data-hub-lock="${e.cstmid}">Lock</button>` : ''}
+        ${hubOwned(e) && !use && !isDefault ? `<button class="subtle" data-hub-lock="${e.cstmid}">Lock</button>` : ''}
       </div>`;
     }).join('');
     h += '</div></div>';
@@ -5654,7 +5668,7 @@ function renderHub() {
   document.getElementById('hub-ps').addEventListener('change', e => { HUB_FORM.includePs = e.target.checked; renderHub(); });
   document.getElementById('hub-unlock-all').addEventListener('click', () => {
     let n = 0;
-    for (const e of all) if (!e.flg && visible(e)) { ensure(e).flg = 2; n++; }
+    for (const e of all) if (!hubOwned(e) && visible(e)) { ensure(e).flg = 2; n++; }
     redo(`Unlocked ${n} decoration${n === 1 ? '' : 's'}.`);
   });
   host.querySelectorAll('[data-hub-unlock]').forEach(b => b.addEventListener('click', () => {
@@ -5665,7 +5679,7 @@ function renderHub() {
     const e = ensure(byId[b.dataset.hubUse]);
     const site = siteOf(e);
     for (const o of list) if (o !== e && siteOf(o) === site && (o.flg & 4)) o.flg = (o.flg & ~4) || 2;
-    e.flg = (e.flg || 2) | 4;
+    e.flg = (hubOwned(e) ? (e.flg & 6) : 2) | 4;
     redo(`${hubSiteName(site)} now shows ${name(e.cstmid)}.`);
   }));
   host.querySelectorAll('[data-hub-lock]').forEach(b => b.addEventListener('click', () => {
