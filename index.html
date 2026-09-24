@@ -1314,6 +1314,9 @@ async function loadMastersBuffer(buf) {
       atkattr: all('SELECT * FROM master_part_atkattr'),
       bodydetail: all('SELECT * FROM master_body_detail')
     };
+    for (const [key, sql] of [['questParamText', 'SELECT qid, no, val FROM master_quest_param_text'], ['questParamDesc', 'SELECT qid, no, val FROM master_quest_param_desc_text'], ['rewards', 'SELECT * FROM master_reward'], ['questCats', 'SELECT * FROM master_quest_category']]) {
+      try { AP[key] = all(sql); } catch (err) { AP[key] = []; console.warn(`${key} not available in this masters.db:`, err); }
+    }
     AP.stewOdds = [];
     AP.stewOddsId = STEW_GACHA_ID;
     try {
@@ -1867,6 +1870,7 @@ function renderAll() {
       });
       if (activeTab === 'stews') renderStewReport();
       if (activeTab === 'dates') renderDates();
+      if (activeTab === 'quests') renderQuests();
       window.scrollTo(0, 0);
     });
   });
@@ -2859,89 +2863,298 @@ function wireBlueprints() {
   });
 }
 
-function blockQuests() {
-  return `<section class="block">\n    <div class="block-head"><div><div class="eyebrow">Progress</div><h2>Quests</h2></div></div>\n    <div class="block-body">\n      <div class="toolbar">\n        <div class="eyebrow" style="margin:0;">Active quests</div>\n        <div class="count" id="q-count"></div>\n      </div>\n      <div class="listBlock" id="q-list"></div>\n    </div>\n  </section>`;
+// ---------------------------------------------------------------------------
+// QUESTS tab
+// Offline saves keep quests in soul.quest:
+//   ord  : quests currently taken   {qid, prgnow, prgmax, timer, expire, term, rwd, order}
+//   user : history for every offline quest {qid, ordcnt (times taken), clrcnt (times cleared)}
+//   dis/dfs/dss : per-quest extra data keyed by qid (left alone)
+//   hash : game checksum of unknown input (left alone)
+// SAVE.soul.quest is the same object the save is rebuilt from, so edits here
+// ship with Download .sav.
+// ---------------------------------------------------------------------------
+
+const QUEST_FORM = { histFilter: 'all', histSearch: '', addSearch: '', showLocked: false, open: 'active' };
+let QUEST_STATE = { root: null, original: null, lastMsg: '' };
+
+function questData() {
+  const soul = SAVE && SAVE.soul;
+  const q = soul && soul.quest;
+  if (!q || typeof q !== 'object' || Array.isArray(q)) return null;
+  if (!Array.isArray(q.ord)) q.ord = [];
+  if (!Array.isArray(q.user)) q.user = [];
+  return q;
 }
 
-function resolveQuestText(text, subs) {
-  if (!text) return text;
+function questSyncState() {
+  if (QUEST_STATE.root !== RAW_SAV_ROOT) {
+    const q = questData();
+    QUEST_STATE = { root: RAW_SAV_ROOT, original: q ? JSON.parse(JSON.stringify({ ord: q.ord, user: q.user })) : null, lastMsg: '' };
+  }
+}
+
+let QUEST_META = null;
+function questMeta() {
+  if (QUEST_META && QUEST_META.ap === AP) return QUEST_META;
+  const byId = {}, pText = {}, pDesc = {}, rwd = {}, cats = {};
+  for (const m of arr(AP && AP.quests)) byId[m.qid] = m;
+  for (const r of arr(AP && AP.questParamText)) (pText[r.qid] = pText[r.qid] || [])[r.no] = r.val;
+  for (const r of arr(AP && AP.questParamDesc)) (pDesc[r.qid] = pDesc[r.qid] || [])[r.no] = r.val;
+  for (const r of arr(AP && AP.rewards)) rwd[r.rwdid] = r;
+  for (const r of arr(AP && AP.questCats)) cats[r.catid] = resolveName(r.name) || r.catid.replace(/^QUESTCAT_/, '');
+  QUEST_META = { ap: AP, byId, pText, pDesc, rwd, cats };
+  return QUEST_META;
+}
+
+function questFill(text, params) {
+  if (!text) return '';
   return text.replace(/#(\d+)/g, (m, n) => {
-    const key = subs[parseInt(n, 10)];
-    return key ? resolveName(key) || m : m;
+    const key = params && params[parseInt(n, 10)];
+    if (!key) return m;
+    return resolveName(key) || String(key).replace(/^[A-Z_]+\.TXT_/, '');
+  }).replace(/##/g, '#'); // the game escapes a literal # as ##
+}
+function questName(qid) {
+  const M = questMeta(), m = M.byId[qid];
+  if (!m) return qid;
+  const t = resolveName(m.name);
+  return t ? questFill(t, M.pText[qid]).replace(/\s+/g, ' ').trim() : qid;
+}
+function questDesc(qid) {
+  const M = questMeta(), m = M.byId[qid];
+  if (!m) return '';
+  const t = resolveName(m.desc);
+  return t ? questFill(t, M.pDesc[qid]).replace(/\s+/g, ' ').trim() : '';
+}
+function questReward(rwdid) {
+  if (!rwdid) return '';
+  const r = questMeta().rwd[rwdid];
+  if (!r) return rwdid;
+  const n = r.num > 1 ? ` ×${Number(r.num).toLocaleString()}` : '';
+  if (r.type === 'MONEY') return `${Number(r.num).toLocaleString()} Kill Coins`;
+  const id = r.val0 || '';
+  let nm = null;
+  if (r.type === 'SKILL') nm = SKL_INDEX[id] && SKL_INDEX[id].name && `Decal: ${SKL_INDEX[id].name}`;
+  else if (ITEM_INDEX[id]) {
+    const it = ITEM_INDEX[id];
+    const bp = id.startsWith('ITMP_') && PT_INDEX[id.replace(/^ITMP_/, 'PT_')];
+    nm = bp ? `Blueprint: ${bp.name}` : it.name;
+  } else if (PT_INDEX[id]) nm = PT_INDEX[id].name;
+  else if (MSR_INDEX[id]) nm = MSR_INDEX[id].name;
+  else if (BST_INDEX[id]) nm = BST_INDEX[id].name;
+  return (nm || `${r.type} ${id}`) + n;
+}
+function questStars(qid) {
+  const m = questMeta().byId[qid];
+  return m && m.lvl != null ? '★'.repeat(Math.max(1, Math.round(m.lvl / 2))) : '';
+}
+function questUserEntry(q, qid) {
+  return q.user.find(u => u.qid === qid) || null;
+}
+function questLocked(q, qid) {
+  const m = questMeta().byId[qid];
+  if (!m) return '';
+  const why = [];
+  if (m.cond_quest_id) {
+    const u = questUserEntry(q, m.cond_quest_id);
+    if (!u || !(u.clrcnt > 0)) why.push(`clear "${questName(m.cond_quest_id)}" first`);
+  }
+  const maxFlr = SAVE.playlog && SAVE.playlog[0] && SAVE.playlog[0].base && SAVE.playlog[0].base.max_floor;
+  if (m.cond_flr > 0 && maxFlr != null && maxFlr < m.cond_flr) why.push(`needs floor ${m.cond_flr} (you've reached ${maxFlr})`);
+  return why.join('; ');
+}
+
+function blockQuests() {
+  return `<section class="block">
+    <div class="block-head"><div><div class="eyebrow">Progress</div><h2>Quests</h2></div></div>
+    <div class="block-body">
+      <div class="capNote" style="margin-top:0;">Edits your current quests and quest history. The save also holds a quest checksum ("hash") whose input is unknown; it is left untouched. Try quest edits on a copy of your save first and check them in game.</div>
+      <div id="q-body"></div>
+    </div>
+  </section>`;
+}
+
+function renderQuests() {
+  const host = document.getElementById('q-body');
+  if (!host || !SAVE) return;
+  questSyncState();
+  const q = questData();
+  if (!q) { host.innerHTML = '<div class="warnNote">This save has no quest data (soul.quest). Load a .sav or the full .json dump.</div>'; return; }
+  const M = questMeta();
+  const changed = QUEST_STATE.original && JSON.stringify({ ord: q.ord, user: q.user }) !== JSON.stringify(QUEST_STATE.original);
+  const tabs = [['active', `Current quests (${q.ord.length})`], ['add', 'Take a quest'], ['history', `Quest history (${q.user.length})`]];
+  let h = '';
+  if (changed) h += `<div class="warnNote" style="display:flex; gap:10px; align-items:center; border-color:var(--good); color:var(--good-bright);"><div style="flex:1;">Quests changed. Download the .sav to keep it.</div><button class="subtle" id="q-undo-all">Undo all quest changes</button></div>`;
+  if (QUEST_STATE.lastMsg) h += `<pre class="stewLog">${escapeHtml(QUEST_STATE.lastMsg)}</pre>`;
+  h += `<div class="subTabs">${tabs.map(([k, l]) => `<div class="subTab ${QUEST_FORM.open === k ? 'active' : ''}" data-q-tab="${k}">${l}</div>`).join('')}</div>`;
+
+  if (QUEST_FORM.open === 'active') {
+    if (q.ord.length > 3) h += `<div class="warnNote">You have ${q.ord.length} quests taken. Holding more than 3 at once is untested; check it on a copy of your save.</div>`;
+    h += '<div class="listBlock" style="max-height:none;">';
+    h += q.ord.map((o, i) => {
+      const done = o.prgmax > 0 && o.prgnow >= o.prgmax;
+      const pct = o.prgmax > 0 ? Math.min(100, Math.round(100 * (o.prgnow || 0) / o.prgmax)) : 0;
+      return `<div class="listRow" style="flex-direction:column; align-items:stretch; padding:10px; gap:4px;">
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <div class="name"><b>${escapeHtml(questName(o.qid))}</b> <span style="color:var(--warn);">${questStars(o.qid)}</span> ${done ? '<span class="badge current">COMPLETE</span>' : ''}</div>
+          <span class="id">${escapeHtml(o.qid)}</span>
+        </div>
+        <div style="font-size:11.5px; color:var(--text-dim);">${escapeHtml(questDesc(o.qid))}</div>
+        <div style="font-size:11.5px;">Reward: ${escapeHtml(questReward(o.rwd))}</div>
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+          <div class="stewBar" style="width:160px;"><span style="width:${pct}%"></span></div>
+          <span style="font-size:11.5px;">Progress</span>
+          <input type="number" min="0" max="${o.prgmax}" value="${o.prgnow || 0}" data-q-prg="${i}" style="width:70px; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:4px 6px; font-family:var(--mono);">
+          <span style="font-size:11.5px;">/ ${o.prgmax}</span>
+          <button class="action" data-q-complete="${i}" ${done ? 'disabled' : ''}>Complete</button>
+          <button class="subtle" data-q-drop="${i}">Drop quest</button>
+        </div>
+      </div>`;
+    }).join('') || '<div style="padding:10px; color:var(--text-faint); font-size:12px;">No quests taken. Use "Take a quest" to add one.</div>';
+    h += '</div><div class="capNote">Complete sets progress to the goal, so the game should treat the quest as done the next time it checks. The reward is still collected in game.</div>';
+  }
+
+  if (QUEST_FORM.open === 'add') {
+    const active = new Set(q.ord.map(o => o.qid));
+    const s = norm(QUEST_FORM.addSearch);
+    const list = q.user.filter(u => M.byId[u.qid] && !active.has(u.qid)).map(u => ({ u, lock: questLocked(q, u.qid), name: questName(u.qid) }))
+      .filter(x => (QUEST_FORM.showLocked || !x.lock) && (!s || norm(x.name).includes(s) || norm(x.u.qid).includes(s) || norm(questDesc(x.u.qid)).includes(s)))
+      .sort((a, b) => (M.byId[a.u.qid].no || 0) - (M.byId[b.u.qid].no || 0));
+    h += `<div class="toolbar"><input type="text" id="q-add-search" placeholder="Search quests..." value="${escapeHtml(QUEST_FORM.addSearch)}" style="flex:1; max-width:320px; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);">
+      <label class="stewHlOnly"><input type="checkbox" id="q-show-locked" ${QUEST_FORM.showLocked ? 'checked' : ''}> Include quests you haven't unlocked</label><span class="count">${list.length} shown</span></div>`;
+    h += '<div class="listBlock" style="max-height:520px;">';
+    h += list.map(x => {
+      const m = M.byId[x.u.qid];
+      const r = x.u.clrcnt > 0 ? m.rwd : (m.first_rwd || m.rwd);
+      return `<div class="listRow" style="align-items:flex-start; padding:8px 10px;">
+        <div class="name"><b>${escapeHtml(x.name)}</b> <span style="color:var(--warn);">${questStars(x.u.qid)}</span> ${x.u.clrcnt > 0 ? `<span class="badge">cleared ×${x.u.clrcnt}</span>` : '<span class="badge current">never cleared</span>'}
+          <div style="font-size:11px; color:var(--text-dim);">${escapeHtml(questDesc(x.u.qid))}</div>
+          <div style="font-size:11px;">Reward: ${escapeHtml(questReward(r))}${x.u.clrcnt > 0 ? '' : ' (first clear)'}</div>
+          ${x.lock ? `<div style="font-size:11px; color:var(--warn);">Locked: ${escapeHtml(x.lock)}</div>` : ''}</div>
+        <span class="id">${escapeHtml(x.u.qid)}</span>
+        <button class="subtle" data-q-take="${escapeHtml(x.u.qid)}">Take</button>
+      </div>`;
+    }).join('') || '<div style="padding:10px; color:var(--text-faint); font-size:12px;">No quests match.</div>';
+    h += '</div>';
+  }
+
+  if (QUEST_FORM.open === 'history') {
+    const s = norm(QUEST_FORM.histSearch);
+    const f = QUEST_FORM.histFilter;
+    const list = q.user.map((u, i) => ({ u, i, name: questName(u.qid) }))
+      .filter(x => f === 'all' || (f === 'cleared' && x.u.clrcnt > 0) || (f === 'taken' && x.u.ordcnt > 0 && !(x.u.clrcnt > 0)) || (f === 'never' && !(x.u.ordcnt > 0)))
+      .filter(x => !s || norm(x.name).includes(s) || norm(x.u.qid).includes(s))
+      .sort((a, b) => ((M.byId[a.u.qid] || {}).no || 0) - ((M.byId[b.u.qid] || {}).no || 0));
+    const cnt = { cleared: q.user.filter(u => u.clrcnt > 0).length, never: q.user.filter(u => !(u.ordcnt > 0)).length };
+    h += `<div class="toolbar"><select id="q-hist-filter" style="background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:6px 8px; font-family:var(--mono); font-size:12px;">
+        ${[['all', `All (${q.user.length})`], ['cleared', `Cleared (${cnt.cleared})`], ['taken', 'Taken, not cleared'], ['never', `Never taken (${cnt.never})`]].map(([k, l]) => `<option value="${k}" ${f === k ? 'selected' : ''}>${l}</option>`).join('')}
+      </select>
+      <input type="text" id="q-hist-search" placeholder="Search..." value="${escapeHtml(QUEST_FORM.histSearch)}" style="flex:1; max-width:260px; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);">
+      <button class="subtle" id="q-clear-shown" ${list.some(x => !(x.u.clrcnt > 0)) ? '' : 'disabled'}>Mark all shown as cleared</button>
+      <span class="count">${list.length} shown</span></div>`;
+    h += '<table class="stewTable"><thead><tr><th>Quest</th><th>Category</th><th>Times taken</th><th>Times cleared</th><th></th></tr></thead><tbody>';
+    h += list.map(x => {
+      const m = M.byId[x.u.qid] || {};
+      return `<tr><td>${escapeHtml(x.name)} <span style="color:var(--warn);">${questStars(x.u.qid)}</span><div class="dtRel">${escapeHtml(x.u.qid)}</div></td>
+        <td style="font-size:11px; color:var(--text-dim);">${escapeHtml(M.cats[m.cat] || m.cat || '')}</td>
+        <td><input type="number" min="0" value="${x.u.ordcnt || 0}" data-q-ord="${x.i}" style="width:60px; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:3px 6px; font-family:var(--mono);"></td>
+        <td><input type="number" min="0" value="${x.u.clrcnt || 0}" data-q-clr="${x.i}" style="width:60px; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:3px 6px; font-family:var(--mono);"></td>
+        <td>${x.u.clrcnt > 0 ? '' : `<button class="subtle" data-q-mark="${x.i}">Mark cleared</button>`}</td></tr>`;
+    }).join('');
+    h += '</tbody></table><div class="capNote">"Times cleared" above 0 means the quest pays its normal reward instead of the first-clear reward, and unlocks quests that require it. Times taken is raised to match if it is lower.</div>';
+  }
+  host.innerHTML = h;
+  wireQuestEvents(q);
+}
+
+function wireQuestEvents(q) {
+  const host = document.getElementById('q-body');
+  const redo = msg => { QUEST_STATE.lastMsg = msg || ''; renderQuests(); if (msg) toast(msg.split('\n')[0]); };
+  host.querySelectorAll('[data-q-tab]').forEach(t => t.addEventListener('click', () => { QUEST_FORM.open = t.dataset.qTab; QUEST_STATE.lastMsg = ''; renderQuests(); }));
+  const undo = document.getElementById('q-undo-all');
+  if (undo) undo.addEventListener('click', () => {
+    const o = JSON.parse(JSON.stringify(QUEST_STATE.original));
+    q.ord = o.ord;
+    q.user = o.user;
+    redo('Quests restored to how they were when you loaded the save.');
+  });
+  host.querySelectorAll('[data-q-prg]').forEach(inp => inp.addEventListener('change', () => {
+    const o = q.ord[Number(inp.dataset.qPrg)];
+    let v = parseInt(inp.value, 10) || 0;
+    v = Math.min(Math.max(v, 0), o.prgmax > 0 ? o.prgmax : v);
+    o.prgnow = v;
+    redo(`${questName(o.qid)}: progress ${v} / ${o.prgmax}`);
+  }));
+  host.querySelectorAll('[data-q-complete]').forEach(b => b.addEventListener('click', () => {
+    const o = q.ord[Number(b.dataset.qComplete)];
+    o.prgnow = o.prgmax > 0 ? o.prgmax : 1;
+    redo(`Completed "${questName(o.qid)}". Collect the reward in game.`);
+  }));
+  host.querySelectorAll('[data-q-drop]').forEach(b => b.addEventListener('click', () => {
+    const [o] = q.ord.splice(Number(b.dataset.qDrop), 1);
+    redo(`Dropped "${questName(o.qid)}".`);
+  }));
+  const addS = document.getElementById('q-add-search');
+  if (addS) addS.addEventListener('change', () => { QUEST_FORM.addSearch = addS.value; renderQuests(); });
+  const showL = document.getElementById('q-show-locked');
+  if (showL) showL.addEventListener('change', () => { QUEST_FORM.showLocked = showL.checked; renderQuests(); });
+  host.querySelectorAll('[data-q-take]').forEach(b => b.addEventListener('click', () => {
+    const qid = b.dataset.qTake;
+    const m = questMeta().byId[qid];
+    const u = questUserEntry(q, qid);
+    if (!m || !u || q.ord.some(o => o.qid === qid)) return;
+    q.ord.push({
+      qid,
+      prgnow: 0,
+      prgmax: m.prgmax > 0 ? m.prgmax : 1,
+      timer: 0,
+      expire: 0,
+      term: 0,
+      rwd: u.clrcnt > 0 ? m.rwd : (m.first_rwd || m.rwd),
+      order: Math.floor(Date.now() / 1000)
+    });
+    u.ordcnt = (u.ordcnt || 0) + 1;
+    redo(`Took "${questName(qid)}". It is now in your current quests.`);
+  }));
+  const hf = document.getElementById('q-hist-filter');
+  if (hf) hf.addEventListener('change', () => { QUEST_FORM.histFilter = hf.value; renderQuests(); });
+  const hs = document.getElementById('q-hist-search');
+  if (hs) hs.addEventListener('change', () => { QUEST_FORM.histSearch = hs.value; renderQuests(); });
+  const setClr = (u, v) => {
+    u.clrcnt = Math.max(0, v);
+    if (u.clrcnt > 0 && !((u.ordcnt || 0) >= u.clrcnt)) u.ordcnt = u.clrcnt;
+  };
+  host.querySelectorAll('[data-q-clr]').forEach(inp => inp.addEventListener('change', () => {
+    const u = q.user[Number(inp.dataset.qClr)];
+    setClr(u, parseInt(inp.value, 10) || 0);
+    redo(`${questName(u.qid)}: cleared ${u.clrcnt}, taken ${u.ordcnt}`);
+  }));
+  host.querySelectorAll('[data-q-ord]').forEach(inp => inp.addEventListener('change', () => {
+    const u = q.user[Number(inp.dataset.qOrd)];
+    u.ordcnt = Math.max(0, parseInt(inp.value, 10) || 0);
+    redo(`${questName(u.qid)}: taken ${u.ordcnt}`);
+  }));
+  host.querySelectorAll('[data-q-mark]').forEach(b => b.addEventListener('click', () => {
+    const u = q.user[Number(b.dataset.qMark)];
+    setClr(u, 1);
+    redo(`Marked "${questName(u.qid)}" as cleared.`);
+  }));
+  const cs = document.getElementById('q-clear-shown');
+  if (cs) cs.addEventListener('click', () => {
+    const s = norm(QUEST_FORM.histSearch), f = QUEST_FORM.histFilter;
+    let n = 0;
+    for (const u of q.user) {
+      if (u.clrcnt > 0) continue;
+      const nm = questName(u.qid);
+      const pass = (f === 'all' || (f === 'taken' && u.ordcnt > 0) || (f === 'never' && !(u.ordcnt > 0))) && (!s || norm(nm).includes(s) || norm(u.qid).includes(s));
+      if (pass) { setClr(u, 1); n++; }
+    }
+    redo(`Marked ${n} quest${n === 1 ? '' : 's'} as cleared.`);
   });
 }
 
 function wireQuests() {
-  const soul = SAVE.soul;
-  soul.quests = arr(soul.quests);
-  const allQ = AP.quests || [];
-  const allQById = {};
-  for (const q of allQ) allQById[q.qid] = q;
-  for (const q of allQ) NAME_INDEX_QUEST_CACHE[q.qid] = q.qid;
-  function freshQuestEntry(qid) {
-    return {
-      qid: qid,
-      prgnow: 0,
-      prgmax: 1,
-      ordcnt: 1,
-      clrcnt: 0,
-      expire: -1,
-      timer: 0,
-      rwd: {
-        type: null,
-        num: 0,
-        val: [],
-        money: 0,
-        medal: 0,
-        pts: []
-      },
-      order: 0,
-      dis: [],
-      dfs: [],
-      dss: []
-    };
-  }
-  function renderList() {
-    document.getElementById('q-count').textContent = `${soul.quests.length} active`;
-    document.getElementById('q-list').innerHTML = soul.quests.map((q, i) => {
-      const done = q.clrcnt > 0;
-      const pct = q.prgmax > 0 ? Math.min(100, Math.round(100 * (q.prgnow || 0) / q.prgmax)) : done ? 100 : 0;
-      const meta = allQById[q.qid];
-      const rawName = meta ? resolveName(meta.name) : null;
-      const rawDesc = meta ? resolveName(meta.desc) : null;
-      const name = rawName ? resolveQuestText(rawName, meta.pts || []) : q.qid;
-      const desc = rawDesc ? resolveQuestText(rawDesc, meta.pdts || []) : '';
-      const stars = meta && meta.lvl != null ? '★'.repeat(Math.max(1, Math.round(meta.lvl / 2))) : '';
-      return `<div class="listRow" style="flex-direction:column; align-items:stretch; padding:10px;">\n        <div style="display:flex; justify-content:space-between; align-items:center;">\n          <div class="name">${escapeHtml(name)} ${stars ? `<span style="color:var(--warn);">${stars}</span>` : ''} ${done ? '<span class="badge current">CLEARED</span>' : ''}</div>\n          <div style="display:flex; gap:6px; align-items:center;">\n            <span class="id">${q.prgnow != null ? q.prgnow : '?'} / ${q.prgmax != null ? q.prgmax : '?'} (${pct}%)</span>\n            <input type="number" class="q-prgnow" data-q-idx="${i}" value="${q.prgnow != null ? q.prgnow : 0}" style="width:60px;" title="Current progress">\n            ${!done ? `<button class="subtle" data-q-complete="${i}">Complete</button>` : ''}\n            <button class="subtle" data-q-remove="${i}">✕</button>\n          </div>\n        </div>\n        ${desc ? `<div style="font-size:11px; color:var(--text-dim); margin-top:4px; white-space:pre-line;">${escapeHtml(desc)}</div>` : ''}\n      </div>`;
-    }).join('') || '<div style="padding:10px; color:var(--text-faint); font-size:12px;">No active quests.</div>';
-    document.querySelectorAll('[data-q-complete]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const q = soul.quests[parseInt(btn.dataset.qComplete, 10)];
-        q.clrcnt = Math.max(1, q.clrcnt || 0);
-        q.ordcnt = Math.max(1, q.ordcnt || 0);
-        if (q.prgmax > 0) q.prgnow = q.prgmax;
-        renderList();
-        toast(`"${q.qid}" marked complete`);
-      });
-    });
-    document.querySelectorAll('[data-q-remove]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        soul.quests.splice(parseInt(btn.dataset.qRemove, 10), 1);
-        renderList();
-      });
-    });
-    document.querySelectorAll('.q-prgnow').forEach(inp => {
-      inp.addEventListener('change', () => {
-        const q = soul.quests[parseInt(inp.dataset.qIdx, 10)];
-        q.prgnow = parseInt(inp.value, 10) || 0;
-        if (q.prgmax > 0 && q.prgnow >= q.prgmax) {
-          q.clrcnt = Math.max(1, q.clrcnt || 0);
-        }
-        renderList();
-      });
-    });
-  }
-  renderList();
+  if (activeTab === 'quests') renderQuests();
 }
 
 const NAME_INDEX_QUEST_CACHE = {};

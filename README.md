@@ -31,7 +31,7 @@ PSN saves have to be decrypted first.
 | **Dates** | Every date in the save, with fixes for time-jump damage (future dates, dates past 2038, overflowed negative dates) |
 | Storage | Storage Box contents and capacity |
 | Rewards | Reward Box items |
-| Quests | Quest progress |
+| **Quests** | Current quests (progress, complete, drop), take a new quest, and quest history (times taken / cleared) |
 | VIP | VIP Express Pass status |
 
 ### Stews

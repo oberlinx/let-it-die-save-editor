@@ -1,0 +1,15 @@
+# Never commit game data or personal saves
+*.sav
+*.bak
+*.db
+*.sqlite
+*.sqlite3
+brggame*.json
+Savedata/
+
+# OS / editor clutter
+Thumbs.db
+desktop.ini
+.DS_Store
+.vscode/
+__pycache__/
