@@ -224,6 +224,14 @@
   .dtRel { font-size: 10.5px; color: var(--text-faint); }
   a.dtToggle { color: var(--text); text-decoration: none; }
   a.dtToggle:hover { color: var(--accent-bright); }
+  .photoGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+  .photoCard { margin: 0; background: var(--bg); border: 1px solid var(--panel-border); padding: 8px; }
+  .photoCard img { width: 100%; aspect-ratio: 1; object-fit: contain; display: block; cursor: zoom-in; image-rendering: auto; background: #000; }
+  .photoCard figcaption { font-size: 12px; margin-top: 6px; }
+  .photoModal { position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 200; display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .photoModal[hidden] { display: none; }
+  .photoModalInner { background: var(--panel); border: 1px solid var(--panel-border-bright); padding: 12px; max-width: 95vw; text-align: center; }
+  .photoModalInner img { width: min(768px, 85vw, 75vh); height: auto; image-rendering: pixelated; display: block; }
   .stewH { font-family: var(--display); font-size: 14px; margin: 10px 0 6px; }
   @media (max-width: 640px) { .stewAct { grid-template-columns: 1fr; gap: 4px; } }
   a.gitlink:hover { color: var(--accent-bright); }
@@ -1834,6 +1842,9 @@ const TABS = [ {
   id: 'hub',
   label: 'Waiting Room'
 }, {
+  id: 'photos',
+  label: 'Screenshots'
+}, {
   id: 'dates',
   label: 'Dates'
 }, {
@@ -1859,7 +1870,7 @@ function renderAll() {
   app.querySelectorAll('[id]').forEach(el => {
     if (el.scrollTop > 0) scrollStates[el.id] = el.scrollTop;
   });
-  app.innerHTML = `\n    <div class="tabbar">\n      ${TABS.map(t => `<button class="tabbtn ${activeTab === t.id ? 'active' : ''}" data-tab-btn="${t.id}">${t.label}</button>`).join('')}\n    </div>\n    <div class="tabpanel" data-tab-panel="account" style="display:${activeTab === 'account' ? 'block' : 'none'}">${blockCurrency()}</div>\n    <div class="tabpanel" data-tab-panel="fighters" style="display:${activeTab === 'fighters' ? 'block' : 'none'}">${blockCharacters()}</div>\n    <div class="tabpanel" data-tab-panel="research" style="display:${activeTab === 'research' ? 'block' : 'none'}">${blockBlueprints()}</div>\n    <div class="tabpanel" data-tab-panel="decals" style="display:${activeTab === 'decals' ? 'block' : 'none'}">${blockSkillDecals()}</div>\n    <div class="tabpanel" data-tab-panel="stews" style="display:${activeTab === 'stews' ? 'block' : 'none'}">${blockStews()}</div>\n    <div class="tabpanel" data-tab-panel="bags" style="display:${activeTab === 'bags' ? 'block' : 'none'}">${blockBags()}</div>\n    <div class="tabpanel" data-tab-panel="boxes" style="display:${activeTab === 'boxes' ? 'block' : 'none'}">${blockBoxes()}</div>\n    <div class="tabpanel" data-tab-panel="hub" style="display:${activeTab === 'hub' ? 'block' : 'none'}">${blockHub()}</div>\n    <div class="tabpanel" data-tab-panel="dates" style="display:${activeTab === 'dates' ? 'block' : 'none'}">${blockDates()}</div>\n    <div class="tabpanel" data-tab-panel="storage" style="display:${activeTab === 'storage' ? 'block' : 'none'}">${blockStorageBox()}</div>\n    <div class="tabpanel" data-tab-panel="rewards" style="display:${activeTab === 'rewards' ? 'block' : 'none'}">${blockRewardBox()}</div>\n    <div class="tabpanel" data-tab-panel="quests" style="display:${activeTab === 'quests' ? 'block' : 'none'}">${blockQuests()}</div>\n    <div class="tabpanel" data-tab-panel="vip" style="display:${activeTab === 'vip' ? 'block' : 'none'}">${blockVip()}</div>\n  `;
+  app.innerHTML = `\n    <div class="tabbar">\n      ${TABS.map(t => `<button class="tabbtn ${activeTab === t.id ? 'active' : ''}" data-tab-btn="${t.id}">${t.label}</button>`).join('')}\n    </div>\n    <div class="tabpanel" data-tab-panel="account" style="display:${activeTab === 'account' ? 'block' : 'none'}">${blockCurrency()}</div>\n    <div class="tabpanel" data-tab-panel="fighters" style="display:${activeTab === 'fighters' ? 'block' : 'none'}">${blockCharacters()}</div>\n    <div class="tabpanel" data-tab-panel="research" style="display:${activeTab === 'research' ? 'block' : 'none'}">${blockBlueprints()}</div>\n    <div class="tabpanel" data-tab-panel="decals" style="display:${activeTab === 'decals' ? 'block' : 'none'}">${blockSkillDecals()}</div>\n    <div class="tabpanel" data-tab-panel="stews" style="display:${activeTab === 'stews' ? 'block' : 'none'}">${blockStews()}</div>\n    <div class="tabpanel" data-tab-panel="bags" style="display:${activeTab === 'bags' ? 'block' : 'none'}">${blockBags()}</div>\n    <div class="tabpanel" data-tab-panel="boxes" style="display:${activeTab === 'boxes' ? 'block' : 'none'}">${blockBoxes()}</div>\n    <div class="tabpanel" data-tab-panel="hub" style="display:${activeTab === 'hub' ? 'block' : 'none'}">${blockHub()}</div>\n    <div class="tabpanel" data-tab-panel="photos" style="display:${activeTab === 'photos' ? 'block' : 'none'}">${blockPhotos()}</div>\n    <div class="tabpanel" data-tab-panel="dates" style="display:${activeTab === 'dates' ? 'block' : 'none'}">${blockDates()}</div>\n    <div class="tabpanel" data-tab-panel="storage" style="display:${activeTab === 'storage' ? 'block' : 'none'}">${blockStorageBox()}</div>\n    <div class="tabpanel" data-tab-panel="rewards" style="display:${activeTab === 'rewards' ? 'block' : 'none'}">${blockRewardBox()}</div>\n    <div class="tabpanel" data-tab-panel="quests" style="display:${activeTab === 'quests' ? 'block' : 'none'}">${blockQuests()}</div>\n    <div class="tabpanel" data-tab-panel="vip" style="display:${activeTab === 'vip' ? 'block' : 'none'}">${blockVip()}</div>\n  `;
   wireCurrency();
   wireCharacters();
   wireBlueprints();
@@ -1868,6 +1879,7 @@ function renderAll() {
   wireBags();
   wireBoxes();
   wireHub();
+  wirePhotos();
   wireDates();
   wireStorageBox();
   wireRewardBox();
@@ -1886,6 +1898,7 @@ function renderAll() {
       if (activeTab === 'bags') renderBags();
       if (activeTab === 'boxes') renderBoxes();
       if (activeTab === 'hub') renderHub();
+      if (activeTab === 'photos') renderPhotos();
       window.scrollTo(0, 0);
     });
   });
@@ -5128,6 +5141,85 @@ function renderHub() {
 }
 
 function wireHub() { if (activeTab === 'hub') renderHub(); }
+
+// ---------------------------------------------------------------------------
+// SCREENSHOTS (soul.screenshot) - Kiwako's commemorative photos, one per large
+// stamp (boss 1-4), stored inside the save as base64 PNGs (256x256). The game
+// refers to them, so this tab is view/export only and never changes the save.
+// ---------------------------------------------------------------------------
+
+const PHOTO_ORDINAL = [ '', 'first', 'second', 'third', 'fourth' ];
+
+function photoList() {
+  const s = SAVE && SAVE.soul;
+  return s && Array.isArray(s.screenshot) ? s.screenshot : [];
+}
+function photoBytes(b64) {
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+function photoTitle(p) {
+  const o = PHOTO_ORDINAL[p.boss];
+  return o ? `Your ${o} large stamp` : `Photo ${p.boss}`;
+}
+function photoFileName(p) {
+  const d = dtIsDateValue(p.created) ? new Date(p.created * 1000) : null;
+  const ds = d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` : 'undated';
+  return `LET_IT_DIE_photo_${p.boss}_${ds}.png`;
+}
+function photoExport(p) {
+  triggerDownload(photoBytes(p.photo), photoFileName(p), 'image/png');
+}
+
+function blockPhotos() {
+  return `<section class="block">
+    <div class="block-head"><div><div class="eyebrow">Kiwako's photos</div><h2>Screenshots</h2></div></div>
+    <div class="block-body">
+      <div class="capNote" style="margin-top:0;">Kiwako takes a commemorative photo each time you earn a large stamp, and the game keeps it inside your save. You can view and export them here. They can't be deleted or changed, because the game refers to them; nothing on this tab changes your save.</div>
+      <div id="photo-body"></div>
+    </div>
+  </section>`;
+}
+
+function renderPhotos() {
+  const host = document.getElementById('photo-body');
+  if (!host || !SAVE) return;
+  const list = photoList().filter(p => p && typeof p.photo === 'string' && p.photo.length);
+  if (!list.length) { host.innerHTML = '<div style="padding:10px; color:var(--text-faint); font-size:12px;">No photos in this save yet.</div>'; return; }
+  const total = list.reduce((a, p) => a + Math.floor(p.photo.length * 3 / 4), 0);
+  let h = `<div class="toolbar"><span style="font-size:12px;">${list.length} photo${list.length === 1 ? '' : 's'}, ${(total / 1024).toFixed(0)} KB</span><span style="flex:1;"></span><button class="action" id="photo-export-all">Export all as PNG</button></div>`;
+  h += '<div class="photoGrid">';
+  h += list.map((p, i) => `<figure class="photoCard">
+      <img src="data:image/png;base64,${p.photo}" alt="${escapeHtml(photoTitle(p))}" data-photo-view="${i}">
+      <figcaption><b>${escapeHtml(photoTitle(p))}</b><div class="dtRel">${dtIsDateValue(p.created) ? escapeHtml(dtFmt(p.created)) : 'no date'} · ${(p.photo.length * 3 / 4 / 1024).toFixed(0)} KB</div>
+      <div style="display:flex; gap:6px; margin-top:6px;"><button class="subtle" data-photo-view="${i}">View</button><button class="subtle" data-photo-export="${i}">Export PNG</button></div></figcaption>
+    </figure>`).join('');
+  h += '</div><div class="photoModal" id="photo-modal" hidden><div class="photoModalInner"><img id="photo-modal-img" alt=""><div id="photo-modal-cap" style="margin-top:8px; font-size:12px;"></div><button class="subtle" id="photo-modal-close" style="margin-top:8px;">Close</button></div></div>';
+  host.innerHTML = h;
+  host.querySelectorAll('[data-photo-export]').forEach(b => b.addEventListener('click', () => {
+    const p = list[Number(b.dataset.photoExport)];
+    photoExport(p);
+    toast(`Exported ${photoFileName(p)}`);
+  }));
+  document.getElementById('photo-export-all').addEventListener('click', () => {
+    list.forEach((p, i) => setTimeout(() => photoExport(p), i * 400));
+    toast(`Exporting ${list.length} photo${list.length === 1 ? '' : 's'}...`);
+  });
+  const modal = document.getElementById('photo-modal');
+  const close = () => { modal.hidden = true; };
+  host.querySelectorAll('[data-photo-view]').forEach(el => el.addEventListener('click', () => {
+    const p = list[Number(el.dataset.photoView)];
+    document.getElementById('photo-modal-img').src = `data:image/png;base64,${p.photo}`;
+    document.getElementById('photo-modal-cap').textContent = `${photoTitle(p)}${dtIsDateValue(p.created) ? ' · ' + dtFmt(p.created) : ''}`;
+    modal.hidden = false;
+  }));
+  document.getElementById('photo-modal-close').addEventListener('click', close);
+  modal.addEventListener('click', e => { if (e.target === modal) close(); });
+}
+
+function wirePhotos() { if (activeTab === 'photos') renderPhotos(); }
 
 function triggerDownload(data, filename, mime) {
   const blob = new Blob([ data ], {
