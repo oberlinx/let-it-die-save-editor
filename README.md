@@ -38,6 +38,7 @@ PSN saves have to be decrypted first.
 | Rewards | Reward Box items |
 | **Quests** | Current quests (progress, complete, drop), take a new quest, and quest history (times taken / cleared) |
 | VIP | VIP Express Pass status |
+| **Compare** | Load a second save, see what differs, and copy ticked parts into the save you're editing (account values, fighters with their gear, research, decal stock, Waiting Room decorations, Reward Box and Storage items). You can also choose which account the downloaded save belongs to, to move progress onto another account |
 
 ### Save check
 

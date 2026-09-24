@@ -948,6 +948,11 @@ function buildRawSavRootFromSave(SAVE, rawRoot, mainUid) {
   for (const b of arr(rawRoot.beast && rawRoot.beast.bsts)) oldBstsByEid[b.eid] = b;
   const oldItemsByEid = {};
   for (const it of arr(rawRoot.item && rawRoot.item.items)) oldItemsByEid[it.eid] = it;
+  // items copied from a second save on the Compare tab keep all their fields
+  if (typeof CMP_EXTRA !== 'undefined' && CMP_EXTRA.root === rawRoot) {
+    Object.assign(oldPtsByEid, CMP_EXTRA.pts); Object.assign(oldMsrsByEid, CMP_EXTRA.msrs);
+    Object.assign(oldBstsByEid, CMP_EXTRA.bsts); Object.assign(oldItemsByEid, CMP_EXTRA.items);
+  }
   const oldDeathbagByCid = rawRoot.soul && rawRoot.soul.deathbag && rawRoot.soul.deathbag[mainUid] || {};
   for (const c of SAVE.soul.chrs) {
     const slots = [];
@@ -1045,9 +1050,13 @@ function buildRawSavRootFromSave(SAVE, rawRoot, mainUid) {
     // the old length still get room because slots.length is always included.
     const origCap = ORIG_BAG_CAP[c.cid];
     const capGrew = origCap == null || deathBagCapacity(c) > origCap;
-    const targetSlotCount = oldDeathbagByCid[c.cid] ? Math.max(oldDeathbagByCid[c.cid].length, slots.length, capGrew ? bagArrayLen : 0) : Math.max(slots.length, deathBagCapacity(c));
+    // a deleted fighter's bag is {} in the game's saves; a fighter copied from a
+    // second save (Compare tab) keeps that save's bag layout
+    const cmpBag = typeof CMP_EXTRA !== 'undefined' && CMP_EXTRA.root === rawRoot && CMP_EXTRA.bags && CMP_EXTRA.bags[c.cid];
+    const oldBag = arr(cmpBag || oldDeathbagByCid[c.cid]);
+    const targetSlotCount = oldBag.length ? Math.max(oldBag.length, slots.length, capGrew ? bagArrayLen : 0) : Math.max(slots.length, deathBagCapacity(c));
     const origSlotByEid = {};
-    arr(oldDeathbagByCid[c.cid]).forEach((s, i) => {
+    oldBag.forEach((s, i) => {
       if (s && s.eid) origSlotByEid[s.eid] = s.slot != null ? s.slot : i;
     });
     const laid = new Array(Math.max(targetSlotCount, slots.length)).fill(null);
@@ -1897,6 +1906,9 @@ const TABS = [ {
 }, {
   id: 'vip',
   label: 'VIP'
+}, {
+  id: 'compare',
+  label: 'Compare'
 } ];
 
 let activeTab = 'account';
@@ -1908,7 +1920,7 @@ function renderAll() {
   app.querySelectorAll('[id]').forEach(el => {
     if (el.scrollTop > 0) scrollStates[el.id] = el.scrollTop;
   });
-  app.innerHTML = `\n    ${blockHealth()}\n    <div class="tabbar">\n      ${TABS.map(t => `<button class="tabbtn ${activeTab === t.id ? 'active' : ''}" data-tab-btn="${t.id}">${t.label}</button>`).join('')}\n    </div>\n    <div class="tabpanel" data-tab-panel="account" style="display:${activeTab === 'account' ? 'block' : 'none'}">${blockCurrency()}</div>\n    <div class="tabpanel" data-tab-panel="fighters" style="display:${activeTab === 'fighters' ? 'block' : 'none'}">${blockCharacters()}</div>\n    <div class="tabpanel" data-tab-panel="research" style="display:${activeTab === 'research' ? 'block' : 'none'}">${blockBlueprints()}</div>\n    <div class="tabpanel" data-tab-panel="decals" style="display:${activeTab === 'decals' ? 'block' : 'none'}">${blockSkillDecals()}</div>\n    <div class="tabpanel" data-tab-panel="stews" style="display:${activeTab === 'stews' ? 'block' : 'none'}">${blockStews()}</div>\n    <div class="tabpanel" data-tab-panel="bags" style="display:${activeTab === 'bags' ? 'block' : 'none'}">${blockBags()}</div>\n    <div class="tabpanel" data-tab-panel="boxes" style="display:${activeTab === 'boxes' ? 'block' : 'none'}">${blockBoxes()}</div>\n    <div class="tabpanel" data-tab-panel="hub" style="display:${activeTab === 'hub' ? 'block' : 'none'}">${blockHub()}</div>\n    <div class="tabpanel" data-tab-panel="photos" style="display:${activeTab === 'photos' ? 'block' : 'none'}">${blockPhotos()}</div>\n    <div class="tabpanel" data-tab-panel="graves" style="display:${activeTab === 'graves' ? 'block' : 'none'}">${blockGraves()}</div>\n    <div class="tabpanel" data-tab-panel="dates" style="display:${activeTab === 'dates' ? 'block' : 'none'}">${blockDates()}</div>\n    <div class="tabpanel" data-tab-panel="storage" style="display:${activeTab === 'storage' ? 'block' : 'none'}">${blockStorageBox()}</div>\n    <div class="tabpanel" data-tab-panel="rewards" style="display:${activeTab === 'rewards' ? 'block' : 'none'}">${blockRewardBox()}</div>\n    <div class="tabpanel" data-tab-panel="quests" style="display:${activeTab === 'quests' ? 'block' : 'none'}">${blockQuests()}</div>\n    <div class="tabpanel" data-tab-panel="vip" style="display:${activeTab === 'vip' ? 'block' : 'none'}">${blockVip()}</div>\n  `;
+  app.innerHTML = `\n    ${blockHealth()}\n    <div class="tabbar">\n      ${TABS.map(t => `<button class="tabbtn ${activeTab === t.id ? 'active' : ''}" data-tab-btn="${t.id}">${t.label}</button>`).join('')}\n    </div>\n    <div class="tabpanel" data-tab-panel="account" style="display:${activeTab === 'account' ? 'block' : 'none'}">${blockCurrency()}</div>\n    <div class="tabpanel" data-tab-panel="fighters" style="display:${activeTab === 'fighters' ? 'block' : 'none'}">${blockCharacters()}</div>\n    <div class="tabpanel" data-tab-panel="research" style="display:${activeTab === 'research' ? 'block' : 'none'}">${blockBlueprints()}</div>\n    <div class="tabpanel" data-tab-panel="decals" style="display:${activeTab === 'decals' ? 'block' : 'none'}">${blockSkillDecals()}</div>\n    <div class="tabpanel" data-tab-panel="stews" style="display:${activeTab === 'stews' ? 'block' : 'none'}">${blockStews()}</div>\n    <div class="tabpanel" data-tab-panel="bags" style="display:${activeTab === 'bags' ? 'block' : 'none'}">${blockBags()}</div>\n    <div class="tabpanel" data-tab-panel="boxes" style="display:${activeTab === 'boxes' ? 'block' : 'none'}">${blockBoxes()}</div>\n    <div class="tabpanel" data-tab-panel="hub" style="display:${activeTab === 'hub' ? 'block' : 'none'}">${blockHub()}</div>\n    <div class="tabpanel" data-tab-panel="photos" style="display:${activeTab === 'photos' ? 'block' : 'none'}">${blockPhotos()}</div>\n    <div class="tabpanel" data-tab-panel="graves" style="display:${activeTab === 'graves' ? 'block' : 'none'}">${blockGraves()}</div>\n    <div class="tabpanel" data-tab-panel="dates" style="display:${activeTab === 'dates' ? 'block' : 'none'}">${blockDates()}</div>\n    <div class="tabpanel" data-tab-panel="storage" style="display:${activeTab === 'storage' ? 'block' : 'none'}">${blockStorageBox()}</div>\n    <div class="tabpanel" data-tab-panel="rewards" style="display:${activeTab === 'rewards' ? 'block' : 'none'}">${blockRewardBox()}</div>\n    <div class="tabpanel" data-tab-panel="quests" style="display:${activeTab === 'quests' ? 'block' : 'none'}">${blockQuests()}</div>\n    <div class="tabpanel" data-tab-panel="vip" style="display:${activeTab === 'vip' ? 'block' : 'none'}">${blockVip()}</div>\n    <div class="tabpanel" data-tab-panel="compare" style="display:${activeTab === 'compare' ? 'block' : 'none'}">${blockCompare()}</div>\n  `;
   wireHealth();
   wireCurrency();
   wireCharacters();
@@ -1925,6 +1937,7 @@ function renderAll() {
   wireRewardBox();
   wireQuests();
   wireVip();
+  wireCompare();
   document.querySelectorAll('[data-tab-btn]').forEach(btn => {
     btn.addEventListener('click', () => {
       activeTab = btn.dataset.tabBtn;
@@ -1940,6 +1953,7 @@ function renderAll() {
       if (activeTab === 'hub') renderHub();
       if (activeTab === 'photos') renderPhotos();
       if (activeTab === 'graves') renderGraves();
+      if (activeTab === 'compare') renderCompare();
       window.scrollTo(0, 0);
     });
   });
@@ -6164,6 +6178,391 @@ function renderGraves() {
 
 function wireGraves() { if (activeTab === 'graves') renderGraves(); }
 
+// ---------------------------------------------------------------------------
+// COMPARE two saves. Load a second save (B) next to the one being edited (A),
+// see what differs, and copy selected parts of B into A: account values,
+// fighters (with their gear, bag and decals), research, decal stock, Waiting
+// Room decorations, Reward Box items and Storage items. You also choose which
+// account the downloaded save belongs to: A's (default) or B's, in which case
+// every uid-keyed part of the save is re-keyed to B's uid and B's account
+// identity (name, Steam ID, ...) is used.
+// B is only read; nothing in B is ever written.
+// ---------------------------------------------------------------------------
+
+let CMP = { rootB: null, adB: null, uidB: '', file: '', account: 'A', forRoot: null, msg: '' };
+// raw instances of items copied from B, used by the build so copied items keep
+// every field B had (keyed by eid)
+let CMP_EXTRA = { root: null, pts: {}, msrs: {}, bsts: {}, items: {}, bags: {} };
+const CMP_ACCOUNT_FIELDS = [ [ 'free_money', 'Kill Coins' ], [ 'spirit', 'SPLithium' ], [ 'safe_level', 'Kill Coin bank level' ], [ 'spirit_tank_level', 'SPLithium tank level' ], [ 'bloodnium_point', 'Bloodnium' ], [ 'recycle_point', 'Recycle Points' ], [ 'rank', 'Rank' ], [ 'rank_point', 'Rank points' ], [ 'tdm_point', 'TDM points' ], [ 'tdm_rank', 'TDM rank' ] ];
+const CMP_IDENTITY_FIELDS = [ 'nm', 'psnacid', 'sid', 'skey', 'uuid', 'olid' ];
+
+function cmpSync() {
+  if (CMP.forRoot !== RAW_SAV_ROOT) CMP = { rootB: null, adB: null, uidB: '', file: '', account: 'A', forRoot: RAW_SAV_ROOT, msg: '' };
+  if (CMP_EXTRA.root !== RAW_SAV_ROOT) CMP_EXTRA = { root: RAW_SAV_ROOT, pts: {}, msrs: {}, bsts: {}, items: {}, bags: {} };
+}
+
+async function cmpLoadFile(file) {
+  const bytes = new Uint8Array(await readFileAsArrayBuffer(file));
+  const root = isBrgSav(bytes) ? await parseBrgSav(bytes) : parseSaveJsonText(new TextDecoder('utf-8').decode(bytes));
+  if (!looksLikeFullDump(root)) throw new Error('not a LET IT DIE save');
+  // the adapter records the loaded save's empty shapes; keep A's
+  const keepShapes = RAW_EMPTY_SHAPES;
+  let ad;
+  try { ad = adaptFullDumpToLegacyShape(root); } finally { RAW_EMPTY_SHAPES = keepShapes; }
+  CMP.rootB = root;
+  CMP.adB = ad;
+  CMP.uidB = String(ad.__rawSavMainUid || '');
+  CMP.file = file.name;
+  CMP.account = 'A';
+  CMP.msg = '';
+}
+
+const cmpClone = o => JSON.parse(JSON.stringify(o));
+const cmpUidA = () => String(RAW_SAV_MAIN_UID);
+
+// ---- account re-key (used at download when B's account is chosen) ---------
+function cmpRekeyUid(node, from, to, depth) {
+  if (!node || typeof node !== 'object' || depth > 12) return;
+  if (Array.isArray(node)) { for (const v of node) cmpRekeyUid(v, from, to, depth + 1); return; }
+  for (const k of Object.keys(node)) {
+    let v = node[k];
+    if (/uid$/i.test(k) && (v === Number(from) || v === from)) node[k] = typeof v === 'number' ? Number(to) : String(to);
+    else if (v && typeof v === 'object') cmpRekeyUid(v, from, to, depth + 1);
+    if (k === from) { node[to] = node[k]; delete node[k]; }
+  }
+}
+function applyAccountChoice(root) {
+  if (!CMP.rootB || CMP.forRoot !== RAW_SAV_ROOT || CMP.account !== 'B') return root;
+  const from = cmpUidA(), to = CMP.uidB;
+  if (!to || from === to) return root;
+  cmpRekeyUid(root, from, to, 0);
+  const ub = CMP.rootB.user || {};
+  root.user = root.user || {};
+  for (const f of CMP_IDENTITY_FIELDS) if (f in ub) root.user[f] = ub[f];
+  return root;
+}
+
+// ---- helpers ---------------------------------------------------------------
+function cmpEidsInA(skipCid) {
+  const s = new Set;
+  for (const c of arr(SAVE.soul.chrs)) {
+    if (skipCid && c.cid === skipCid) continue;
+    for (const p of arr(c.pspts)) s.add(p.eptid);
+    for (const m of arr(c.psmsrs)) s.add(m.emsrid);
+    for (const b of arr(c.psbsts)) s.add(b.ebstid);
+    for (const it of arr(c.psitems)) s.add(it.eitemid);
+  }
+  const cl = SAVE.cl || {};
+  for (const p of arr(cl.pts)) s.add(p.eptid);
+  for (const m of arr(cl.msrs)) s.add(m.emsrid);
+  for (const b of arr(cl.bsts)) s.add(b.ebstid);
+  for (const it of arr(cl.items)) s.add(it.eitemid);
+  return s;
+}
+function cmpRawInstB(kind, eid) {
+  const r = CMP.rootB;
+  const list = kind === 'pts' ? arr(r.part && r.part.pts && r.part.pts[CMP.uidB]) : kind === 'msrs' ? arr(r.mushroom && r.mushroom.msrs) : kind === 'bsts' ? arr(r.beast && r.beast.bsts) : arr(r.item && r.item.items);
+  return list.find(x => x.eid === eid) || null;
+}
+// remember B's raw instance (uid switched to A's) under the eid it gets in A
+function cmpKeepInst(kind, oldEid, newEid) {
+  const inst = cmpRawInstB(kind, oldEid);
+  if (!inst) return;
+  const c = cmpClone(inst);
+  c.eid = newEid;
+  if ('uid' in c && c.uid === Number(CMP.uidB)) c.uid = Number(cmpUidA());
+  CMP_EXTRA[kind][newEid] = c;
+}
+function cmpTopFinished(list, ptid) {
+  let t = 0;
+  for (const r of list) if (r.ptid === ptid && r.research_type === 'FINISHED' && r.lvl > t) t = r.lvl;
+  return t;
+}
+function cmpChrSummary(c) {
+  if (!c) return '—';
+  const items = arr(c.pspts).length + arr(c.psmsrs).length + arr(c.psbsts).length + arr(c.psitems).length;
+  return `${CLASS_NAMES[c.type] || c.type} g${c.grade}${c.limit_break ? ' LB' + c.limit_break : ''} · Lv${c.lvl != null ? c.lvl : '?'} · ${items} items · ${arr(c.eqskls).length} decals${c.state && c.state !== 'FREE' ? ' · ' + c.state : ''}`;
+}
+function cmpChrKey(c) {
+  const strip = x => { const o = cmpClone(x); delete o.state; return o; };
+  return JSON.stringify(strip(c));
+}
+function cmpPresentLabel(p) {
+  if (!p) return '?';
+  if (p.type === 'MONEY') return `${Number(p.num || 0).toLocaleString()} Kill Coins`;
+  if (p.type === 'SPIRIT') return `${Number(p.num || 0).toLocaleString()} SPLithium`;
+  const v = p.val0;
+  const nm = (ITEM_INDEX[v] && itemDisplayName(v)) || (PT_INDEX[v] && PT_INDEX[v].name) || (SKL_INDEX[v] && 'Decal: ' + SKL_INDEX[v].name) || (MSR_INDEX[v] && MSR_INDEX[v].name) || (BST_INDEX[v] && BST_INDEX[v].name) || v || p.kind || p.type;
+  return `${nm}${p.num > 1 ? ' ×' + p.num : ''}`;
+}
+function cmpStorageLabel(cl, s) {
+  if (s.eptid && s.eptid !== '-1') { const i = arr(cl.pts).find(p => p.eptid === s.eptid); const r = i && PT_INDEX[i.ptid]; return r ? `${r.name} +${displayFromRaw(r, i.lvl)}` : (i ? i.ptid : 'part'); }
+  if (s.eitemid && s.eitemid !== '-1') { const i = arr(cl.items).find(p => p.eitemid === s.eitemid); return i ? itemDisplayName(i.itemId) : 'item'; }
+  if (s.emsrid && s.emsrid !== '-1') { const i = arr(cl.msrs).find(p => p.emsrid === s.emsrid); return i ? msrDisplayName(i.msrid, i.cooked) : 'mushroom'; }
+  if (s.ebstid && s.ebstid !== '-1') { const i = arr(cl.bsts).find(p => p.ebstid === s.ebstid); return i ? bstDisplayName(i.bstid, i.cooked) : 'beast'; }
+  return null;
+}
+const cmpSlotEid = s => [ s.eptid, s.eitemid, s.emsrid, s.ebstid ].find(e => e && e !== '-1') || '';
+
+// ---- the differences --------------------------------------------------------
+function cmpDiff() {
+  const A = SAVE, B = CMP.adB, rB = CMP.rootB;
+  const d = { account: [], fighters: [], research: [], decals: [], hub: [], rewards: [], storage: [], other: [] };
+  for (const [f, label] of CMP_ACCOUNT_FIELDS) {
+    const a = A.soul[f], b = B.soul[f];
+    if (b !== undefined && JSON.stringify(a) !== JSON.stringify(b)) d.account.push({ key: f, label, a, b });
+  }
+  const aByCid = {}, bByCid = {};
+  for (const c of arr(A.soul.chrs)) aByCid[c.cid] = c;
+  for (const c of arr(B.soul.chrs)) bByCid[c.cid] = c;
+  for (const cid of new Set(Object.keys(aByCid).concat(Object.keys(bByCid)))) {
+    const a = aByCid[cid], b = bByCid[cid];
+    if (a && b && cmpChrKey(a) === cmpChrKey(b)) continue;
+    d.fighters.push({ key: cid, a, b });
+  }
+  const resA = arr(A.user_research), resB = arr(B.user_research);
+  for (const ptid of new Set(resA.concat(resB).map(r => r.ptid))) {
+    const ta = cmpTopFinished(resA, ptid), tb = cmpTopFinished(resB, ptid);
+    if (ta !== tb) d.research.push({ key: ptid, a: ta, b: tb });
+  }
+  const skA = {}, skB = {};
+  for (const s of arr(A.soul.psskls)) skA[s.id] = s.cnt || 0;
+  for (const s of arr(B.soul.psskls)) skB[s.id] = s.cnt || 0;
+  for (const id of new Set(Object.keys(skA).concat(Object.keys(skB)))) if ((skA[id] || 0) !== (skB[id] || 0)) d.decals.push({ key: id, a: skA[id] || 0, b: skB[id] || 0 });
+  const hA = {}, hB = {};
+  for (const e of arr(A.soul.hubcustom)) hA[e.cstmid] = e;
+  for (const e of arr(B.soul.hubcustom)) hB[e.cstmid] = e;
+  for (const id of Object.keys(hB)) if (hubOwned(hB[id]) && !hubOwned(hA[id])) d.hub.push({ key: id });
+  const pidsA = new Set(arr(A.presents).map(p => p.pid));
+  for (const p of arr(B.presents)) if (!pidsA.has(p.pid)) d.rewards.push({ key: p.pid, p });
+  const eidsA = new Set(arr(A.cl && A.cl.slots).map(cmpSlotEid).filter(Boolean));
+  for (const s of arr(B.cl && B.cl.slots)) { const e = cmpSlotEid(s); if (e && !eidsA.has(e)) d.storage.push({ key: e, s }); }
+  // everything else: just say which parts differ
+  const rA = RAW_SAV_ROOT;
+  const handled = new Set([ 'soul', 'user', 'part', 'mushroom', 'beast', 'item', 'bodyuser', 'playlog' ]);
+  for (const k of new Set(Object.keys(rA).concat(Object.keys(rB)))) {
+    if (handled.has(k)) continue;
+    if (JSON.stringify(rA[k]) !== JSON.stringify(rB[k])) d.other.push(k);
+  }
+  const soulHandled = new Set([ 'chr', 'deathbag', 'skl', 'partresearch', 'hubcustom', 'present', 'cl', 'modified', ...CMP_ACCOUNT_FIELDS.map(x => x[0]) ]);
+  for (const k of new Set(Object.keys(rA.soul || {}).concat(Object.keys(rB.soul || {})))) {
+    if (soulHandled.has(k)) continue;
+    if (JSON.stringify((rA.soul || {})[k]) !== JSON.stringify((rB.soul || {})[k])) d.other.push('soul.' + k);
+  }
+  return d;
+}
+
+// ---- copying B → A ----------------------------------------------------------
+function cmpCopyAccount(key) {
+  SAVE.soul[key] = cmpClone(CMP.adB.soul[key]);
+}
+function cmpCopyResearch(ptid) {
+  // copy the part and the earlier parts of its upgrade chain, as B has them
+  const chain = chainOf(ptid);
+  const upto = chain.slice(0, chain.indexOf(ptid) + 1);
+  const resB = arr(CMP.adB.user_research);
+  const research = SAVE.user_research;
+  for (const id of upto) {
+    if (!resB.some(r => r.ptid === id) && id !== ptid) continue;
+    for (let i = research.length - 1; i >= 0; i--) if (research[i].ptid === id) research.splice(i, 1);
+    for (const r of resB) if (r.ptid === id) research.push(cmpClone(r));
+  }
+}
+function cmpCopyDecal(id) {
+  const b = arr(CMP.adB.soul.psskls).find(s => s.id === id);
+  SAVE.soul.psskls = arr(SAVE.soul.psskls);
+  let a = SAVE.soul.psskls.find(s => s.id === id);
+  if (!a) SAVE.soul.psskls.push(a = { id, lvl: 1, cnt: 0, is_checked: 1 });
+  a.cnt = b ? b.cnt : 0;
+}
+function cmpCopyHub(id) {
+  const list = SAVE.soul.hubcustom;
+  let e = list.find(x => x.cstmid === id);
+  if (!e) list.push(e = { cstmid: id, flg: 0 });
+  e.flg = 2;
+}
+function cmpCopyReward(pid) {
+  const p = arr(CMP.adB.presents).find(x => x.pid === pid);
+  if (p && !SAVE.presents.some(x => x.pid === pid)) SAVE.presents.push(cmpClone(p));
+}
+function cmpCopyStorage(eid) {
+  const clB = CMP.adB.cl, clA = SAVE.cl;
+  const sB = arr(clB.slots).find(s => cmpSlotEid(s) === eid);
+  if (!sB) return 'not found';
+  const idx = storageFreeSlotIndex();
+  if (idx < 0) return 'the Storage Box is full';
+  const taken = cmpEidsInA();
+  const newEid = taken.has(eid) ? presentUuid() : eid;
+  const slot = clA.slots[idx];
+  for (const [k, list, kind, idKey] of [ [ 'eptid', 'pts', 'pts', 'eptid' ], [ 'eitemid', 'items', 'items', 'eitemid' ], [ 'emsrid', 'msrs', 'msrs', 'emsrid' ], [ 'ebstid', 'bsts', 'bsts', 'ebstid' ] ]) {
+    if (sB[k] && sB[k] !== '-1') {
+      const inst = arr(clB[list]).find(x => x[idKey] === eid);
+      if (inst) { clA[list] = arr(clA[list]); const c = cmpClone(inst); c[idKey] = newEid; clA[list].push(c); }
+      slot[k] = newEid;
+      cmpKeepInst(kind, eid, newEid);
+    } else slot[k] = '-1';
+  }
+  return null;
+}
+function cmpFighterBlock(b) {
+  if (!b) return 'not in the other save';
+  if (b.state === 'ENEMY') return 'dead in the other save (recover it there first)';
+  if (b.state === 'DUMMY') return 'not a normal fighter';
+  if (b.abid) return 'kidnapped in the other save';
+  return null;
+}
+function cmpCopyFighter(cid) {
+  const b = arr(CMP.adB.soul.chrs).find(c => c.cid === cid);
+  const why = cmpFighterBlock(b);
+  if (why) return why;
+  const aIdx = SAVE.soul.chrs.findIndex(c => c.cid === cid);
+  const a = aIdx >= 0 ? SAVE.soul.chrs[aIdx] : null;
+  if (!a && !freeHangers().length) return 'no empty hanger in the freezer (raise the freezer level first)';
+  if (a && (a.state === 'GUARD' || a.state === 'USE')) return `your ${a.name} is ${a.state === 'GUARD' ? 'on defense' : 'the fighter you are playing'}; change that in game first`;
+  const c = cmpClone(b);
+  c.uid = Number(cmpUidA());
+  if (c.state !== 'FREE') c.state = 'FREE';
+  // item ids: keep B's unless they're already used elsewhere in this save
+  const taken = cmpEidsInA(cid);
+  const remap = {};
+  const fix = (kind, idKey, list) => {
+    for (const x of arr(list)) {
+      const old = x[idKey];
+      const neu = taken.has(old) ? presentUuid() : old;
+      remap[old] = neu;
+      x[idKey] = neu;
+      cmpKeepInst(kind, old, neu);
+    }
+  };
+  fix('pts', 'eptid', c.pspts);
+  fix('msrs', 'emsrid', c.psmsrs);
+  fix('bsts', 'ebstid', c.psbsts);
+  fix('items', 'eitemid', c.psitems);
+  for (const e of arr(c.eqpts)) if (remap[e.eptid]) e.eptid = remap[e.eptid];
+  // keep the other save's Death Bag layout (slot positions and length)
+  const bagB = arr(CMP.rootB.soul && CMP.rootB.soul.deathbag && CMP.rootB.soul.deathbag[CMP.uidB] && CMP.rootB.soul.deathbag[CMP.uidB][cid]);
+  if (bagB.length) CMP_EXTRA.bags[cid] = bagB.map(s => Object.assign({}, s, s && s.eid && remap[s.eid] ? { eid: remap[s.eid] } : {}));
+  if (c.armslots) for (const k of Object.keys(c.armslots)) if (remap[c.armslots[k]]) c.armslots[k] = remap[c.armslots[k]];
+  if (a) {
+    // replacing: the old fighter's items that the copy doesn't carry are removed
+    const keep = new Set(Object.values(remap));
+    if (FIGHTER_DELETES.root !== RAW_SAV_ROOT) FIGHTER_DELETES = { root: RAW_SAV_ROOT, cids: new Set, eids: new Set };
+    for (const p of arr(a.pspts)) if (!keep.has(p.eptid)) FIGHTER_DELETES.eids.add(p.eptid);
+    for (const m of arr(a.psmsrs)) if (!keep.has(m.emsrid)) FIGHTER_DELETES.eids.add(m.emsrid);
+    for (const x of arr(a.psbsts)) if (!keep.has(x.ebstid)) FIGHTER_DELETES.eids.add(x.ebstid);
+    for (const x of arr(a.psitems)) if (!keep.has(x.eitemid)) FIGHTER_DELETES.eids.add(x.eitemid);
+    SAVE.soul.chrs[aIdx] = c;
+  } else {
+    // a fighter deleted earlier in this session and copied back isn't "deleted" any more
+    if (FIGHTER_DELETES.root === RAW_SAV_ROOT) FIGHTER_DELETES.cids.delete(c.cid);
+    // same hanger as in the other save when it's free here, else the first empty one
+    const slotB = arr(CMP.adB.soul.chrslots).find(h => h && h.cid === cid);
+    const same = slotB && arr(SAVE.soul.chrslots).find(h => h && h.slot === slotB.slot && h.cid === '');
+    (same || freeHangers()[0]).cid = c.cid;
+    SAVE.soul.chrs.push(c);
+    SAVE.soul.chrs.sort((x, y) => String(x.cid).localeCompare(String(y.cid)));
+  }
+  return null;
+}
+
+// ---- UI ---------------------------------------------------------------------
+function blockCompare() {
+  return `<section class="block">
+    <div class="block-head"><div><div class="eyebrow">Two saves</div><h2>Compare &amp; Copy</h2></div></div>
+    <div class="block-body">
+      <div class="capNote" style="margin-top:0;">Load a second save to see what differs from the one you're editing, and copy the parts you tick into it. The second save is only read, never changed. Keep backups of both.</div>
+      <div id="cmp-body"></div>
+    </div>
+  </section>`;
+}
+
+function renderCompare() {
+  const host = document.getElementById('cmp-body');
+  if (!host || !SAVE) return;
+  cmpSync();
+  const uA = cmpUidA(), nmA = (RAW_SAV_ROOT.user || {}).nm || 'this save';
+  let h = `<div class="toolbar"><label class="subtle" style="cursor:pointer; padding:6px 10px; border:1px solid var(--panel-border);">Load second save (.sav or .json)<input type="file" id="cmp-file" accept=".sav,.json" style="display:none;"></label>
+    <span class="count">${CMP.rootB ? `Comparing with <b>${escapeHtml(CMP.file)}</b>` : 'No second save loaded'}</span></div>`;
+  if (CMP.msg) h += `<pre class="stewLog">${escapeHtml(CMP.msg)}</pre>`;
+  if (!CMP.rootB) { host.innerHTML = h; cmpWire(); return; }
+  const nmB = (CMP.rootB.user || {}).nm || 'other save';
+  const same = uA === CMP.uidB;
+  h += `<div class="subDetails" style="padding:10px; margin-bottom:12px;"><div class="field" style="max-width:520px;"><label>The downloaded save belongs to</label>
+    <select id="cmp-account" style="width:100%; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);" ${same ? 'disabled' : ''}>
+      <option value="A" ${CMP.account === 'A' ? 'selected' : ''}>${escapeHtml(nmA)} (uid ${escapeHtml(uA)}) — the save you're editing</option>
+      <option value="B" ${CMP.account === 'B' ? 'selected' : ''}>${escapeHtml(nmB)} (uid ${escapeHtml(CMP.uidB)}) — the second save's account</option>
+    </select></div>
+    <div class="capNote">${same ? 'Both saves are the same account.' : CMP.account === 'B' ? `On download, every part of the save tied to uid ${escapeHtml(uA)} is moved to uid ${escapeHtml(CMP.uidB)}, and the account name, Steam ID and login ids are taken from ${escapeHtml(nmB)}'s save. Use this to put this save's progress on that account.` : `The save keeps ${escapeHtml(nmA)}'s account. Pick the other account to move this save's progress onto it.`}</div></div>`;
+  const d = cmpDiff();
+  const sect = (id, title, rows, head, rowHtml, note) => {
+    h += `<details class="subDetails" style="margin-bottom:10px;" ${rows.length && rows.length <= 40 ? 'open' : ''}><summary>▸ ${title} (${rows.length} difference${rows.length === 1 ? '' : 's'})</summary><div class="subDetailsBody">`;
+    if (!rows.length) { h += '<div class="dtRel">Same in both saves.</div></div></details>'; return; }
+    if (note) h += `<div class="capNote" style="margin-top:0;">${note}</div>`;
+    h += `<div class="toolbar" style="margin:4px 0;"><button class="subtle" data-cmp-all="${id}">Tick all</button><button class="subtle" data-cmp-none="${id}">Untick all</button><span style="flex:1;"></span><button class="action" data-cmp-copy="${id}">Copy ticked from ${escapeHtml(nmB)}'s save</button></div>`;
+    h += `<table class="stewTable"><thead><tr><th></th>${head.map(x => `<th>${x}</th>`).join('')}</tr></thead><tbody>`;
+    h += rows.map(r => `<tr><td><input type="checkbox" data-cmp-sec="${id}" data-cmp-key="${escapeHtml(r.key)}" ${r.disabled ? `disabled title="${escapeHtml(r.disabled)}"` : ''}></td>${rowHtml(r).map(x => `<td>${x}</td>`).join('')}</tr>`).join('');
+    h += '</tbody></table></div></details>';
+  };
+  const fmt = v => typeof v === 'number' ? v.toLocaleString() : escapeHtml(v == null ? '—' : String(v));
+  sect('account', 'Account values', d.account, [ 'Value', 'This save', nmB ], r => [ escapeHtml(r.label), fmt(r.a), fmt(r.b) ]);
+  for (const r of d.fighters) {
+    if (!r.b) r.disabled = 'only in this save';
+    else r.disabled = cmpFighterBlock(r.b) || (r.a && (r.a.state === 'GUARD' || r.a.state === 'USE') ? `your copy is ${r.a.state === 'GUARD' ? 'on defense' : 'being played'}` : null) || (!r.a && !freeHangers().length ? 'no empty hanger' : null);
+  }
+  sect('fighters', 'Fighters', d.fighters, [ 'Fighter', 'This save', nmB ], r => [ escapeHtml((r.b || r.a).name || '?'), escapeHtml(cmpChrSummary(r.a)), escapeHtml(cmpChrSummary(r.b)) ],
+    `Copying a fighter brings its stats, gear, Death Bag and equipped decals. A fighter that exists in both saves is replaced; a new one goes into the first empty hanger (${freeHangers().length} empty now). Copied fighters arrive as free (not on defense, not selected). Equipped decals are copied as they are; your decal stock isn't changed.`);
+  const resName = id => (PT_INDEX[id] && PT_INDEX[id].name) || id;
+  const lvl = (id, t) => t ? '+' + displayFromRaw(PT_INDEX[id], t) : 'not researched';
+  sect('research', 'Research', d.research, [ 'Blueprint', 'This save', nmB ], r => [ escapeHtml(resName(r.key)), lvl(r.key, r.a), lvl(r.key, r.b) ], 'Copying a blueprint also copies the earlier parts of its upgrade chain as the other save has them. The "next level" markers and research stamps are rebuilt afterwards.');
+  sect('decals', 'Decal stock', d.decals, [ 'Decal', 'This save', nmB ], r => [ escapeHtml((SKL_INDEX[r.key] || {}).name || r.key), fmt(r.a), fmt(r.b) ]);
+  sect('hub', 'Waiting Room decorations', d.hub, [ 'Decoration (owned only in the other save)' ], r => { const m = arr(AP && AP.hubCustom).find(x => x.id === r.key); return [ escapeHtml((m && resolveName(m.name)) || r.key) ]; });
+  sect('rewards', 'Reward Box', d.rewards, [ 'Item only in the other save' ], r => [ escapeHtml(cmpPresentLabel(r.p)) ]);
+  sect('storage', 'Storage Box', d.storage, [ 'Item only in the other save' ], r => [ escapeHtml(cmpStorageLabel(CMP.adB.cl, r.s) || '?') ], `Copied items go into empty Storage slots (${arr(SAVE.cl.slots).filter(s => !cmpSlotEid(s)).length} empty now).`);
+  h += `<details class="subDetails"><summary>▸ Other parts that differ (view only, ${d.other.length})</summary><div class="subDetailsBody">${d.other.length ? d.other.map(k => `<span class="badge" style="margin:2px;">${escapeHtml(k)}</span>`).join('') : '<div class="dtRel">Nothing else differs.</div>'}</div></details>`;
+  host.innerHTML = h;
+  cmpWire();
+}
+
+function cmpWire() {
+  const fileInp = document.getElementById('cmp-file');
+  if (fileInp) fileInp.addEventListener('change', async () => {
+    const f = fileInp.files && fileInp.files[0];
+    if (!f) return;
+    try { await cmpLoadFile(f); toast(`Loaded ${f.name} for comparing`); } catch (e) { CMP.rootB = null; CMP.adB = null; CMP.msg = `Couldn't read ${f.name}: ${e.message}`; }
+    renderCompare();
+  });
+  const acc = document.getElementById('cmp-account');
+  if (acc) acc.addEventListener('change', () => { CMP.account = acc.value; renderCompare(); toast(acc.value === 'B' ? 'The download will use the other save\'s account' : 'The download keeps this save\'s account'); });
+  document.querySelectorAll('[data-cmp-all]').forEach(b => b.addEventListener('click', () => document.querySelectorAll(`[data-cmp-sec="${b.dataset.cmpAll}"]:not(:disabled)`).forEach(x => { x.checked = true; })));
+  document.querySelectorAll('[data-cmp-none]').forEach(b => b.addEventListener('click', () => document.querySelectorAll(`[data-cmp-sec="${b.dataset.cmpNone}"]`).forEach(x => { x.checked = false; })));
+  document.querySelectorAll('[data-cmp-copy]').forEach(b => b.addEventListener('click', () => {
+    const sec = b.dataset.cmpCopy;
+    const keys = [ ...document.querySelectorAll(`[data-cmp-sec="${sec}"]:checked`) ].map(x => x.dataset.cmpKey);
+    if (!keys.length) { toast('Tick something to copy first', true); return; }
+    const fails = [];
+    let n = 0;
+    for (const k of keys) {
+      let err = null;
+      if (sec === 'account') cmpCopyAccount(k);
+      else if (sec === 'fighters') err = cmpCopyFighter(k);
+      else if (sec === 'research') cmpCopyResearch(k);
+      else if (sec === 'decals') cmpCopyDecal(k);
+      else if (sec === 'hub') cmpCopyHub(k);
+      else if (sec === 'rewards') cmpCopyReward(k);
+      else if (sec === 'storage') err = cmpCopyStorage(k);
+      if (err) fails.push(`${k}: ${err}`); else n++;
+    }
+    if (sec === 'research') { normalizeResearchMarkers(SAVE.user_research); syncStampFromResearch(); }
+    if (sec === 'rewards') normalizePresents(SAVE.presents);
+    CMP.msg = `Copied ${n} ${sec} difference${n === 1 ? '' : 's'} from ${CMP.file}. Download the .sav to keep it.${fails.length ? '\nNot copied:\n' + fails.join('\n') : ''}`;
+    runSaveCheck();
+    renderAll();
+    toast(`Copied ${n}${fails.length ? `, ${fails.length} skipped` : ''}`, !!fails.length);
+  }));
+}
+
+function wireCompare() { if (activeTab === 'compare') renderCompare(); }
+
 // The game writes an empty collection as {} in most places (and [] in a
 // few). The editor works on arrays, so a collection that was empty when the
 // save was loaded and is still empty could come back in the other shape.
@@ -6222,7 +6621,7 @@ document.getElementById('btn-download-sav').addEventListener('click', async () =
   try {
     normalizePresents(SAVE.presents);
     questOrdForSave();
-    const root = restoreEmptyShapes(applyDateRules(buildRawSavRootFromSave(SAVE, RAW_SAV_ROOT, RAW_SAV_MAIN_UID)), RAW_SAV_ROOT);
+    const root = applyAccountChoice(restoreEmptyShapes(applyDateRules(buildRawSavRootFromSave(SAVE, RAW_SAV_ROOT, RAW_SAV_MAIN_UID)), RAW_SAV_ROOT));
     triggerDownload(await buildBrgSav(root), 'brggame.sav', 'application/octet-stream');
     toast('Downloaded brggame.sav');
   } catch (err) {
@@ -6238,7 +6637,7 @@ document.getElementById('btn-download-json').addEventListener('click', () => {
   try {
     normalizePresents(SAVE.presents);
     questOrdForSave();
-    const root = restoreEmptyShapes(applyDateRules(buildRawSavRootFromSave(SAVE, RAW_SAV_ROOT, RAW_SAV_MAIN_UID)), RAW_SAV_ROOT);
+    const root = applyAccountChoice(restoreEmptyShapes(applyDateRules(buildRawSavRootFromSave(SAVE, RAW_SAV_ROOT, RAW_SAV_MAIN_UID)), RAW_SAV_ROOT));
     triggerDownload(JSON.stringify(root), 'brggame.json', 'application/json');
     toast('Downloaded brggame.json');
   } catch (err) {
