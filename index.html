@@ -4995,7 +4995,7 @@ function blockBags() {
   return `<section class="block">
     <div class="block-head"><div><div class="eyebrow">Mystery bags · Tokyo Death Metro</div><h2>Lost Bags</h2></div></div>
     <div class="block-body">
-      <div class="capNote" style="margin-top:0;">What each Lost Bag rarity will give is rolled in advance and stored in your save, a short list per rarity. The list is shown next-bag-first on the assumption that the game uses it the same way as the stew queue (from the end); that hasn't been confirmed for Lost Bags. "Fill with" and "Reroll" change every slot, so the order doesn't matter for them. Keep a copy of your save.</div>
+      <div class="capNote" style="margin-top:0;">What each Lost Bag rarity will give is rolled in advance and stored in your save, a short list per rarity. The contents are picked when you <b>earn</b> a bag, so these lists decide future bags only; bags already in your Reward Box keep what they have (change those on the Rewards tab). The game takes the top entry of the list and doesn't refill it, so #1 is your next bag of that rarity (confirmed in game).</div>
       <div id="bag-body"></div>
     </div>
   </section>`;
@@ -5016,7 +5016,7 @@ function renderBags() {
   for (const r of rars) {
     const list = arr(b[r]);
     const pool = bagPool(r);
-    const order = list.map((e, i) => ({ e, i })).reverse();
+    const order = list.map((e, i) => ({ e, i })); // the game takes the FIRST entry (confirmed in game)
     const fillSel = BAG_FORM.fill[r] || (pool[0] && pool[0].id) || '';
     h += `<div class="subDetails" style="padding:10px; margin-bottom:12px;">
       <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:8px;">
