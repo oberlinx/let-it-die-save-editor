@@ -1977,28 +1977,16 @@ function bankRow(soul, kind, label, levelField, valueField) {
   const cap = bankCapacityForLevel(level);
   const val = soul[valueField] != null ? soul[valueField] : 0;
   const over = val > cap;
-  return `<div class="bankRow">\n    <div class="bankLabel">${label}</div>\n    <div class="field"><label>Bank Level (1-${maxLvl})</label><input type="number" min="1" max="${maxLvl}" data-bank-level="${levelField}" data-bank-cap-target="${valueField}" value="${level}"></div>\n    <div class="field"><label>Held Amount</label><input type="text" inputmode="numeric" data-currency="${valueField}" value="${val.toLocaleString()}"></div>\n    <div class="bankCap ${over ? 'over' : ''}" data-bank-cap-display="${valueField}">cap: ${cap.toLocaleString()}${over ? ' -- OVER CAP' : ''}</div>\n    <div style="display:flex; gap:6px; white-space:nowrap;"><button class="subtle" data-bank-fill="${valueField}" data-bank-fill-level="${levelField}" title="Fill to this bank level's cap without changing the level">Fill to cap</button>\n    <button class="subtle" data-bank-max="${levelField}" data-bank-max-value="${valueField}" title="Max the bank level and fill it">Max level + fill</button></div>\n  </div>`;
+  return `<div class="bankRow">\n    <div class="bankLabel">${label}</div>\n    <div class="field"><label>Bank Level</label><select data-bank-level="${levelField}" data-bank-cap-target="${valueField}" style="width:100%; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);">${fighterOpts(1, maxLvl, Number(level), v => 'Level ' + v)}</select></div>\n    <div class="field"><label>Held Amount</label><input type="text" inputmode="numeric" data-currency="${valueField}" value="${val.toLocaleString()}"></div>\n    <div class="bankCap ${over ? 'over' : ''}" data-bank-cap-display="${valueField}">cap: ${cap.toLocaleString()}${over ? ' -- OVER CAP' : ''}</div>\n    <div style="display:flex; gap:6px; white-space:nowrap;"><button class="subtle" data-bank-fill="${valueField}" data-bank-fill-level="${levelField}" title="Fill to this bank level's cap without changing the level">Fill to cap</button>\n    <button class="subtle" data-bank-max="${levelField}" data-bank-max-value="${valueField}" title="Max the bank level and fill it">Max level + fill</button></div>\n  </div>`;
 }
 
 function blockCurrency() {
   const soul = SAVE.soul;
   const rank = tdmRankForPoints(soul.tdm_point || 0, AP);
-  return `<section class="block">\n    <div class="block-head"><div><div class="eyebrow">Account</div><h2>Account Details</h2></div></div>\n    <div class="block-body">\n      <div class="grid" style="margin-bottom:14px;">\n        <div class="field"><label>Account ID (psnacid)</label><input type="text" id="acc-psnacid" value="${escapeHtml(SAVE.user.psnacid != null ? String(SAVE.user.psnacid) : '')}"></div>\n        <div class="field"><label>Account Name</label><input type="text" id="acc-name" maxlength="32" value="${escapeHtml(SAVE.user.nm != null ? String(SAVE.user.nm) : '')}"></div>\n        <div class="field"><label>TDM Point (editable)</label><input type="number" id="tdm-point" value="${soul.tdm_point || 0}"></div>\n        <div class="field"><label>TDM Rank (auto from point)</label><input type="text" value="${rank ? formatTdmRank(resolveName(rank.name)) || rank.id : soul.tdm_rank || '?'}" disabled></div>\n      </div>\n      <div class="eyebrow" style="margin-bottom:8px;">Bank-limited currencies</div>\n      <div class="bankTable">\n        ${bankRow(soul, 'money', 'Kill Coins', 'safe_level', 'free_money')}\n        ${bankRow(soul, 'spirit', 'SPLithium', 'spirit_tank_level', 'spirit')}\n      </div>\n      <div class="grid">\n        ${CURRENCY_FIELDS.map(([f, label, cap]) => `\n          <div class="field">\n            <label>${label}${cap ? ` (max ${cap.toLocaleString()})` : ''}</label>${f === 'recycle_point' ? `<div class="capNote" style="margin:0 0 4px;">In game, anything earned over the max is lost.</div>` : ''}\n            <input type="text" inputmode="numeric" data-currency="${f}" ${cap ? `data-max="${cap}"` : ''} value="${(soul[f] != null ? soul[f] : 0).toLocaleString()}">\n          </div>`).join('')}\n      </div>\n      ${masteryBlockHtml()}\n    </div>\n  </section>`;
+  return `<section class="block">\n    <div class="block-head"><div><div class="eyebrow">Account</div><h2>Account Details</h2></div></div>\n    <div class="block-body">\n      <div class="grid" style="margin-bottom:14px;">\n        <div class="field"><label>Account ID <span class="id">(Steam ID, read only)</span></label><div id="acc-psnacid" style="padding:8px 0; font-size:14px; word-break:break-all;">${escapeHtml(SAVE.user.psnacid != null && SAVE.user.psnacid !== '' ? String(SAVE.user.psnacid) : '—')}</div></div>\n        <div class="field"><label>Account Name <span class="id">(read only)</span></label><div id="acc-name" style="padding:8px 0; font-size:14px; word-break:break-all;"><b>${escapeHtml(SAVE.user.nm != null && SAVE.user.nm !== '' ? String(SAVE.user.nm) : '—')}</b></div></div>\n        <div class="field"><label>TDM Points</label><input type="number" id="tdm-point" value="${soul.tdm_point || 0}"></div>\n        <div class="field"><label>TDM Rank <span class="id">(from the points)</span></label><div style="padding:8px 0; font-size:14px; word-break:break-all;">${escapeHtml(rank ? formatTdmRank(resolveName(rank.name)) || rank.id : soul.tdm_rank || '?')}</div></div>\n      </div>\n      <div class="eyebrow" style="margin-bottom:8px;">Bank-limited currencies</div>\n      <div class="bankTable">\n        ${bankRow(soul, 'money', 'Kill Coins', 'safe_level', 'free_money')}\n        ${bankRow(soul, 'spirit', 'SPLithium', 'spirit_tank_level', 'spirit')}\n      </div>\n      <div class="grid">\n        ${CURRENCY_FIELDS.map(([f, label, cap]) => `\n          <div class="field">\n            <label>${label}${cap ? ` (max ${cap.toLocaleString()})` : ''}</label>${f === 'recycle_point' ? `<div class="capNote" style="margin:0 0 4px;">In game, anything earned over the max is lost.</div>` : ''}\n            <input type="text" inputmode="numeric" data-currency="${f}" ${cap ? `data-max="${cap}"` : ''} value="${(soul[f] != null ? soul[f] : 0).toLocaleString()}">\n          </div>`).join('')}\n      </div>\n      ${masteryBlockHtml()}\n    </div>\n  </section>`;
 }
 
 function wireCurrency() {
-  document.getElementById('acc-psnacid').addEventListener('change', e => {
-    SAVE.user.psnacid = e.target.value.trim();
-  });
-  document.getElementById('acc-name').addEventListener('change', e => {
-    const v = e.target.value.trim();
-    if (!v) {
-      e.target.value = SAVE.user.nm || '';
-      toast('Account name can\'t be empty', true);
-      return;
-    }
-    SAVE.user.nm = v;
-  });
   document.getElementById('tdm-point').addEventListener('change', e => {
     SAVE.soul.tdm_point = parseInt(e.target.value, 10) || 0;
     const rank = tdmRankForPoints(SAVE.soul.tdm_point, AP);
@@ -4471,7 +4459,7 @@ function wireMastery() {
     document.getElementById('mst-list').innerHTML = shown.map(p => {
       const e = mstlvl.find(m => m.ptarmtp === p.ptarmtp);
       const lvl = e ? e.lvl : 1;
-      return `<div class="listRow"><div class="name">${escapeHtml(p.name)}</div><input type="number" class="mst-lvl" data-mst="${p.ptarmtp}" min="1" max="20" value="${lvl}" style="width:70px;"></div>`;
+      return `<div class="listRow"><div class="name">${escapeHtml(p.name)}</div><select class="mst-lvl" data-mst="${p.ptarmtp}" style="width:90px; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);">${fighterOpts(1, 20, Number(lvl) || 1, v => 'Lv ' + v)}</select></div>`;
     }).join('');
     document.querySelectorAll('.mst-lvl').forEach(inp => {
       inp.addEventListener('change', () => {
@@ -4564,7 +4552,7 @@ function blockVip() {
   const vip = SAVE.soul.vip;
   const expiresDate = vip.expired_time ? new Date(vip.expired_time * 1e3) : null;
   const expiresStr = expiresDate ? `${expiresDate.getMonth() + 1}/${expiresDate.getDate()}/${expiresDate.getFullYear()}` : '';
-  return `<section class="block">\n    <div class="block-head"><div><div class="eyebrow">Direct Hell Insurance</div><h2>VIP Express Pass</h2></div></div>\n    <div class="block-body">\n      <div class="grid">\n        <div class="field"><label>VIP Active (0/1)</label><input type="number" min="0" max="1" data-vip="vip_flag" value="${vip.vip_flag || 0}"></div>\n        <div class="field"><label>Membership Type</label><select id="vip-type" style="width:100%; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);">${[[1, '30-day Express Pass'], [0, '1-Day Express / none']].concat([0, 1].includes(vip.vip_type || 0) ? [] : [[vip.vip_type, `Other (${vip.vip_type})`]]).map(([v, l]) => `<option value="${v}" ${(vip.vip_type || 0) === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>\n        <div class="field"><label>Multi-day Passes Held</label><input type="number" data-vip="vip_pass_num" value="${vip.vip_pass_num || 0}"></div>\n        <div class="field"><label>One-day Passes Held</label><input type="number" data-vip="oneday_vip_pass_num" value="${vip.oneday_vip_pass_num || 0}"></div>\n        <div class="field"><label>Expires (month/day/year)</label><input type="text" id="vip-expires-date" placeholder="MM/DD/YYYY" value="${expiresStr}"></div>\n        <div class="field"><label>Auto-renew (0/1)</label><input type="number" min="0" max="1" data-vip="automatic_renewal" value="${vip.automatic_renewal || 0}"></div>\n      </div>\n      <button class="subtle" id="vip-30days" style="margin-top:10px;">Set expiry 30 days from now</button>\n    </div>\n  </section>`;
+  return `<section class="block">\n    <div class="block-head"><div><div class="eyebrow">Direct Hell Insurance</div><h2>VIP Express Pass</h2></div></div>\n    <div class="block-body">\n      <div class="grid">\n        <div class="field"><label>VIP Active</label><select data-vip="vip_flag" style="width:100%; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);"><option value="1" ${vip.vip_flag ? 'selected' : ''}>On</option><option value="0" ${vip.vip_flag ? '' : 'selected'}>Off</option></select></div>\n        <div class="field"><label>Membership Type</label><select id="vip-type" style="width:100%; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);">${[[1, '30-day Express Pass'], [0, '1-Day Express / none']].concat([0, 1].includes(vip.vip_type || 0) ? [] : [[vip.vip_type, `Other (${vip.vip_type})`]]).map(([v, l]) => `<option value="${v}" ${(vip.vip_type || 0) === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>\n        <div class="field"><label>Multi-day Passes Held</label><input type="number" data-vip="vip_pass_num" value="${vip.vip_pass_num || 0}"></div>\n        <div class="field"><label>One-day Passes Held</label><input type="number" data-vip="oneday_vip_pass_num" value="${vip.oneday_vip_pass_num || 0}"></div>\n        <div class="field"><label>Expires</label><input type="date" id="vip-expires-date" value="${expiresDate ? `${expiresDate.getFullYear()}-${String(expiresDate.getMonth() + 1).padStart(2, '0')}-${String(expiresDate.getDate()).padStart(2, '0')}` : ''}" style="width:100%; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono); color-scheme:dark;"></div>\n        <div class="field"><label>Auto-renew</label><select data-vip="automatic_renewal" style="width:100%; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);"><option value="1" ${vip.automatic_renewal ? 'selected' : ''}>On</option><option value="0" ${vip.automatic_renewal ? '' : 'selected'}>Off</option></select></div>\n      </div>\n      <button class="subtle" id="vip-30days" style="margin-top:10px;">Set expiry 30 days from now</button>\n    </div>\n  </section>`;
 }
 
 function wireVip() {
@@ -4585,14 +4573,14 @@ function wireVip() {
     toast(v === 1 ? 'Membership type: 30-day Express Pass' : 'Membership type: 1-Day Express / none');
   });
   document.getElementById('vip-expires-date').addEventListener('change', e => {
-    const m = e.target.value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-    if (!m) {
-      toast('Use MM/DD/YYYY format', true);
-      return;
-    }
-    const d = new Date(parseInt(m[3], 10), parseInt(m[1], 10) - 1, parseInt(m[2], 10));
+    const m = e.target.value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) { renderAll(); return; }
+    // keep the time of day the save already had, only the date changes
+    const old = SAVE.soul.vip.expired_time ? new Date(SAVE.soul.vip.expired_time * 1e3) : null;
+    const d = new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10), old ? old.getHours() : 0, old ? old.getMinutes() : 0, old ? old.getSeconds() : 0);
+    if (d.getFullYear() > 2037) { toast('Pick a date before 2038 (the game can\'t store later dates)', true); renderAll(); return; }
     SAVE.soul.vip.expired_time = Math.floor(d.getTime() / 1e3);
-    toast(`Expiry set to ${e.target.value}`);
+    toast(`Expiry set to ${d.toLocaleDateString()}`);
   });
   document.getElementById('vip-30days').addEventListener('click', () => {
     SAVE.soul.vip.expired_time = Math.floor(Date.now() / 1e3) + 30 * 86400;
