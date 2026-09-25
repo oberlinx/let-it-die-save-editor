@@ -1557,6 +1557,7 @@ document.getElementById('file-save').addEventListener('change', async e => {
         repaired++;
       }
     }
+    try { RESEARCH_GAME_SKIP = researchGameSkips(SAVE.user_research); } catch (err) { RESEARCH_GAME_SKIP = new Map(); }
     HEALTH_LOAD = { repairedChars: repairedChars, repairedFighters: repaired };
     HEALTH.open = null;
     try { runSaveCheck(); } catch (err) { console.warn('Save check failed:', err); }
@@ -3208,7 +3209,17 @@ function sortByChainOrder(list) {
 // Without these the game shows the research as finished and won't let you
 // upgrade it. This rebuilds the markers for every blueprint from the
 // FINISHED entries. It is only run after the editor changes research.
-function normalizeResearchMarkers(research) {
+// Parts where the save, as the game wrote it, has no next-level marker for the top level
+// (e.g. the last Glider blueprint on a fully researched account: the game treats it as done).
+// Those are left alone until the part's level is changed in the editor.
+let RESEARCH_GAME_SKIP = new Map();
+function researchGameSkips(research) {
+  const found = [];
+  normalizeResearchMarkers(JSON.parse(JSON.stringify(arr(research))), found, new Map());
+  return new Map(found);
+}
+function normalizeResearchMarkers(research, found, skip) {
+  skip = skip || RESEARCH_GAME_SKIP;
   const MARKERS = new Set([ 'LEVELUP', 'REMODEL' ]);
   const byPt = new Map;
   for (const r of research) {
@@ -3249,6 +3260,10 @@ function normalizeResearchMarkers(research) {
     // an existing marker of the right kind at the right level is kept as the game wrote it
     const same = w ? cur.length === 1 && cur[0].research_type === w.research_type && cur[0].lvl === w.lvl : cur.length === 0;
     if (same) continue;
+    if (w && w.research_type === 'LEVELUP' && !cur.length) {
+      if (skip.get(ptid) === w.lvl - 1) continue;
+      if (found) found.push([ ptid, w.lvl - 1 ]);
+    }
     for (let i = research.length - 1; i >= 0; i--) if (research[i].ptid === ptid && MARKERS.has(research[i].research_type)) research.splice(i, 1);
     if (w) research.push(w);
     changed++;
