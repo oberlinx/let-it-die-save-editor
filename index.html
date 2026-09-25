@@ -6614,6 +6614,14 @@ function defConst(id, fb) { const r = arr(AP && AP.constInt).find(x => x.id === 
 function defLineup() { SAVE.fortsetting = arr(SAVE.fortsetting); return SAVE.fortsetting; }
 function defChr(cid) { return arr(SAVE.soul.chrs).find(c => c.cid === cid) || null; }
 function defEligible(c) { return c && (c.state === 'FREE' || c.state === 'GUARD') && !c.abid; }
+// Unlocks (the game's own rules):
+//   Tokyo Death Metro / defense opens once soul.is_fort_ready = 1 (after the mid-boss COEN).
+//   Each alarm is sold once the deepest floor reached (playlog.base.max_floor) is at least
+//   its master_fort_whistle.shop_open_floor.
+function defUnlocked() { const v = SAVE && SAVE.soul && SAVE.soul.is_fort_ready; return v == null ? true : Number(v) === 1; }
+function defMaxFloor() { const b = SAVE && SAVE.playlog && SAVE.playlog[0] && SAVE.playlog[0].base; return b ? Number(b.max_floor) || 0 : 0; }
+function defAlarmRow(id) { return arr(AP && AP.fortWhistle).find(x => x.id === id) || null; }
+function defAlarmOpen(id) { const w = defAlarmRow(id); return !!w && Number(w.shop_open_floor || 0) <= defMaxFloor(); }
 function defAlarmName(id) {
   const w = arr(AP && AP.fortWhistle).find(x => x.id === id);
   if (!w) return id || 'None';
@@ -6685,7 +6693,12 @@ function renderDefense() {
   if (!host || !SAVE) return;
   if (DEF_STATE.root !== RAW_SAV_ROOT) DEF_STATE = { root: RAW_SAV_ROOT, msg: '' };
   const soul = SAVE.soul, now = Math.floor(Date.now() / 1000);
+  if (!defUnlocked()) {
+    host.innerHTML = `<div class="capNote" style="margin-top:0;">Tokyo Death Metro isn't unlocked on this save yet (it opens after beating the mid-boss COEN), so defense can't be edited. Play to that point first.</div>`;
+    return;
+  }
   const list = defRefreshSnapshots(defLineup());
+  const maxFlr = defMaxFloor();
   const maxAlarm = defConst('WHISTLE_AVAILABLE_SECOND_LIMIT', 432000), dayAlarm = defConst('WHISTLE_AVAILABLE_SECOND', 86400), kidnap = defConst('ABDUCT_GUARD_TIME', 43200);
   const when = t => t > 0 ? `${escapeHtml(dtFmt(t))} (${t > now ? dtRel(t, now) : 'ended ' + dtRel(t, now)})` : 'not set';
   const sel = 'background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:6px 8px; font-family:var(--mono); font-size:12px;';
@@ -6695,12 +6708,12 @@ function renderDefense() {
   const holder = list.find(e => e.is_equip_whistle);
   h += `<div class="subDetails" style="padding:10px; margin-bottom:12px;"><b>Defense Alarm</b>
     <div class="grid" style="margin-top:8px;">
-      <div class="field"><label>Alarm</label><select id="def-alarm" style="width:100%; ${sel}"><option value="" ${!soul.whistle_id ? 'selected' : ''}>None</option>${alarms.map(w => `<option value="${w.id}" ${w.id === soul.whistle_id ? 'selected' : ''}>${escapeHtml(defAlarmName(w.id))}</option>`).join('')}</select></div>
+      <div class="field"><label>Alarm</label><select id="def-alarm" style="width:100%; ${sel}"><option value="" ${!soul.whistle_id ? 'selected' : ''}>None</option>${alarms.map(w => { const open = defAlarmOpen(w.id), cur = w.id === soul.whistle_id; return `<option value="${w.id}" ${cur ? 'selected' : ''} ${open || cur ? '' : 'disabled'}>${escapeHtml(defAlarmName(w.id))}${open ? '' : ` (locked: reach ${w.shop_open_floor}F)`}</option>`; }).join('')}</select></div>
       <div class="field"><label>Runs until</label><div style="padding:7px 0; font-size:12px;">${when(soul.whistle_limit || 0)}</div></div>
-      <div class="field"><label>Set on defender</label><select id="def-holder" style="width:100%; ${sel}"><option value="">Nobody</option>${list.map(e => `<option value="${e.cid}" ${holder && holder.cid === e.cid ? 'selected' : ''}>${escapeHtml((defChr(e.cid) || {}).name || e.cid)}</option>`).join('')}</select></div>
+      <div class="field"><label>Set on defender</label><select id="def-holder" ${soul.whistle_id ? '' : 'disabled'} style="width:100%; ${sel}"><option value="">Nobody</option>${list.map(e => `<option value="${e.cid}" ${holder && holder.cid === e.cid ? 'selected' : ''}>${escapeHtml((defChr(e.cid) || {}).name || e.cid)}</option>`).join('')}</select></div>
     </div>
-    <div class="toolbar"><button class="action" id="def-alarm-max">Max time (${Math.round(maxAlarm / 86400)} days from now)</button><button class="subtle" id="def-alarm-day">+1 day (one purchase)</button><button class="subtle" id="def-alarm-off">End now</button></div>
-    <div class="capNote">The game gives ${Math.round(dayAlarm / 3600)} hours per purchase and holds at most ${Math.round(maxAlarm / 86400)} days. Buying a different alarm in game resets the time.</div></div>`;
+    <div class="toolbar"><button class="action" id="def-alarm-max" ${soul.whistle_id ? '' : 'disabled'}>Max time (${Math.round(maxAlarm / 86400)} days from now)</button><button class="subtle" id="def-alarm-day" ${soul.whistle_id ? '' : 'disabled'}>+1 day (one purchase)</button><button class="subtle" id="def-alarm-off">End now</button></div>
+    <div class="capNote">Only alarms sold at your deepest floor (${maxFlr}F) can be picked; the rest are greyed out. Time and "Set on defender" need an alarm. The game gives ${Math.round(dayAlarm / 3600)} hours per purchase and holds at most ${Math.round(maxAlarm / 86400)} days. Buying a different alarm in game resets the time.</div></div>`;
   // lineup
   const fighters = arr(soul.chrs).filter(defEligible);
   h += `<div class="subDetails" style="padding:10px; margin-bottom:12px;"><b>Defense Lineup</b> <span class="id">${list.length} defender${list.length === 1 ? '' : 's'}</span>
@@ -6722,10 +6735,10 @@ function renderDefense() {
   host.innerHTML = h;
 
   const redo = msg => { DEF_STATE.msg = msg || ''; runSaveCheck(); renderAll(); if (msg) toast(msg.split('\n')[0]); };
-  document.getElementById('def-alarm').addEventListener('change', e => { soul.whistle_id = e.target.value; if (e.target.value && !(soul.whistle_limit > now)) soul.whistle_limit = now + dayAlarm; redo(e.target.value ? `Alarm set to ${defAlarmName(e.target.value)}.` : 'Alarm removed.'); });
-  document.getElementById('def-holder').addEventListener('change', e => { defSetAlarmHolder(e.target.value); redo(e.target.value ? `Alarm set on ${(defChr(e.target.value) || {}).name}.` : 'Alarm not set on any defender.'); });
-  document.getElementById('def-alarm-max').addEventListener('click', () => { soul.whistle_limit = now + maxAlarm; redo(`Alarm runs until ${dtFmt(soul.whistle_limit)} (the ${Math.round(maxAlarm / 86400)}-day max).`); });
-  document.getElementById('def-alarm-day').addEventListener('click', () => { soul.whistle_limit = Math.min(Math.max(soul.whistle_limit || 0, now) + dayAlarm, now + maxAlarm); redo(`Alarm runs until ${dtFmt(soul.whistle_limit)}.`); });
+  document.getElementById('def-alarm').addEventListener('change', e => { if (e.target.value && !defAlarmOpen(e.target.value)) { toast('That alarm is not unlocked yet', true); renderDefense(); return; } soul.whistle_id = e.target.value; if (!e.target.value) defSetAlarmHolder(''); if (e.target.value && !(soul.whistle_limit > now)) soul.whistle_limit = now + dayAlarm; redo(e.target.value ? `Alarm set to ${defAlarmName(e.target.value)}.` : 'Alarm removed.'); });
+  document.getElementById('def-holder').addEventListener('change', e => { if (!soul.whistle_id) { renderDefense(); return; } defSetAlarmHolder(e.target.value); redo(e.target.value ? `Alarm set on ${(defChr(e.target.value) || {}).name}.` : 'Alarm not set on any defender.'); });
+  document.getElementById('def-alarm-max').addEventListener('click', () => { if (!soul.whistle_id) return; soul.whistle_limit = now + maxAlarm; redo(`Alarm runs until ${dtFmt(soul.whistle_limit)} (the ${Math.round(maxAlarm / 86400)}-day max).`); });
+  document.getElementById('def-alarm-day').addEventListener('click', () => { if (!soul.whistle_id) return; soul.whistle_limit = Math.min(Math.max(soul.whistle_limit || 0, now) + dayAlarm, now + maxAlarm); redo(`Alarm runs until ${dtFmt(soul.whistle_limit)}.`); });
   document.getElementById('def-alarm-off').addEventListener('click', () => { soul.whistle_limit = now - 60; redo('Alarm time ended.'); });
   document.getElementById('def-kid-max').addEventListener('click', () => { soul.abduct_guard_time = now + kidnap; redo(`Kidnap protection until ${dtFmt(soul.abduct_guard_time)}.`); });
   document.getElementById('def-kid-off').addEventListener('click', () => { soul.abduct_guard_time = now - 60; redo('Kidnap protection ended.'); });
