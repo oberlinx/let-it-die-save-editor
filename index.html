@@ -314,6 +314,7 @@ const FI_FORM = {
 };
 
 const RB_FORM = {
+  ptLvl: 0,
   searchNum: 1,
   amountNum: 1e3,
   unrevealed: false
@@ -3223,6 +3224,28 @@ function researchGameSkips(research) {
   normalizeResearchMarkers(JSON.parse(JSON.stringify(arr(research))), found, new Map());
   return new Map(found);
 }
+// Armor Skins: the game's own rule (Barb's Bible): "Strengthening a piece of armor to +4 will make it
+// available as an Armor Skin." There is no unlock list in the save -- the game works it out from R&D --
+// so raising or lowering research is all it takes. soul.armorskin only holds the skins in use.
+const ARMOR_TYPES = new Set([ 'PTTP_HEAD', 'PTTP_BODY', 'PTTP_LEGS' ]);
+function armorSkinCapable(rec) { return !!rec && ARMOR_TYPES.has(rec.type) && Number(rec.skin) === 1; }
+function researchTop(research, ptid) {
+  let t = 0;
+  for (const r of arr(research)) if (r.ptid === ptid && r.research_type === 'FINISHED' && r.lvl > t) t = r.lvl;
+  return t;
+}
+function armorSkinUnlocked(research, ptid) {
+  const rec = PT_INDEX[ptid];
+  if (!armorSkinCapable(rec)) return false;
+  const t = researchTop(research, ptid);
+  return t > 0 && displayFromRaw(rec, t) >= 4;
+}
+function armorSkinsUnlocked(research) {
+  const out = new Set();
+  for (const r of arr(research)) if (r.research_type === 'FINISHED' && !out.has(r.ptid) && armorSkinUnlocked(research, r.ptid)) out.add(r.ptid);
+  return out;
+}
+
 function normalizeResearchMarkers(research, found, skip) {
   skip = skip || RESEARCH_GAME_SKIP;
   const MARKERS = new Set([ 'LEVELUP', 'REMODEL' ]);
@@ -3387,7 +3410,7 @@ function wireBlueprints() {
         const e = entryFor(p.id);
         const maxLvl = maxPartLevel(p);
         const dispMax = maxDisplayLevel(p);
-        return `<div class="listRow">\n                  <input type="checkbox" data-bp="${p.id}" ${unlocked ? 'checked' : ''}>\n                  <div class="name">${escapeHtml(p.name)} ${p.is_limitbreak ? '<span class="badge lb">Uncap · in-game +' + dispMax + '</span>' : `<span class="badge">in-game +${dispMax}</span>`} ${isPsOnlyPart(p.id) ? '<span class="badge" title="PlayStation-only; a PC game needs to be modded to have it">PS only</span>' : ''} ${hasNoBlueprint(p.id) ? '<span class="badge" style="background:var(--accent); color:#fff;">(THIS HAS NO BLUEPRINT)</span>' : ''}</div>\n                  ${unlocked ? `<span style="font-size:11px; color:var(--text-dim);">+</span><input type="number" class="bp-level" data-bp-level="${p.id}" min="${minDisplayLevel(p)}" max="${dispMax}" value="${displayFromRaw(p, e ? e.lvl : 1)}" style="width:60px;" title="In-game level, +${minDisplayLevel(p)} to +${dispMax}">` : ''}\n                  <div class="id">${p.id}</div>\n                </div>`;
+        return `<div class="listRow">\n                  <input type="checkbox" data-bp="${p.id}" ${unlocked ? 'checked' : ''}>\n                  <div class="name">${escapeHtml(p.name)} ${p.is_limitbreak ? '<span class="badge lb">Uncap · in-game +' + dispMax + '</span>' : `<span class="badge">in-game +${dispMax}</span>`} ${isPsOnlyPart(p.id) ? '<span class="badge" title="PlayStation-only; a PC game needs to be modded to have it">PS only</span>' : ''} ${armorSkinCapable(p) ? (armorSkinUnlocked(research, p.id) ? '<span class="badge" title="Researched to +4 or more, so the game offers it as an Armor Skin">skin unlocked</span>' : '<span class="badge" style="opacity:.55;" title="Researching this to +4 unlocks it as an Armor Skin">skin at +4</span>') : ''} ${hasNoBlueprint(p.id) ? '<span class="badge" style="background:var(--accent); color:#fff;">(THIS HAS NO BLUEPRINT)</span>' : ''}</div>\n                  ${unlocked ? `<span style="font-size:11px; color:var(--text-dim);">+</span><input type="number" class="bp-level" data-bp-level="${p.id}" min="${minDisplayLevel(p)}" max="${dispMax}" value="${displayFromRaw(p, e ? e.lvl : 1)}" style="width:60px;" title="In-game level, +${minDisplayLevel(p)} to +${dispMax}">` : ''}\n                  <div class="id">${p.id}</div>\n                </div>`;
       }).join('')}\n            </div>\n          </div>`).join('');
     }
     document.getElementById('bp-slot-content').innerHTML = renderSlotGroup(researchSubTab);
@@ -4293,6 +4316,9 @@ const PRESENT_TYPES = [ {
   id: 'BP',
   label: 'Blueprint'
 }, {
+  id: 'PT',
+  label: 'Weapon / Armor'
+}, {
   id: 'MUSHROOM',
   label: 'Mushroom'
 }, {
@@ -4325,13 +4351,16 @@ function rewardRow(p, i) {
   } else if (p.type === 'SKILL' && p.val0) {
     const rec = SKL_INDEX[p.val0];
     detail = `${rec ? rec.name : p.val0} x${p.num || 1}`;
-  } else if (p.type === 'PT' && p.val0) {
+  } else if ((p.type === 'PT' || [ 'PTTP_ARM', 'PTTP_HEAD', 'PTTP_BODY', 'PTTP_LEGS' ].includes(p.type)) && p.val0) {
+    // a weapon / armor reward: val1 = the part's level in save units ('0' = base), shown as in-game +n
     const rec = PT_INDEX[p.val0];
-    detail = `${rec ? rec.name : p.val0} x${p.num || 1}`;
-    if (rec) levelInput = `<input type="number" class="rb-pt-level" data-rb-idx="${i}" min="0" max="${maxPartLevel(rec)}" value="${Math.min(Number(p.val1) || 0, maxPartLevel(rec))}" style="width:60px;" title="Raw save value, 0-${maxPartLevel(rec)}${rec.is_limitbreak ? ` -- shows as in-game +${maxDisplayLevel(rec)} at max` : ''}">`;
-  } else if ([ 'PTTP_ARM', 'PTTP_HEAD', 'PTTP_BODY', 'PTTP_LEGS' ].includes(p.type) && p.val0) {
-    const rec = PT_INDEX[p.val0];
-    detail = `${rec ? rec.name : p.val0} (blueprint) x${p.num || 1}`;
+    detail = `${rec ? rec.name : p.val0}${rec ? ' (' + (rec.type === 'PTTP_ARM' ? 'weapon' : 'armor') + ')' : ''} x${p.num || 1}`;
+    if (rec) {
+      const raw = Math.max(1, Math.min(Number(p.val1) || 1, maxPartLevel(rec) || 1));
+      let opts = '';
+      for (let r = 1; r <= (maxPartLevel(rec) || 1); r++) opts += `<option value="${r}" ${r === raw ? 'selected' : ''}>+${displayFromRaw(rec, r)}</option>`;
+      levelInput = `<select class="rb-pt-level" data-rb-idx="${i}" title="Level (in-game +n)" style="width:80px; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:4px 6px; font-family:var(--mono);">${opts}</select>`;
+    }
   }
   return `<div class="listRow"><div class="name">${escapeHtml(p.type || '?')}: ${escapeHtml(detail)}</div><div class="id">${escapeHtml(p.from || '?')}${p.kind ? ' · ' + p.kind : ''}</div>${levelInput}<button class="subtle" data-rb-remove="${i}">✕</button></div>`;
 }
@@ -4340,7 +4369,7 @@ function rbAddFormHtml() {
   if ([ 'ITEM', 'BP', 'MUSHROOM', 'BEAST', 'SKILL', 'PT' ].includes(rbType)) {
     let extraField = '';
     if (rbType === 'BP') extraField = `<div class="field"><label><input type="checkbox" id="rb-add-unrevealed" style="width:auto; margin-right:6px;" ${RB_FORM.unrevealed ? 'checked' : ''}>Unrevealed</label></div>`;
-    if (rbType === 'PT') extraField = '';
+    if (rbType === 'PT') extraField = `<div class="field"><label>Level (in-game +n)</label><input type="number" id="rb-add-lvl" min="0" value="${escapeHtml(RB_FORM.ptLvl)}"></div>`;
     return `<div class="grid">\n      <div class="searchwrap" style="grid-column:span 2;"><input type="text" id="rb-search" placeholder="Search ${rbType === 'BP' ? 'blueprint (by the weapon/armor it unlocks)' : 'name'}..."><div class="acdrop" id="rb-acdrop"></div></div>\n      <div class="field"><label>Quantity</label><input type="number" id="rb-num" min="1" value="${escapeHtml(RB_FORM.searchNum)}"></div>\n      ${extraField}\n    </div>`;
   }
   return `<div class="grid">\n    <div class="field"><label>Amount</label><input type="number" id="rb-num" min="1" value="${escapeHtml(RB_FORM.amountNum)}"></div>\n    <div class="field" style="display:flex; align-items:end;"><button class="subtle" id="rb-add">+ Add</button></div>\n  </div>`;
@@ -4363,15 +4392,11 @@ function wireRewardBox() {
   }));
   document.querySelectorAll('.rb-pt-level').forEach(inp => {
     inp.addEventListener('change', () => {
-      let v = parseInt(inp.value, 10) || 0;
-      const capAttr = inp.getAttribute('max');
-      if (capAttr && v > parseInt(capAttr, 10)) {
-        v = parseInt(capAttr, 10);
-        toast(`Clamped to this tier's cap (+${v})`);
-      }
-      if (v < 0) v = 0;
-      SAVE.presents[parseInt(inp.dataset.rbIdx, 10)].val1 = String(v);
-      inp.value = v;
+      const p = SAVE.presents[parseInt(inp.dataset.rbIdx, 10)];
+      const raw = parseInt(inp.value, 10) || 1;
+      p.val1 = String(raw > 1 ? raw : 0);
+      const rec = PT_INDEX[p.val0];
+      toast(`${rec ? rec.name : 'Reward'} set to +${rec ? displayFromRaw(rec, raw) : raw - 1}`);
     });
   });
   renderRbForm();
@@ -4379,8 +4404,8 @@ function wireRewardBox() {
 
 function renderRbForm() {
   const isSearchType = [ 'ITEM', 'BP', 'MUSHROOM', 'BEAST', 'SKILL', 'PT' ].includes(rbType);
-  document.getElementById('rb-add-form').innerHTML = rbAddFormHtml() + (isSearchType ? qtyFirstNote(false) : '');
-  bindFormState([ [ 'rb-num', RB_FORM, isSearchType ? 'searchNum' : 'amountNum' ], [ 'rb-add-unrevealed', RB_FORM, 'unrevealed' ] ]);
+  document.getElementById('rb-add-form').innerHTML = rbAddFormHtml() + (isSearchType ? qtyFirstNote(rbType === 'PT') : '') + (rbType === 'PT' ? '<div class="capNote">Weapons and armor are sent the way the game sends them (type = the part\'s slot). The level is set to the in-game +n you pick; the game\'s own weapon rewards always come at +0, so check the level when you claim it.</div>' : '');
+  bindFormState([ [ 'rb-num', RB_FORM, isSearchType ? 'searchNum' : 'amountNum' ], [ 'rb-add-unrevealed', RB_FORM, 'unrevealed' ], [ 'rb-add-lvl', RB_FORM, 'ptLvl' ] ]);
   const searchCat = rbType === 'ITEM' ? 'item' : rbType === 'BP' ? 'bp' : rbType === 'MUSHROOM' ? 'msr' : rbType === 'BEAST' ? 'bst' : rbType === 'SKILL' ? 'skl' : rbType === 'PT' ? 'pt' : null;
   if (searchCat) {
     wireAutocomplete(document.getElementById('rb-search'), document.getElementById('rb-acdrop'), searchCat, rec => {
@@ -4389,7 +4414,8 @@ function renderRbForm() {
         const unrevealed = !!(document.getElementById('rb-add-unrevealed') || {}).checked;
         addPresent('ITEM', num, rec.id + (unrevealed ? 'U' : ''));
       } else if (rbType === 'PT') {
-        addPresent(rec.type || 'PTTP_ARM', num, rec.id);
+        const raw = rawFromDisplay(rec, (document.getElementById('rb-add-lvl') || {}).value);
+        addPresent(rec.type || 'PTTP_ARM', num, rec.id, raw > 1 ? raw : 0);
       } else {
         addPresent(rbType, num, rec.id);
       }
@@ -4588,11 +4614,27 @@ function wireStamp() {
   });
 }
 
+// soul.vip: flag 1 = member. type 1 = 1-Day Express, type 0 = 30-Day Express (a save with type 0
+// still had 12 days left; the type-1 save auto-renews with only 1-Day passes). user.vip_level = type.
+const VIP_PLANS = [ { id: 'none', label: 'None' }, { id: 'day', label: '1-Day Express' }, { id: 'month', label: '30-Day Express' } ];
+function vipPlanOf(v) { return !v || !Number(v.vip_flag) ? 'none' : Number(v.vip_type) === 1 ? 'day' : 'month'; }
+function setVipPlan(plan) {
+  const v = SAVE.soul.vip, now = Math.floor(Date.now() / 1e3);
+  if (plan === 'none') {
+    v.vip_flag = 0; v.vip_type = 0; v.automatic_renewal = 0;
+    if (Number(v.expired_time) > now) v.expired_time = now;
+  } else {
+    v.vip_flag = 1; v.vip_type = plan === 'day' ? 1 : 0;
+    if (!(Number(v.expired_time) > now)) v.expired_time = now + (plan === 'day' ? 86400 : 30 * 86400);
+  }
+  if (SAVE.user) SAVE.user.vip_level = v.vip_type;
+}
+
 function blockVip() {
   const vip = SAVE.soul.vip;
   const expiresDate = vip.expired_time ? new Date(vip.expired_time * 1e3) : null;
   const expiresStr = expiresDate ? `${expiresDate.getMonth() + 1}/${expiresDate.getDate()}/${expiresDate.getFullYear()}` : '';
-  return `<section class="block">\n    <div class="block-head"><div><div class="eyebrow">Direct Hell Insurance</div><h2>VIP Express Pass</h2></div></div>\n    <div class="block-body">\n      <div class="grid">\n        <div class="field"><label>VIP Active</label><select data-vip="vip_flag" style="width:100%; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);"><option value="1" ${vip.vip_flag ? 'selected' : ''}>On</option><option value="0" ${vip.vip_flag ? '' : 'selected'}>Off</option></select></div>\n        <div class="field"><label>Membership Type</label><select id="vip-type" style="width:100%; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);">${[[1, '30-day Express Pass'], [0, '1-Day Express / none']].concat([0, 1].includes(vip.vip_type || 0) ? [] : [[vip.vip_type, `Other (${vip.vip_type})`]]).map(([v, l]) => `<option value="${v}" ${(vip.vip_type || 0) === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>\n        <div class="field"><label>Multi-day Passes Held</label><input type="number" data-vip="vip_pass_num" value="${vip.vip_pass_num || 0}"></div>\n        <div class="field"><label>One-day Passes Held</label><input type="number" data-vip="oneday_vip_pass_num" value="${vip.oneday_vip_pass_num || 0}"></div>\n        <div class="field"><label>Expires</label><input type="date" id="vip-expires-date" value="${expiresDate ? `${expiresDate.getFullYear()}-${String(expiresDate.getMonth() + 1).padStart(2, '0')}-${String(expiresDate.getDate()).padStart(2, '0')}` : ''}" style="width:100%; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono); color-scheme:dark;"></div>\n        <div class="field"><label>Auto-renew</label><select data-vip="automatic_renewal" style="width:100%; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);"><option value="1" ${vip.automatic_renewal ? 'selected' : ''}>On</option><option value="0" ${vip.automatic_renewal ? '' : 'selected'}>Off</option></select></div>\n      </div>\n      <button class="subtle" id="vip-30days" style="margin-top:10px;">Set expiry 30 days from now</button>\n    </div>\n  </section>`;
+  return `<section class="block">\n    <div class="block-head"><div><div class="eyebrow">Direct Hell Insurance</div><h2>VIP Express Pass</h2></div></div>\n    <div class="block-body">\n      <div class="grid">\n        <div class="field"><label>Express Pass</label><select id="vip-plan" style="width:100%; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);">${VIP_PLANS.map(p => `<option value="${p.id}" ${vipPlanOf(vip) === p.id ? 'selected' : ''}>${p.label}</option>`).join('')}</select></div>\n        <div class="field"><label>30-Day Passes held</label><input type="number" data-vip="vip_pass_num" value="${vip.vip_pass_num || 0}"></div>\n        <div class="field"><label>1-Day Passes held</label><input type="number" data-vip="oneday_vip_pass_num" value="${vip.oneday_vip_pass_num || 0}"></div>\n        <div class="field"><label>Expires</label><input type="date" id="vip-expires-date" value="${expiresDate ? `${expiresDate.getFullYear()}-${String(expiresDate.getMonth() + 1).padStart(2, '0')}-${String(expiresDate.getDate()).padStart(2, '0')}` : ''}" style="width:100%; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono); color-scheme:dark;"></div>\n        <div class="field"><label>Auto-renew</label><select data-vip="automatic_renewal" style="width:100%; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);"><option value="1" ${vip.automatic_renewal ? 'selected' : ''}>On</option><option value="0" ${vip.automatic_renewal ? '' : 'selected'}>Off</option></select></div>\n      </div>\n      <div class="toolbar" style="margin-top:10px;"><button class="subtle" id="vip-renew" ${vipPlanOf(vip) === 'none' ? 'disabled style="opacity:.35;"' : ''}>Renew: expires ${vipPlanOf(vip) === 'day' ? '24 hours' : '30 days'} from now</button></div>\n      <div class="capNote">None = not a member. 1-Day Express lasts 24 hours, 30-Day Express lasts 30 days; auto-renew uses your held passes of that kind when it runs out. (In the save: type 1 = 1-Day, type 0 = 30-Day, worked out from saves.)</div>\n    </div>\n  </section>`;
 }
 
 function wireVip() {
@@ -4605,12 +4647,10 @@ function wireVip() {
   // 0 = 1-Day Express / none (fresh game) -- inferred from saves, not named in
   // the game data. user.vip_level has matched the type in every save seen, so
   // it's kept in step when it currently matches.
-  document.getElementById('vip-type').addEventListener('change', e => {
-    const v = parseInt(e.target.value, 10) || 0;
-    const old = SAVE.soul.vip.vip_type || 0;
-    SAVE.soul.vip.vip_type = v;
-    if (SAVE.user && (SAVE.user.vip_level || 0) === old) SAVE.user.vip_level = v;
-    toast(v === 1 ? 'Membership type: 30-day Express Pass' : 'Membership type: 1-Day Express / none');
+  document.getElementById('vip-plan').addEventListener('change', e => {
+    setVipPlan(e.target.value);
+    renderAll();
+    toast(e.target.value === 'none' ? 'Express Pass: none' : `Express Pass: ${e.target.value === 'day' ? '1-Day' : '30-Day'} Express, expires ${dtFmt(SAVE.soul.vip.expired_time)}`);
   });
   document.getElementById('vip-expires-date').addEventListener('change', e => {
     const m = e.target.value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -4622,11 +4662,12 @@ function wireVip() {
     SAVE.soul.vip.expired_time = Math.floor(d.getTime() / 1e3);
     toast(`Expiry set to ${d.toLocaleDateString()}`);
   });
-  document.getElementById('vip-30days').addEventListener('click', () => {
-    SAVE.soul.vip.expired_time = Math.floor(Date.now() / 1e3) + 30 * 86400;
-    SAVE.soul.vip.vip_flag = 1;
+  document.getElementById('vip-renew').addEventListener('click', () => {
+    const plan = vipPlanOf(SAVE.soul.vip);
+    if (plan === 'none') return;
+    SAVE.soul.vip.expired_time = Math.floor(Date.now() / 1e3) + (plan === 'day' ? 86400 : 30 * 86400);
     renderAll();
-    toast('VIP expiry set to 30 days from now');
+    toast(`Express Pass expires ${dtFmt(SAVE.soul.vip.expired_time)}`);
   });
 }
 
@@ -5950,6 +5991,25 @@ function runSaveCheck() {
     });
   });
 
+  // armor skins in use must still be unlocked (R&D at +4)
+  safe('armorskin', () => {
+    const inUse = arr(SAVE.soul.armorskin).filter(x => x && x.ptid);
+    if (!inUse.length) return;
+    const bad = inUse.filter(x => !armorSkinUnlocked(SAVE.user_research, x.ptid));
+    if (bad.length) add('warning', `${bad.length} Armor Skin${bad.length === 1 ? ' is' : 's are'} in use but no longer unlocked (research below +4): ${bad.map(x => escapeHtml((PT_INDEX[x.ptid] || {}).name || x.ptid)).join(', ')}.`, 'research', {
+      label: 'Take those skins off', run: () => { const keep = arr(SAVE.soul.armorskin).filter(x => !x || !x.ptid || armorSkinUnlocked(SAVE.user_research, x.ptid)); const k = arr(SAVE.soul.armorskin).length - keep.length; SAVE.soul.armorskin = keep.length ? keep : (Array.isArray(SAVE.soul.armorskin) ? [] : {}); return `Took off ${k} Armor Skin${k === 1 ? '' : 's'}; the fighter shows their real armor.`; }
+    });
+  });
+
+  // defense: at most 9 defenders (one wave 5, the other 4)
+  safe('defense', () => {
+    const list = arr(SAVE.fortsetting);
+    if (list.length <= DEF_MAX) return;
+    add('problem', `${list.length} fighters are set to defend; the game allows ${DEF_MAX} (one wave 5, the other 4).`, 'defense', {
+      label: `Keep the first ${DEF_MAX}`, run: () => { const l = defLineup().slice().sort((a, b) => a.wave - b.wave || a.order - b.order); for (const e of l.slice(DEF_MAX)) defPlace(e.wave, e.order, ''); return `Removed ${l.length - DEF_MAX} defender${l.length - DEF_MAX === 1 ? '' : 's'}; they're back in the freezer.`; }
+    });
+  });
+
   // fighters: bag overflow, duplicate or unknown items
   safe('fighters', () => {
     const seen = new Map;
@@ -6384,7 +6444,8 @@ function cmpPresentLabel(p) {
   if (p.type === 'MONEY') return `${Number(p.num || 0).toLocaleString()} Kill Coins`;
   if (p.type === 'SPIRIT') return `${Number(p.num || 0).toLocaleString()} SPLithium`;
   const v = p.val0;
-  const nm = (ITEM_INDEX[v] && itemDisplayName(v)) || (PT_INDEX[v] && PT_INDEX[v].name) || (SKL_INDEX[v] && 'Decal: ' + SKL_INDEX[v].name) || (MSR_INDEX[v] && MSR_INDEX[v].name) || (BST_INDEX[v] && BST_INDEX[v].name) || v || p.kind || p.type;
+  const ptLvl = PT_INDEX[v] && (p.type === 'PT' || String(p.type).startsWith('PTTP_')) ? ' +' + displayFromRaw(PT_INDEX[v], Number(p.val1) || 1) : '';
+  const nm = (ITEM_INDEX[v] && itemDisplayName(v)) || (PT_INDEX[v] && PT_INDEX[v].name + ptLvl) || (SKL_INDEX[v] && 'Decal: ' + SKL_INDEX[v].name) || (MSR_INDEX[v] && MSR_INDEX[v].name) || (BST_INDEX[v] && BST_INDEX[v].name) || v || p.kind || p.type;
   return `${nm}${p.num > 1 ? ' ×' + p.num : ''}`;
 }
 function cmpStorageLabel(cl, s) {
@@ -6670,7 +6731,7 @@ function wireCompare() { if (activeTab === 'compare') renderCompare(); }
 // lineups (fortorder) of the same game.
 // ---------------------------------------------------------------------------
 
-const DEF_WAVES = 2, DEF_SLOTS = 5;
+const DEF_WAVES = 2, DEF_SLOTS = 5, DEF_MAX = 9;   // 9 defenders at most: one wave has 5, the other 4
 let DEF_STATE = { root: null, msg: '' };
 
 function defConst(id, fb) { const r = arr(AP && AP.constInt).find(x => x.id === id); return r ? Number(r.value) : fb; }
@@ -6720,6 +6781,7 @@ function defPlace(wave, order, cid) {
     if (!defEligible(c)) return `${(c && c.name) || 'That fighter'} can't defend (${c ? c.state : 'not found'})`;
     // a fighter can only be in one place
     const prev = list.findIndex(e => e.cid === cid);
+    if (prev < 0 && !old && list.length >= DEF_MAX) return `Only ${DEF_MAX} fighters can defend (one wave 5, the other 4). Empty a place first.`;
     let carried = 0;
     if (prev >= 0) { carried = list[prev].is_equip_whistle ? 1 : 0; list.splice(prev, 1); }
     const at2 = list.findIndex(e => e.wave === wave && e.order === order);
@@ -6779,18 +6841,19 @@ function renderDefense() {
     <div class="capNote">Only alarms sold at your deepest floor (${maxFlr}F) can be picked; the rest are greyed out. Time and "Set on defender" need an alarm. The game gives ${Math.round(dayAlarm / 3600)} hours per purchase and holds at most ${Math.round(maxAlarm / 86400)} days. Buying a different alarm in game resets the time.</div></div>`;
   // lineup
   const fighters = arr(soul.chrs).filter(defEligible);
-  h += `<div class="subDetails" style="padding:10px; margin-bottom:12px;"><b>Defense Lineup</b> <span class="id">${list.length} defender${list.length === 1 ? '' : 's'}</span>
+  h += `<div class="subDetails" style="padding:10px; margin-bottom:12px;"><b>Defense Lineup</b> <span class="id">${list.length} of ${DEF_MAX} defenders</span>
     <div class="grid" style="margin-top:8px; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr));">`;
   for (let w = 0; w < DEF_WAVES; w++) {
     h += `<div class="field"><label>Wave ${w + 1}</label>`;
     for (let o = 0; o < DEF_SLOTS; o++) {
       const e = list.find(x => x.wave === w && x.order === o);
-      h += `<div style="display:flex; gap:6px; align-items:center; margin-bottom:4px;"><span class="id" style="width:18px;">${o + 1}.</span><select data-def-slot="${w}:${o}" style="flex:1; ${sel}"><option value="">— empty —</option>${fighters.map(c => `<option value="${c.cid}" ${e && e.cid === c.cid ? 'selected' : ''}>${escapeHtml(c.name || '?')} · ${escapeHtml(CLASS_NAMES[c.type] || c.type)} g${c.grade} Lv${c.lvl != null ? c.lvl : '?'}${c.state === 'GUARD' && !(e && e.cid === c.cid) ? ' (in another place)' : ''}</option>`).join('')}${e && !fighters.some(c => c.cid === e.cid) ? `<option value="${e.cid}" selected>${escapeHtml(e.cid)} (not a usable fighter)</option>` : ''}</select>${e && e.is_equip_whistle ? '<span class="badge" title="Alarm is set on this defender">alarm</span>' : ''}</div>`;
+      const full = !e && list.length >= DEF_MAX;
+      h += `<div style="display:flex; gap:6px; align-items:center; margin-bottom:4px;"><span class="id" style="width:18px;">${o + 1}.</span><select data-def-slot="${w}:${o}" ${full ? 'disabled title="9 defenders already set"' : ''} style="flex:1; ${sel}${full ? ' opacity:.4;' : ''}"><option value="">${full ? '— full (9 max) —' : '— empty —'}</option>${fighters.map(c => `<option value="${c.cid}" ${e && e.cid === c.cid ? 'selected' : ''}>${escapeHtml(c.name || '?')} · ${escapeHtml(CLASS_NAMES[c.type] || c.type)} g${c.grade} Lv${c.lvl != null ? c.lvl : '?'}${c.state === 'GUARD' && !(e && e.cid === c.cid) ? ' (in another place)' : ''}</option>`).join('')}${e && !fighters.some(c => c.cid === e.cid) ? `<option value="${e.cid}" selected>${escapeHtml(e.cid)} (not a usable fighter)</option>` : ''}</select>${e && e.is_equip_whistle ? '<span class="badge" title="Alarm is set on this defender">alarm</span>' : ''}</div>`;
     }
     h += '</div>';
   }
   h += `</div><div class="toolbar"><button class="subtle" id="def-clear">Clear lineup</button></div>
-    <div class="capNote">Pick from fighters in the freezer that aren't being played, dead or kidnapped. Choosing a fighter already in the lineup moves it. Removed defenders go back to normal.</div></div>`;
+    <div class="capNote">Up to ${DEF_MAX} defenders: one wave can have 5 and the other 4 (either way round). Once ${DEF_MAX} are set, the empty place is locked until you empty another. Pick from fighters in the freezer that aren't being played, dead or kidnapped. Choosing a fighter already in the lineup moves it. Removed defenders go back to normal.</div></div>`;
   // kidnap protection
   h += `<div class="subDetails" style="padding:10px;"><b>Kidnap protection</b>
     <div style="font-size:12px; margin:6px 0;">Protected until: ${when(soul.abduct_guard_time || 0)}</div>
@@ -6912,7 +6975,7 @@ const REVIEW_ONOFF = new Set([ 'vip_flag', 'automatic_renewal', 'is_fort_ready' 
 function reviewVal(k, v) {
   if (v === undefined || v === null || v === '') return '—';
   if (REVIEW_ONOFF.has(k)) return Number(v) ? 'On' : 'Off';
-  if (k === 'vip_type') return Number(v) === 1 ? '30-day Express Pass' : '1-Day Express / none';
+  if (k === 'vip_type') return Number(v) === 1 ? '1-Day Express' : '30-Day Express';
   if (reviewIsTime(k) && Number(v) > 1e8) return dtFmt(Number(v));
   if (typeof v === 'number') return v.toLocaleString();
   return String(v);
@@ -6966,7 +7029,7 @@ function reviewDiff(A, B, rawA, rawB) {
     acc.lines.push(k === 'crntcid' ? `${label}: ${chrName(a)} → ${chrName(b)}` : `${label}: ${reviewVal(k, a)} → ${reviewVal(k, b)}`);
   }
   const va = aS.vip || {}, vb = bS.vip || {};
-  const vipLabel = { vip_flag: 'VIP active', vip_type: 'VIP membership type', vip_pass_num: 'Multi-day passes', oneday_vip_pass_num: 'One-day passes', expired_time: 'VIP expires', automatic_renewal: 'VIP auto-renew' };
+  const vipLabel = { vip_flag: 'Express member', vip_type: 'Express Pass kind', vip_pass_num: '30-Day passes held', oneday_vip_pass_num: '1-Day passes held', expired_time: 'VIP expires', automatic_renewal: 'VIP auto-renew' };
   for (const k of new Set(Object.keys(va).concat(Object.keys(vb)))) if (JSON.stringify(va[k]) !== JSON.stringify(vb[k])) acc.lines.push(`${vipLabel[k] || 'VIP ' + k}: ${reviewVal(k, va[k])} → ${reviewVal(k, vb[k])}`);
   // weapon mastery
   const ma = {}, mb = {};
@@ -7032,6 +7095,11 @@ function reviewDiff(A, B, rawA, rawB) {
     const r = PT_INDEX[ptid], lv = t => t ? '+' + displayFromRaw(r, t) : 'not researched';
     rs.lines.push(`${(r && r.name) || ptid}: ${lv(ta)} → ${lv(tb)}`);
   }
+  const sk = sec('Armor Skins (unlocked by R&D at +4)');
+  const skA = armorSkinsUnlocked(ra), skB = armorSkinsUnlocked(rb);
+  const skNew = [ ...skB ].filter(x => !skA.has(x)).map(x => (PT_INDEX[x] || {}).name || x), skGone = [ ...skA ].filter(x => !skB.has(x)).map(x => (PT_INDEX[x] || {}).name || x);
+  if (skNew.length) sk.lines.push(`Newly unlocked (${skNew.length}): ${skNew.join(', ')}`);
+  if (skGone.length) sk.lines.push(`No longer unlocked (${skGone.length}): ${skGone.join(', ')}`);
   // waiting room
   const hb = sec('Waiting Room');
   const hA = {}, hB = {};

@@ -25,7 +25,7 @@ PSN saves have to be decrypted first.
 |---|---|
 | Account | Account name, TDM points/rank, Kill Coins and SPLithium with their bank levels |
 | Fighters | Fighter Freezer: fighter stats, levels, decals, bags and inventories; equipped weapons (all 6 weapon slots and which one is in each hand) and armor; raise the freezer level (adds hangers), add a new fighter into an empty hanger (the way the Fighter Depot does), delete a fighter the way the game does, and recover a dead fighter (Hater) for free |
-| Research | Blueprint research (Chokufunsha) unlocks and levels |
+| Research | Blueprint research (Chokufunsha) unlocks and levels. Armor researched to +4 unlocks its Armor Skin, as in the game |
 | Decals | Skill decal counts |
 | **Stews** | Mushroom Stew decal queue: see upcoming pulls, dedupe, move a rarity to the front, stack, reroll, clear, undo |
 | **Mystery Bags** | Lost Bags from Tokyo Death Metro: see what each rarity will give, set any slot, fill all, or reroll from the game's odds |
@@ -34,12 +34,12 @@ PSN saves have to be decrypted first.
 | **Screenshots** | View and export Kiwako's large-stamp photos stored in the save (view/export only; they can't be deleted because the game refers to them) |
 | **Dead Fighters** | Browse the dead fighter archive: yours and other players', when and where they died, Kill Coins carried, and stats, gear and decals when the game kept them (view only) |
 | **Dates** | Every date in the save, with fixes for time-jump damage (future dates, dates past 2038, overflowed negative dates) |
-| Storage | Storage Box contents and capacity |
-| Rewards | Reward Box items |
+| Storage | Storage Box contents and capacity; repair and refill ammo on everything stored |
+| Rewards | Reward Box items, including weapons and armor at a chosen in-game +n |
 | **Quests** | Current quests (progress, complete, drop), take a new quest, and quest history (times taken / cleared) |
-| VIP | VIP Express Pass status |
+| VIP | Express Pass: None, 1-Day or 30-Day, passes held, expiry, auto-renew |
 | **Compare** | Load a second save, see what differs, and copy ticked parts into the save you're editing (account values, fighters with their gear, research, decal stock, Waiting Room decorations, Reward Box and Storage items). You can also choose which account the downloaded save belongs to, to move progress onto another account |
-| **Defense** | Tokyo Death Metro defense: set the lineup (2 waves, 5 places each) from your freezer fighters, choose the defense alarm and which defender carries it, max the alarm time (5 days) and kidnap protection (12 hours). Only alarms unlocked at your deepest floor can be picked, and the tab stays locked until Tokyo Death Metro is open |
+| **Defense** | Tokyo Death Metro defense: set the lineup (up to 9 defenders: one wave 5, the other 4) from your freezer fighters, choose the defense alarm and which defender carries it, max the alarm time (5 days) and kidnap protection (12 hours). Only alarms unlocked at your deepest floor can be picked, and the tab stays locked until Tokyo Death Metro is open |
 
 ### Save check
 
