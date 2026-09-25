@@ -15,7 +15,7 @@ You can also download `index.html` and open it straight from your PC.
    The browser remembers it after the first time. Use **Forget masters.db** to stop that.
 4. Click **2. Load your save** and pick your `.sav` from
    `...\steamapps\common\LET IT DIE\Savedata\`.
-5. Make your changes, then click **Download .sav**. Put the downloaded file in place of your save.
+5. Make your changes, then click **Download .sav**. A list of everything you changed appears first so you can check it; you can also save a backup of the original from there. The file downloads as `brggame_<date>_<time>.sav` so older downloads are never replaced. Rename it to your save's name (e.g. `brggame.sav`) and put it in place of your save.
 
 PSN saves have to be decrypted first.
 

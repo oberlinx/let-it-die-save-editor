@@ -258,8 +258,8 @@
     <button class="subtle" id="btn-forget-masters" style="display:none;" title="Stop loading masters.db automatically in this browser">Forget masters.db</button>
     <label class="loadchip" id="chip-save"><span class="dot"></span>2. Load your save (.sav or .json)<input type="file" id="file-save" accept=".sav,.json"></label>
     <div class="sep"></div>
-    <button class="action" id="btn-download-sav" disabled title="Saves your edits as brggame.sav">⬇ Download .sav</button>
-    <button class="action" id="btn-download-json" disabled title="Saves your edits as brggame.json (uncompressed)">⬇ Download .json</button>
+    <button class="action" id="btn-download-sav" disabled title="Review your changes, then save them as brggame_date_time.sav">⬇ Download .sav</button>
+    <button class="action" id="btn-download-json" disabled title="Review your changes, then save them as brggame_date_time.json (uncompressed)">⬇ Download .json</button>
     <div class="psnNote">PSN saves must first be decrypted. Use <a href="https://garlicsaves.com" target="_blank" rel="noopener">garlicsaves.com</a> or read <a href="https://discord.com/channels/256677044174323713/1544630372208480316/1547464159804002397" target="_blank" rel="noopener">this guide</a></div>
   </div>
 </header>
@@ -1497,6 +1497,7 @@ document.getElementById('file-save').addEventListener('change', async e => {
     if (soulEntry && soulEntry.obj && soulEntry.obj.__rawSavRoot) {
       RAW_SAV_ROOT = soulEntry.obj.__rawSavRoot;
       RAW_SAV_MAIN_UID = soulEntry.obj.__rawSavMainUid;
+      reviewSnapshot(soulEntry.file);
       document.getElementById('btn-download-sav').disabled = false;
       document.getElementById('btn-download-json').disabled = false;
     }
@@ -6815,6 +6816,279 @@ function restoreEmptyShapes(built, raw) {
   return built;
 }
 
+// ---------------------------------------------------------------------------
+// REVIEW BEFORE DOWNLOAD + dated file names.
+// At load the save is kept as text (ORIG_SAVE). Download builds the new save,
+// runs both through the same adapter the editor uses and lists what differs,
+// so a slip (wrong fighter, wrong field) shows up before the file is written.
+// Files are named brggame_YYYY-MM-DD_HHMM so older downloads are never replaced.
+// ---------------------------------------------------------------------------
+
+let ORIG_SAVE = { root: null, text: '', file: null, name: '' };
+function reviewSnapshot(file) {
+  ORIG_SAVE = { root: RAW_SAV_ROOT, text: RAW_SAV_ROOT ? JSON.stringify(RAW_SAV_ROOT) : '', file: file || null, name: file ? file.name : '' };
+}
+function reviewAdapt(raw) {
+  const keep = RAW_EMPTY_SHAPES;
+  try { return adaptFullDumpToLegacyShape(raw); } finally { RAW_EMPTY_SHAPES = keep; }
+}
+function reviewStamp(d) {
+  d = d || new Date();
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}`;
+}
+function reviewFileName(ext, stamp) { return `brggame_${stamp || reviewStamp()}.${ext}`; }
+
+// the root that the download buttons write
+function buildDownloadRoot() {
+  normalizePresents(SAVE.presents);
+  questOrdForSave();
+  return applyAccountChoice(restoreEmptyShapes(applyDateRules(buildRawSavRootFromSave(SAVE, RAW_SAV_ROOT, RAW_SAV_MAIN_UID)), RAW_SAV_ROOT));
+}
+
+const REVIEW_SOUL_LABELS = {
+  free_money: 'Kill Coins', spirit: 'SPLithium', safe_level: 'Kill Coin bank level', spirit_tank_level: 'SPLithium bank level',
+  bloodnium_point: 'Bloodnium', recycle_point: 'Recycle Points', rank: 'Rank', rank_point: 'Rank points', tdm_point: 'TDM points',
+  tdm_rank: 'TDM rank', freezer_level: 'Freezer level', crntcid: 'Current fighter', whistle_id: 'Defense alarm',
+  whistle_limit: 'Defense alarm runs until', abduct_guard_time: 'Kidnap protection until', is_fort_ready: 'Tokyo Death Metro open',
+  paid_money: 'Paid Kill Coins', last_rcv_deathbox_time: 'Last death box received'
+};
+const REVIEW_PART_LABELS = {
+  quests: 'Quests', quest: 'Quests', all_quests: 'Quests', mysterybag: 'Mystery Bags (Lost Bags)', deathbox: 'Death Boxes',
+  fortsetting: 'Defense lineup', prison: 'Kidnapped fighters', screenshot: 'Screenshots', dchrs: 'Dead fighters',
+  researchstamp: 'Research stamps', mail: 'Mail', radio: 'Radio', unlockfighter: 'Fighter unlocks', armorskin: 'Armor skins',
+  openelvflr: 'Elevator stops', msrbook: 'Mushroom book', bstbook: 'Beast book', magazine: 'Magazines', waiting: 'Waiting Room',
+  playlog: 'Play log counters', hitchart: 'Hit chart', teams: 'Teams', dests: 'Destinations', jointeams: 'Teams',
+  terms: 'Terms', relationship: 'Relationships', hvntrinfo: 'Heaven treasure', areaflag: 'Area flags', areaescflag: 'Area flags',
+  areamapflags: 'Map flags'
+};
+const REVIEW_KEY_WORDS = { tdm: 'TDM', hp: 'HP', exp: 'EXP', spl: 'SPL', vip: 'VIP', cnt: 'count', num: 'number', flg: 'flag' };
+function reviewKeyLabel(k) {
+  const w = String(k).split('_').filter(Boolean).map(x => REVIEW_KEY_WORDS[x] || x);
+  const t = w.join(' ');
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+const reviewIsTime = k => /(_time|_limit|expire|expired_time)$/.test(k);
+const REVIEW_ONOFF = new Set([ 'vip_flag', 'automatic_renewal', 'is_fort_ready' ]);
+function reviewVal(k, v) {
+  if (v === undefined || v === null || v === '') return '—';
+  if (REVIEW_ONOFF.has(k)) return Number(v) ? 'On' : 'Off';
+  if (k === 'vip_type') return Number(v) === 1 ? '30-day Express Pass' : '1-Day Express / none';
+  if (reviewIsTime(k) && Number(v) > 1e8) return dtFmt(Number(v));
+  if (typeof v === 'number') return v.toLocaleString();
+  return String(v);
+}
+function reviewPartLabel(p) { const r = PT_INDEX[p.ptid]; return r ? `${r.name} +${displayFromRaw(r, p.lvl)}` : p.ptid; }
+function reviewInv(c) {
+  const m = new Map();
+  for (const p of arr(c && c.pspts)) m.set(p.eptid, reviewPartLabel(p));
+  for (const i of arr(c && c.psitems)) m.set(i.eitemid, itemDisplayName(i.itemId));
+  for (const x of arr(c && c.psmsrs)) m.set(x.emsrid, msrDisplayName(x.msrid, x.cooked));
+  for (const x of arr(c && c.psbsts)) m.set(x.ebstid, bstDisplayName(x.bstid, x.cooked));
+  return m;
+}
+// "Dragon Buster Sword S +2 ×3, Ammo ×2"
+function reviewGroup(labels) {
+  const n = new Map();
+  for (const l of labels) n.set(l, (n.get(l) || 0) + 1);
+  return [ ...n ].map(([l, c]) => c > 1 ? `${l} ×${c}` : l).join(', ');
+}
+function reviewMapDiff(a, b) {
+  const added = [], removed = [], changed = [];
+  for (const [k, v] of b) { if (!a.has(k)) added.push(v); else if (a.get(k) !== v) changed.push(`${a.get(k)} → ${v}`); }
+  for (const [k, v] of a) if (!b.has(k)) removed.push(v);
+  return { added, removed, changed };
+}
+function reviewDecalName(id) { return (SKL_INDEX[id] || {}).name || id; }
+
+function reviewDiff(A, B, rawA, rawB) {
+  const S = [];   // sections: {title, lines[]}
+  const sec = title => { const s = { title, lines: [] }; S.push(s); return s; };
+  const aS = A.soul || {}, bS = B.soul || {};
+  // account and other single values
+  const acc = sec('Account');
+  const uA = String((rawA.user || {}).uid || ''), uB = String((rawB.user || {}).uid || '');
+  if (uA !== uB) acc.lines.push(`Attached to account: ${(rawA.user || {}).nm || uA} → ${(rawB.user || {}).nm || uB}`);
+  const chrName = cid => { const c = arr(bS.chrs).concat(arr(aS.chrs)).find(x => x.cid === cid); return c ? c.name || cid : cid || '—'; };
+  const done = new Set([ 'chrs', 'chrslots', 'psskls', 'hubcustom', 'mstlvl', 'vip', 'modified', 'uid' ]);
+  for (const k of new Set(Object.keys(aS).concat(Object.keys(bS)))) {
+    if (done.has(k)) continue;
+    const a = aS[k], b = bS[k];
+    if ((a && typeof a === 'object') || (b && typeof b === 'object')) continue;
+    if (a === b || (a == null && b === '') || (b == null && a === '')) continue;
+    const label = REVIEW_SOUL_LABELS[k] || reviewKeyLabel(k);
+    acc.lines.push(k === 'crntcid' ? `${label}: ${chrName(a)} → ${chrName(b)}` : `${label}: ${reviewVal(k, a)} → ${reviewVal(k, b)}`);
+  }
+  const va = aS.vip || {}, vb = bS.vip || {};
+  const vipLabel = { vip_flag: 'VIP active', vip_type: 'VIP membership type', vip_pass_num: 'Multi-day passes', oneday_vip_pass_num: 'One-day passes', expired_time: 'VIP expires', automatic_renewal: 'VIP auto-renew' };
+  for (const k of new Set(Object.keys(va).concat(Object.keys(vb)))) if (JSON.stringify(va[k]) !== JSON.stringify(vb[k])) acc.lines.push(`${vipLabel[k] || 'VIP ' + k}: ${reviewVal(k, va[k])} → ${reviewVal(k, vb[k])}`);
+  // weapon mastery
+  const ma = {}, mb = {};
+  for (const m of arr(aS.mstlvl)) ma[m.ptarmtp] = m.lvl;
+  for (const m of arr(bS.mstlvl)) mb[m.ptarmtp] = m.lvl;
+  const mst = sec('Weapon Mastery');
+  const mstName = id => { const r = arr(AP && AP.ptarmtps).find(x => x.id === id); return (r && resolveName(r.name)) || id; };
+  for (const id of new Set(Object.keys(ma).concat(Object.keys(mb)))) if ((ma[id] || 1) !== (mb[id] || 1)) mst.lines.push(`${mstName(id)}: Lv ${ma[id] || 1} → Lv ${mb[id] || 1}`);
+  // fighters
+  const fs = sec('Fighters');
+  const byA = new Map(arr(aS.chrs).map(c => [ c.cid, c ])), byB = new Map(arr(bS.chrs).map(c => [ c.cid, c ]));
+  for (const [cid, c] of byB) if (!byA.has(cid)) fs.lines.push(`Added: ${c.name || '?'} (${cmpChrSummary(c)})`);
+  for (const [cid, c] of byA) if (!byB.has(cid)) fs.lines.push(`Removed: ${c.name || '?'} (${cmpChrSummary(c)})`);
+  const STATES = { FREE: 'in the freezer', GUARD: 'on defense', USE: 'being played', ENEMY: 'dead (Hater)', DUMMY: 'dummy' };
+  for (const [cid, b] of byB) {
+    const a = byA.get(cid);
+    const noUid = x => JSON.stringify(x, (k, v) => k === 'uid' ? undefined : v);
+    if (!a || noUid(a) === noUid(b)) continue;
+    const ch = [];
+    if (a.name !== b.name) ch.push(`name ${a.name} → ${b.name}`);
+    if (a.type !== b.type) ch.push(`class ${CLASS_NAMES[a.type] || a.type} → ${CLASS_NAMES[b.type] || b.type}`);
+    if (a.grade !== b.grade) ch.push(`grade ${a.grade} → ${b.grade}`);
+    if ((a.limit_break || 0) !== (b.limit_break || 0)) ch.push(`limit break ${a.limit_break || 0} → ${b.limit_break || 0}`);
+    if (a.lvl !== b.lvl) ch.push(`level ${a.lvl} → ${b.lvl}`);
+    if (a.state !== b.state) ch.push(`${STATES[a.state] || a.state} → ${STATES[b.state] || b.state}`);
+    const ba = a.bodylvl || {}, bb = b.bodylvl || {};
+    const st = [ 'hp', 'str', 'dex', 'vit', 'stm', 'luk' ].filter(k => (ba[k] || 1) !== (bb[k] || 1)).map(k => `${k.toUpperCase()} ${ba[k] || 1}→${bb[k] || 1}`);
+    if ((ba.skill || 0) !== (bb.skill || 0)) st.push(`decal slots +${ba.skill || 0}→+${bb.skill || 0}`);
+    if ((ba.bag || 0) !== (bb.bag || 0)) st.push(`Death Bag +${ba.bag || 0}→+${bb.bag || 0}`);
+    if ((a.rage || 0) !== (b.rage || 0)) st.push(`rage +${a.rage || 0}→+${b.rage || 0}`);
+    if (st.length) ch.push(st.join(', '));
+    const inv = reviewMapDiff(reviewInv(a), reviewInv(b));
+    if (inv.added.length) ch.push(`items added: ${reviewGroup(inv.added)}`);
+    if (inv.removed.length) ch.push(`items removed: ${reviewGroup(inv.removed)}`);
+    if (inv.changed.length) ch.push(`items changed: ${inv.changed.join(', ')}`);
+    const da = arr(a.eqskls).map(e => e.sklid), db = arr(b.eqskls).map(e => e.sklid);
+    const dAdd = db.filter(x => { const i = da.indexOf(x); if (i >= 0) { da.splice(i, 1); return false; } return true; });
+    if (dAdd.length) ch.push(`decals put on: ${reviewGroup(dAdd.map(reviewDecalName))}`);
+    if (da.length) ch.push(`decals taken off: ${reviewGroup(da.map(reviewDecalName))}`);
+    const gear = c => JSON.stringify([ c.armslots || {}, arr(c.eqpts).map(e => [ e.site, e.eptid, e.arm_slot ]).sort() ]);
+    if (gear(a) !== gear(b)) ch.push('equipped gear changed');
+    if (!ch.length) {
+      const seen = new Set([ 'uid', 'name', 'type', 'grade', 'limit_break', 'lvl', 'state', 'bodylvl', 'rage', 'pspts', 'psitems', 'psmsrs', 'psbsts', 'eqskls', 'armslots', 'eqpts' ]);
+      const keys = Object.keys(Object.assign({}, a, b)).filter(k => !seen.has(k) && noUid(a[k]) !== noUid(b[k]));
+      ch.push(keys.length ? 'changed: ' + keys.map(reviewKeyLabel).join(', ') : 'other details changed');
+    }
+    fs.lines.push(`${b.name || '?'}: ${ch.join('; ')}`);
+  }
+  // decal stock
+  const dk = sec('Decal stock');
+  const ka = {}, kb = {};
+  for (const s of arr(aS.psskls)) ka[s.id] = s.cnt || 0;
+  for (const s of arr(bS.psskls)) kb[s.id] = s.cnt || 0;
+  for (const id of new Set(Object.keys(ka).concat(Object.keys(kb)))) if ((ka[id] || 0) !== (kb[id] || 0)) dk.lines.push(`${reviewDecalName(id)}: ${ka[id] || 0} → ${kb[id] || 0}`);
+  // research
+  const rs = sec('Research');
+  const ra = arr(A.user_research), rb = arr(B.user_research);
+  for (const ptid of new Set(ra.concat(rb).map(r => r.ptid))) {
+    const ta = cmpTopFinished(ra, ptid), tb = cmpTopFinished(rb, ptid);
+    if (ta === tb) continue;
+    const r = PT_INDEX[ptid], lv = t => t ? '+' + displayFromRaw(r, t) : 'not researched';
+    rs.lines.push(`${(r && r.name) || ptid}: ${lv(ta)} → ${lv(tb)}`);
+  }
+  // waiting room
+  const hb = sec('Waiting Room');
+  const hA = {}, hB = {};
+  for (const e of arr(aS.hubcustom)) hA[e.cstmid] = e;
+  for (const e of arr(bS.hubcustom)) hB[e.cstmid] = e;
+  const hubName = id => { const m = arr(AP && AP.hubCustom).find(x => x.id === id); return (m && resolveName(m.name)) || id; };
+  const hubState = e => !e ? 'not owned' : (Number(e.flg) & 4) ? 'in use' : hubOwned(e) ? 'owned' : 'not owned';
+  for (const id of new Set(Object.keys(hA).concat(Object.keys(hB)))) if (hubState(hA[id]) !== hubState(hB[id])) hb.lines.push(`${hubName(id)}: ${hubState(hA[id])} → ${hubState(hB[id])}`);
+  // reward box
+  const rw = sec('Reward Box');
+  const pa = new Map(arr(A.presents).map(p => [ p.pid, cmpPresentLabel(p) ])), pb = new Map(arr(B.presents).map(p => [ p.pid, cmpPresentLabel(p) ]));
+  const pd = reviewMapDiff(pa, pb);
+  if (pd.added.length) rw.lines.push(`Added: ${reviewGroup(pd.added)}`);
+  if (pd.removed.length) rw.lines.push(`Removed: ${reviewGroup(pd.removed)}`);
+  // storage
+  const sg = sec('Storage Box');
+  const sl = cl => { const m = new Map(); for (const s of arr(cl && cl.slots)) { const e = cmpSlotEid(s); if (e) m.set(e, cmpStorageLabel(cl, s) || 'item'); } return m; };
+  const sd = reviewMapDiff(sl(A.cl), sl(B.cl));
+  if (sd.added.length) sg.lines.push(`Added (${sd.added.length}): ${reviewGroup(sd.added)}`);
+  if (sd.removed.length) sg.lines.push(`Removed (${sd.removed.length}): ${reviewGroup(sd.removed)}`);
+  if (sd.changed.length) sg.lines.push(`Changed: ${sd.changed.join(', ')}`);
+  if (arr(A.cl && A.cl.slots).length !== arr(B.cl && B.cl.slots).length) sg.lines.push(`Capacity: ${arr(A.cl && A.cl.slots).length} → ${arr(B.cl && B.cl.slots).length}`);
+  // defense lineup (named)
+  const df = sec('Defense');
+  const fl = x => arr(x).map(e => `W${Number(e.wave) + 1}#${Number(e.order) + 1} ${chrName(e.cid)}${Number(e.is_equip_whistle) ? ' (alarm)' : ''}`).sort().join(', ') || 'nobody';
+  if (fl(A.fortsetting) !== fl(B.fortsetting)) df.lines.push(`Lineup: ${fl(A.fortsetting)} → ${fl(B.fortsetting)}`);
+  // everything else: which parts changed
+  const ot = sec('Other parts');
+  const namedOther = new Set();
+  const note = k => { const l = REVIEW_PART_LABELS[k] || k; if (!namedOther.has(l)) { namedOther.add(l); ot.lines.push(`${l} changed`); } };
+  for (const k of new Set(Object.keys(aS).concat(Object.keys(bS)))) {
+    if (done.has(k)) continue;
+    const a = aS[k], b = bS[k];
+    if (!((a && typeof a === 'object') || (b && typeof b === 'object'))) continue;
+    if (JSON.stringify(a) !== JSON.stringify(b)) note(k);
+  }
+  for (const k of [ 'all_quests', 'prison', 'playlog', 'hitchart', 'teams', 'dests' ]) if (JSON.stringify(A[k]) !== JSON.stringify(B[k])) note(k);
+  if (DATE_RULES.length) ot.lines.push('Dates fixed by the Dates tab rules');
+  return S.filter(s => s.lines.length);
+}
+
+function reviewClose() { const o = document.getElementById('review-overlay'); if (o) o.remove(); document.removeEventListener('keydown', reviewKey); }
+function reviewKey(e) { if (e.key === 'Escape') reviewClose(); }
+
+async function reviewDownloadOriginal(stamp) {
+  const nm = `brggame_backup_${stamp}.sav`;
+  try {
+    if (ORIG_SAVE.file && /\.sav$/i.test(ORIG_SAVE.file.name)) triggerDownload(await ORIG_SAVE.file.arrayBuffer(), nm, 'application/octet-stream');
+    else triggerDownload(await buildBrgSav(JSON.parse(ORIG_SAVE.text)), nm, 'application/octet-stream');
+    toast(`Saved a backup of the save as loaded: ${nm}`);
+  } catch (err) {
+    try { triggerDownload(await buildBrgSav(JSON.parse(ORIG_SAVE.text)), nm, 'application/octet-stream'); toast(`Saved a backup of the save as loaded: ${nm}`); }
+    catch (e2) { toast('Could not make the backup: ' + e2.message, true); }
+  }
+}
+
+async function reviewAndDownload(kind) {
+  if (!SAVE || !RAW_SAV_ROOT) { toast('Load a save first', true); return; }
+  let root;
+  try { root = buildDownloadRoot(); } catch (err) { toast(`Failed to build .${kind}: ` + err.message, true); return; }
+  let sections = null, why = '';
+  try {
+    const rawA = JSON.parse(ORIG_SAVE.root === RAW_SAV_ROOT && ORIG_SAVE.text ? ORIG_SAVE.text : JSON.stringify(RAW_SAV_ROOT));
+    const rawB = JSON.parse(JSON.stringify(root));
+    sections = reviewDiff(reviewAdapt(JSON.parse(JSON.stringify(rawA))), reviewAdapt(rawB), rawA, rawB);
+  } catch (err) { why = err.message; console.warn('review failed', err); }
+  const stamp = reviewStamp(), fname = reviewFileName(kind, stamp);
+  const total = sections ? sections.reduce((n, s) => n + s.lines.length, 0) : 0;
+  reviewClose();
+  const ov = document.createElement('div');
+  ov.id = 'review-overlay';
+  ov.style.cssText = 'position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,.7); display:flex; align-items:flex-start; justify-content:center; padding:40px 16px; overflow:auto;';
+  const body = sections === null
+    ? `<div class="capNote">The change list couldn't be made (${escapeHtml(why)}). The download itself is not affected.</div>`
+    : !sections.length ? `<div class="capNote" style="margin:0;">No changes since you loaded this save.</div>`
+    : sections.map(s => `<details ${s.lines.length <= 12 ? 'open' : ''} style="margin-bottom:8px;"><summary style="cursor:pointer;"><b>${escapeHtml(s.title)}</b> <span class="id">(${s.lines.length})</span></summary>
+        <ul style="margin:6px 0 0 18px; padding:0; font-size:12px; line-height:1.6;">${s.lines.map(l => `<li>${escapeHtml(l)}</li>`).join('')}</ul></details>`).join('');
+  ov.innerHTML = `<section class="block" style="max-width:860px; width:100%; margin:0;">
+    <div class="block-head"><div><div class="eyebrow">Before you download</div><h2>Review changes</h2></div><div class="id">${sections ? total + ' change' + (total === 1 ? '' : 's') : ''}</div></div>
+    <div class="block-body">
+      <div class="capNote" style="margin-top:0;">Everything below differs from the save as you loaded it${ORIG_SAVE.name ? ` (${escapeHtml(ORIG_SAVE.name)})` : ''}. Check it's what you meant before putting the file in the game.</div>
+      <div style="max-height:55vh; overflow:auto; padding-right:6px;">${body}</div>
+      <div class="capNote">The file is named <b>${escapeHtml(fname)}</b> so earlier downloads are never replaced. Rename it to the game's save name (e.g. <b>brggame.sav</b>) when you copy it into the game's save folder, and keep the original somewhere safe.</div>
+      <div class="toolbar" style="margin-top:10px;">
+        <button class="action" id="review-go">⬇ Download ${escapeHtml(fname)}</button>
+        <button class="subtle" id="review-backup" title="The save exactly as you loaded it">Download a backup of the original</button>
+        <button class="subtle" id="review-cancel">Cancel</button>
+      </div>
+    </div>
+  </section>`;
+  document.body.appendChild(ov);
+  ov.addEventListener('click', e => { if (e.target === ov) reviewClose(); });
+  document.addEventListener('keydown', reviewKey);
+  document.getElementById('review-cancel').addEventListener('click', reviewClose);
+  document.getElementById('review-backup').addEventListener('click', () => reviewDownloadOriginal(stamp));
+  document.getElementById('review-go').addEventListener('click', async () => {
+    try {
+      if (kind === 'sav') triggerDownload(await buildBrgSav(root), fname, 'application/octet-stream');
+      else triggerDownload(JSON.stringify(root), fname, 'application/json');
+      toast(`Downloaded ${fname}`);
+      reviewClose();
+    } catch (err) { toast(`Failed to build .${kind}: ` + err.message, true); }
+  });
+}
+
 function triggerDownload(data, filename, mime) {
   const blob = new Blob([ data ], {
     type: mime
@@ -6829,37 +7103,8 @@ function triggerDownload(data, filename, mime) {
   setTimeout(() => URL.revokeObjectURL(url), 1e3);
 }
 
-document.getElementById('btn-download-sav').addEventListener('click', async () => {
-  if (!SAVE || !RAW_SAV_ROOT) {
-    toast('Load a save first', true);
-    return;
-  }
-  try {
-    normalizePresents(SAVE.presents);
-    questOrdForSave();
-    const root = applyAccountChoice(restoreEmptyShapes(applyDateRules(buildRawSavRootFromSave(SAVE, RAW_SAV_ROOT, RAW_SAV_MAIN_UID)), RAW_SAV_ROOT));
-    triggerDownload(await buildBrgSav(root), 'brggame.sav', 'application/octet-stream');
-    toast('Downloaded brggame.sav');
-  } catch (err) {
-    toast('Failed to build .sav: ' + err.message, true);
-  }
-});
-
-document.getElementById('btn-download-json').addEventListener('click', () => {
-  if (!SAVE || !RAW_SAV_ROOT) {
-    toast('Load a save first', true);
-    return;
-  }
-  try {
-    normalizePresents(SAVE.presents);
-    questOrdForSave();
-    const root = applyAccountChoice(restoreEmptyShapes(applyDateRules(buildRawSavRootFromSave(SAVE, RAW_SAV_ROOT, RAW_SAV_MAIN_UID)), RAW_SAV_ROOT));
-    triggerDownload(JSON.stringify(root), 'brggame.json', 'application/json');
-    toast('Downloaded brggame.json');
-  } catch (err) {
-    toast('Failed to build .json: ' + err.message, true);
-  }
-});
+document.getElementById('btn-download-sav').addEventListener('click', () => reviewAndDownload('sav'));
+document.getElementById('btn-download-json').addEventListener('click', () => reviewAndDownload('json'));
 </script>
 </body>
 </html>
