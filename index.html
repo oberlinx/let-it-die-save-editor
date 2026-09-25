@@ -2263,6 +2263,34 @@ function recomputeLevel(chr) {
   chr.bodylvl.lvl = chr.lvl;
 }
 
+function fighterOpts(lo, hi, cur, label) {
+  let h = '';
+  for (let v = lo; v <= hi; v++) h += `<option value="${v}" ${v === cur ? 'selected' : ''}>${escapeHtml(label ? label(v) : String(v))}</option>`;
+  return h;
+}
+// One stat as a dropdown of the legal values for this grade/limit break, with its own Max button.
+function fighterStatField(label, key, lo, hi, cur, base) {
+  const sel = 'flex:1; min-width:0; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);';
+  const atMax = cur >= hi;
+  return `<div class="field"><label>${escapeHtml(label)} <span class="id">(${lo === hi ? hi + ', fixed' : lo + '-' + hi})</span></label>
+    <div style="display:flex; gap:6px;"><select class="chr-stat" data-stat="${key}" ${base != null ? `data-base="${base}"` : ''} data-floor="${lo}" data-cap="${hi}" style="${sel}">${fighterOpts(lo, hi, cur)}</select>
+    <button class="subtle chr-stat-max" data-stat="${key}" ${atMax ? 'disabled style="opacity:.35; cursor:default;"' : ''} title="${atMax ? 'Already at the max' : 'Set to ' + hi}">Max</button></div></div>`;
+}
+// Totals as the game shows them, for "what changed" messages.
+function fighterTotals(chr) {
+  const R = fighterRanges(chr.type || 'BAL', chr.grade != null ? chr.grade : 1, chr.limit_break || 0), bl = chr.bodylvl || {};
+  const t = {};
+  for (const k of [ 'hp', 'str', 'dex', 'vit', 'stm', 'luk' ]) t[k.toUpperCase()] = bl[k] || 1;
+  t['Decal Slots'] = R.skillBase + (bl.skill || 0);
+  t['Death Bag'] = R.bagBase + (bl.bag || 0);
+  t['Rage Bars'] = R.rageBase + (chr.rage || 0);
+  return t;
+}
+function fighterFitNote(before, chr) {
+  const after = fighterTotals(chr), ch = Object.keys(after).filter(k => before[k] !== after[k]).map(k => `${k} ${before[k]}→${after[k]}`);
+  return ch.length ? 'Fitted to the new range: ' + ch.join(', ') : '';
+}
+
 function clampStatLevelAndRecalc(chr) {
   const type = chr.type || 'BAL', grade = chr.grade != null ? chr.grade : 1;
   const maxLb = maxLimitBreakFor(type, grade);
@@ -2575,7 +2603,7 @@ function blockCharacters() {
   const rageTotal = rageTotalFor(chr, R);
   const rageLocked = R.rageFloor === R.rageCap;
   const combat = combatStatsFor(chr, type, grade);
-  return `<section class="block">\n    <div class="block-head">\n      <div><div class="eyebrow">Fighters</div><h2>Fighter Freezer</h2></div>\n      <div style="display:flex; gap:6px; align-items:center;">\n        <span style="font-size:11px; color:var(--text-dim);">${FZ.slots} hangers · ${freeHangers().length} empty</span>\n        <select id="new-char-body" ${atCap ? 'disabled' : ''} title="Body for the new fighter" style="background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:4px 6px; font-family:var(--mono); font-size:11.5px;">${arr(AP && AP.bodies).map(b => `<option value="${b.id}">${b.gender === 'GENDER_MALE' ? 'Male' : 'Female'} ${String(b.id).slice(-1)}</option>`).join('')}</select>\n        <button class="subtle" id="btn-add-char" ${atCap ? 'disabled title="No empty hanger in the freezer."' : 'title="Adds a fighter the same way the Fighter Depot does, into the first empty hanger."'}>+ Add Fighter</button>\n        <button class="subtle" id="btn-del-char" ${fighterDeleteBlock(chr) ? `disabled title="${escapeHtml(fighterDeleteBlock(chr))}"` : 'title="Delete the selected fighter, the way the game does"'}>Delete ${escapeHtml(chr ? chr.name || 'fighter' : 'fighter')}</button>\n      </div>\n    </div>\n    <div class="block-body">\n      <div class="grid" style="margin-bottom:12px;">\n        <div class="field"><label>Freezer Level</label><select id="freezer-level" style="width:100%; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);">${FZ.level == null ? `<option selected>? (${FZ.slots} hangers)</option>` : ''}${arr(AP && AP.freezer).map(r => `<option value="${r.number}" ${r.number === FZ.level ? 'selected' : ''}>Level ${r.number} (${r.count} hangers)</option>`).join('')}</select></div>\n        <div class="field" style="display:flex; align-items:end;"><button class="subtle" id="freezer-max" ${FZ.slots >= FZ.max ? 'disabled' : ''}>Max (${FZ.max} hangers)</button></div>\n      </div>\n      <div class="capNote" style="margin-top:0;">Your freezer has ${FZ.slots} hangers, ${freeHangers().length} empty. ${atCap ? 'Every hanger is in use, so a fighter can\'t be added.' : 'New fighters are added the way the Fighter Depot adds them: grade 1 All-rounder at level 1, into the first empty hanger. Change their class, grade and stats below after adding.'} Raising the freezer level adds empty hangers; it can only go down if the hangers it removes are empty.</div>\n      <div class="charTabs">\n        ${chrs.map((c, i) => `<div class="charTab ${i === activeCharIdx ? 'active' : ''}" data-char-idx="${i}">${c.cid === SAVE.soul.crntcid ? '★ ' : ''}${c.state === 'ENEMY' ? '☠ ' : ''}${escapeHtml(c.name || '#' + i)} · Lv${c.lvl != null ? c.lvl : '?'}</div>`).join('')}\n      </div>\n      <div class="grid" style="margin-bottom:10px;">\n        <div class="field"><label>Name</label><input type="text" id="chr-name" value="${escapeHtml(chr.name || '')}"></div>\n        <div class="field"><label>Class</label>\n          <select id="chr-type" style="width:100%; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);">\n            ${Object.keys(CLASS_NAMES).filter(k => k !== 'OLD').map(k => `<option value="${k}" ${k === type ? 'selected' : ''}>${CLASS_NAMES[k]}</option>`).join('')}\n          </select>\n        </div>\n        <div class="field"><label>Grade (1-6)</label><input type="number" id="chr-grade" min="1" max="6" value="${grade}"></div>\n        <div class="field"><label>Limit Break (0-${maxLb})</label><input type="number" id="chr-lb" min="0" max="${maxLb}" value="${lb}"></div>\n        <div class="field"><label>Level (follows stats, max ${R.levelMax})</label><input type="number" id="chr-lvl" min="1" max="${R.levelMax}" value="${chr.lvl != null ? chr.lvl : 1}"></div>\n      </div>\n      <div style="margin-bottom:16px;">\n        ${isCurrent ? '<span class="badge current">★ CURRENTLY SELECTED FIGHTER</span>' : ''}\n      </div>\n      ${chr.state === 'ENEMY' ? fighterDeadNote(chr) : ''}\n\n      <div class="eyebrow" style="margin-bottom:8px;">Stats (individually editable) <button class="subtle" id="stat-max" style="margin-left:8px;">Max for this grade/limit break</button></div>\n      <div class="grid" style="margin-bottom:8px;">\n        ${[ 'hp', 'str', 'dex', 'vit', 'stm', 'luk' ].map(k => `\n          <div class="field"><label>${k.toUpperCase()} (${statFloor}-${statCap})</label>\n          <input type="number" class="chr-stat" data-stat="${k}" data-floor="${statFloor}" data-cap="${statCap}" value="${Math.min(Math.max(chr.bodylvl[k] != null ? chr.bodylvl[k] : statFloor, statFloor), statCap)}"></div>`).join('')}\n        <div class="field"><label>Decal Slots (${R.skillFloor}-${R.skillCap})</label><input type="number" class="chr-stat" data-stat="skill" data-base="${R.skillBase}" data-floor="${R.skillFloor}" data-cap="${R.skillCap}" value="${skillTotal}"></div>\n        <div class="field"><label>Death Bag (${R.bagFloor}-${R.bagCap})</label><input type="number" class="chr-stat" data-stat="bag" data-base="${R.bagBase}" data-floor="${R.bagFloor}" data-cap="${R.bagCap}" value="${bagTotal}"></div>\n        <div class="field"><label>Rage Bars (${rageLocked ? R.rageCap + ', fixed' : R.rageFloor + '-' + R.rageCap})</label><input type="number" id="chr-rage" data-base="${R.rageBase}" min="${R.rageFloor}" max="${R.rageCap}" value="${rageTotal}" ${rageLocked ? 'disabled' : ''}></div>\n      </div>\n      ${combat ? `<div class="listBlock" style="margin-bottom:16px;"><div class="listRow"><div class="name">Combat stats</div></div>\n        <div class="listRow"><div class="name">${combat}</div></div></div>` : ''}\n\n      <div class="eyebrow" style="margin-bottom:8px;">Currently wearing</div>\n      ${equipEditor(chr)}\n\n      <div class="toolbar" style="margin:16px 0 8px;"><div class="eyebrow" style="margin:0;">Skill Decals</div><div class="count">${arr(chr.eqskls).length} / ${skillTotal} slots</div></div>\n      ${arr(chr.eqskls).length > skillTotal ? `<div class="warnNote">More decals equipped than this fighter has slots (${skillTotal}). Remove some or raise Decal Slots above.</div>` : ''}\n      <div class="searchwrap">\n        <input type="text" id="skill-search" placeholder="Search skill decal name, e.g. &quot;Living on the Edge&quot;...">\n        <div class="acdrop" id="skill-acdrop"></div>\n      </div>\n      <div class="chipRow" id="skill-chips">\n        ${arr(chr.eqskls).map((s, i) => skillChip(s, i)).join('')}\n      </div>\n\n      <div class="toolbar" style="margin:16px 0 8px;"><div class="eyebrow" style="margin:0;">Fighter Inventory (Death Bag contents, incl. equipped gear)</div><button class="subtle" id="fi-clear-all">Clear all</button><div class="count">${fighterItemCount(chr)} / ${deathBagCapacity(chr)} slots</div></div>\n      ${fighterItemCount(chr) > deathBagCapacity(chr) ? `<div class="warnNote">Over this fighter's Death Bag capacity (${deathBagCapacity(chr)}). Remove items or raise Death Bag above.</div>` : ''}\n      <div class="subTabs" id="fi-cat-tabs">\n        <div class="subTab active" data-fi-cat="pt">Weapon/Armor</div>\n        <div class="subTab" data-fi-cat="bp">Blueprint</div>\n        <div class="subTab" data-fi-cat="msr">Mushroom</div>\n        <div class="subTab" data-fi-cat="bst">Beast</div>\n        <div class="subTab" data-fi-cat="item">Material / Other</div>\n      </div>\n      <div id="fi-add-form"></div>\n      <div class="listBlock" id="fi-list">\n        ${fighterInventoryRows(chr).join('') || '<div style="padding:10px; color:var(--text-faint); font-size:12px;">Empty.</div>'}\n      </div>\n    </div>\n  </section>`;
+  return `<section class="block">\n    <div class="block-head">\n      <div><div class="eyebrow">Fighters</div><h2>Fighter Freezer</h2></div>\n      <div style="display:flex; gap:6px; align-items:center;">\n        <span style="font-size:11px; color:var(--text-dim);">${FZ.slots} hangers · ${freeHangers().length} empty</span>\n        <select id="new-char-body" ${atCap ? 'disabled' : ''} title="Body for the new fighter" style="background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:4px 6px; font-family:var(--mono); font-size:11.5px;">${arr(AP && AP.bodies).map(b => `<option value="${b.id}">${b.gender === 'GENDER_MALE' ? 'Male' : 'Female'} ${String(b.id).slice(-1)}</option>`).join('')}</select>\n        <button class="subtle" id="btn-add-char" ${atCap ? 'disabled title="No empty hanger in the freezer."' : 'title="Adds a fighter the same way the Fighter Depot does, into the first empty hanger."'}>+ Add Fighter</button>\n        <button class="subtle" id="btn-del-char" ${fighterDeleteBlock(chr) ? `disabled title="${escapeHtml(fighterDeleteBlock(chr))}"` : 'title="Delete the selected fighter, the way the game does"'}>Delete ${escapeHtml(chr ? chr.name || 'fighter' : 'fighter')}</button>\n      </div>\n    </div>\n    <div class="block-body">\n      <div class="grid" style="margin-bottom:12px;">\n        <div class="field"><label>Freezer Level</label><select id="freezer-level" style="width:100%; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);">${FZ.level == null ? `<option selected>? (${FZ.slots} hangers)</option>` : ''}${arr(AP && AP.freezer).map(r => `<option value="${r.number}" ${r.number === FZ.level ? 'selected' : ''}>Level ${r.number} (${r.count} hangers)</option>`).join('')}</select></div>\n        <div class="field" style="display:flex; align-items:end;"><button class="subtle" id="freezer-max" ${FZ.slots >= FZ.max ? 'disabled' : ''}>Max (${FZ.max} hangers)</button></div>\n      </div>\n      <div class="capNote" style="margin-top:0;">Your freezer has ${FZ.slots} hangers, ${freeHangers().length} empty. ${atCap ? 'Every hanger is in use, so a fighter can\'t be added.' : 'New fighters are added the way the Fighter Depot adds them: grade 1 All-rounder at level 1, into the first empty hanger. Change their class, grade and stats below after adding.'} Raising the freezer level adds empty hangers; it can only go down if the hangers it removes are empty.</div>\n      <div class="charTabs">\n        ${chrs.map((c, i) => `<div class="charTab ${i === activeCharIdx ? 'active' : ''}" data-char-idx="${i}">${c.cid === SAVE.soul.crntcid ? '★ ' : ''}${c.state === 'ENEMY' ? '☠ ' : ''}${escapeHtml(c.name || '#' + i)} · Lv${c.lvl != null ? c.lvl : '?'}</div>`).join('')}\n      </div>\n      <div class="grid" style="margin-bottom:10px;">\n        <div class="field"><label>Name</label><input type="text" id="chr-name" value="${escapeHtml(chr.name || '')}"></div>\n        <div class="field"><label>Class</label>\n          <select id="chr-type" style="width:100%; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);">\n            ${Object.keys(CLASS_NAMES).filter(k => k !== 'OLD').map(k => `<option value="${k}" ${k === type ? 'selected' : ''}>${CLASS_NAMES[k]}</option>`).join('')}\n          </select>\n        </div>\n        <div class="field"><label>Grade</label><select id="chr-grade" style="width:100%; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);">${fighterOpts(1, 6, grade, v => 'Grade ' + v)}</select></div>\n        <div class="field"><label>Limit Break${maxLb < 4 ? ` <span class="id">(grade ${grade} goes up to ${maxLb})</span>` : ''}</label><select id="chr-lb" style="width:100%; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);">${fighterOpts(0, maxLb, lb, v => v ? 'Limit Break ' + v : 'None')}</select></div>\n        <div class="field"><label>Level (from stats)</label><div id="chr-lvl" style="padding:8px 0; font-size:14px;"><b>Lv ${chr.lvl != null ? chr.lvl : 1}</b> <span class="id">of ${R.levelMax} max</span></div></div>\n      </div>\n      <div style="margin-bottom:16px;">\n        ${isCurrent ? '<span class="badge current">★ CURRENTLY SELECTED FIGHTER</span>' : ''}\n      </div>\n      ${chr.state === 'ENEMY' ? fighterDeadNote(chr) : ''}\n\n      <div class="eyebrow" style="margin-bottom:8px;">Stats <button class="subtle" id="stat-max" style="margin-left:8px;">Max all for this grade/limit break</button></div>\n      <div class="grid" style="margin-bottom:8px;">\n        ${[ 'hp', 'str', 'dex', 'vit', 'stm', 'luk' ].map(k => `\n          ${fighterStatField(k.toUpperCase(), k, statFloor, statCap, Math.min(Math.max(chr.bodylvl[k] != null ? chr.bodylvl[k] : statFloor, statFloor), statCap), null)}`).join('')}\n        ${fighterStatField('Decal Slots', 'skill', R.skillFloor, R.skillCap, skillTotal, R.skillBase)}\n        ${fighterStatField('Death Bag', 'bag', R.bagFloor, R.bagCap, bagTotal, R.bagBase)}\n        ${rageLocked ? `<div class="field"><label>Rage Bars</label><div id="chr-rage" style="padding:8px 0; font-size:14px;"><b>${R.rageCap}</b> <span class="id">fixed for this class and grade</span></div></div>` : fighterStatField('Rage Bars', 'rage', R.rageFloor, R.rageCap, rageTotal, R.rageBase)}\n      </div>\n      ${combat ? `<div class="listBlock" style="margin-bottom:16px;"><div class="listRow"><div class="name">Combat stats</div></div>\n        <div class="listRow"><div class="name">${combat}</div></div></div>` : ''}\n\n      <div class="eyebrow" style="margin-bottom:8px;">Currently wearing</div>\n      ${equipEditor(chr)}\n\n      <div class="toolbar" style="margin:16px 0 8px;"><div class="eyebrow" style="margin:0;">Skill Decals</div><div class="count">${arr(chr.eqskls).length} / ${skillTotal} slots</div></div>\n      ${arr(chr.eqskls).length > skillTotal ? `<div class="warnNote">More decals equipped than this fighter has slots (${skillTotal}). Remove some or raise Decal Slots above.</div>` : ''}\n      <div class="searchwrap">\n        <input type="text" id="skill-search" placeholder="Search skill decal name, e.g. &quot;Living on the Edge&quot;...">\n        <div class="acdrop" id="skill-acdrop"></div>\n      </div>\n      <div class="chipRow" id="skill-chips">\n        ${arr(chr.eqskls).map((s, i) => skillChip(s, i)).join('')}\n      </div>\n\n      <div class="toolbar" style="margin:16px 0 8px;"><div class="eyebrow" style="margin:0;">Fighter Inventory (Death Bag contents, incl. equipped gear)</div><button class="subtle" id="fi-clear-all">Clear all</button><div class="count">${fighterItemCount(chr)} / ${deathBagCapacity(chr)} slots</div></div>\n      ${fighterItemCount(chr) > deathBagCapacity(chr) ? `<div class="warnNote">Over this fighter's Death Bag capacity (${deathBagCapacity(chr)}). Remove items or raise Death Bag above.</div>` : ''}\n      <div class="subTabs" id="fi-cat-tabs">\n        <div class="subTab active" data-fi-cat="pt">Weapon/Armor</div>\n        <div class="subTab" data-fi-cat="bp">Blueprint</div>\n        <div class="subTab" data-fi-cat="msr">Mushroom</div>\n        <div class="subTab" data-fi-cat="bst">Beast</div>\n        <div class="subTab" data-fi-cat="item">Material / Other</div>\n      </div>\n      <div id="fi-add-form"></div>\n      <div class="listBlock" id="fi-list">\n        ${fighterInventoryRows(chr).join('') || '<div style="padding:10px; color:var(--text-faint); font-size:12px;">Empty.</div>'}\n      </div>\n    </div>\n  </section>`;
 }
 
 function combatStatsFor(chr, type, grade) {
@@ -2880,54 +2908,29 @@ function wireCharacters() {
     renderAll();
   });
   document.getElementById('chr-type').addEventListener('change', e => {
+    const before = fighterTotals(chr);
     chr.type = e.target.value;
     clampStatLevelAndRecalc(chr);
     renderAll();
+    const note = fighterFitNote(before, chr);
+    if (note) toast(note);
   });
   document.getElementById('chr-grade').addEventListener('change', e => {
-    let g = parseInt(e.target.value, 10) || 1;
-    if (g < 1) g = 1;
-    if (g > 6) g = 6;
-    chr.grade = g;
+    const before = fighterTotals(chr);
+    chr.grade = Math.min(Math.max(parseInt(e.target.value, 10) || 1, 1), 6);
     clampStatLevelAndRecalc(chr);
     renderAll();
+    const note = fighterFitNote(before, chr);
+    toast(`Grade ${chr.grade}` + (note ? '. ' + note : ''));
   });
   document.getElementById('chr-lb').addEventListener('change', e => {
+    const before = fighterTotals(chr);
     const maxLb = maxLimitBreakFor(chr.type || 'BAL', chr.grade != null ? chr.grade : 1);
-    let lb = parseInt(e.target.value, 10) || 0;
-    if (lb < 0) lb = 0;
-    if (lb > maxLb) lb = maxLb;
-    chr.limit_break = lb;
+    chr.limit_break = Math.min(Math.max(parseInt(e.target.value, 10) || 0, 0), maxLb);
     clampStatLevelAndRecalc(chr);
     renderAll();
-  });
-  document.getElementById('chr-lvl').addEventListener('change', e => {
-    const maxLvl = fighterRanges(chr.type || 'BAL', chr.grade != null ? chr.grade : 1, chr.limit_break || 0).levelMax;
-    let v = parseInt(e.target.value, 10) || 1;
-    if (v < 1) v = 1;
-    if (v > maxLvl) {
-      v = maxLvl;
-      toast(`Clamped to this grade/limit break's max level (${maxLvl})`);
-    }
-    chr.lvl = v;
-    chr.bodylvl = chr.bodylvl || {};
-    chr.bodylvl.lvl = v;
-    e.target.value = v;
-  });
-  document.getElementById('chr-rage').addEventListener('change', e => {
-    const R = fighterRanges(chr.type || 'BAL', chr.grade != null ? chr.grade : 1, chr.limit_break || 0);
-    let t = parseInt(e.target.value, 10) || R.rageFloor;
-    if (t < R.rageFloor) {
-      t = R.rageFloor;
-      toast(`Clamped to this grade/limit break's minimum (${t})`);
-    }
-    if (t > R.rageCap) {
-      t = R.rageCap;
-      toast(`Clamped to this grade/limit break's max (${t})`);
-    }
-    chr.rage = t - R.rageBase;
-    recomputeLevel(chr);
-    renderAll();
+    const note = fighterFitNote(before, chr);
+    toast(`Limit Break ${chr.limit_break}` + (note ? '. ' + note : ''));
   });
   document.querySelectorAll('.chr-stat').forEach(inp => {
     inp.addEventListener('change', () => {
@@ -2944,11 +2947,18 @@ function wireCharacters() {
       }
       inp.value = v;
       const baseAttr = inp.getAttribute('data-base');
-      chr.bodylvl[inp.dataset.stat] = baseAttr != null ? v - parseInt(baseAttr, 10) : v;
+      if (inp.dataset.stat === 'rage') chr.rage = v - parseInt(baseAttr, 10);
+      else chr.bodylvl[inp.dataset.stat] = baseAttr != null ? v - parseInt(baseAttr, 10) : v;
       recomputeLevel(chr);
       renderAll();
     });
   });
+  document.querySelectorAll('.chr-stat-max').forEach(btn => btn.addEventListener('click', () => {
+    const inp = document.querySelector(`select.chr-stat[data-stat="${btn.dataset.stat}"]`);
+    if (!inp) return;
+    inp.value = inp.getAttribute('data-cap');
+    inp.dispatchEvent(new Event('change'));
+  }));
   document.getElementById('stat-max').addEventListener('click', () => {
     const R = fighterRanges(chr.type || 'BAL', chr.grade != null ? chr.grade : 1, chr.limit_break || 0);
     setStatLevel(chr, R.statCap);
