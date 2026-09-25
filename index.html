@@ -4618,14 +4618,16 @@ function wireStamp() {
 // still had 12 days left; the type-1 save auto-renews with only 1-Day passes). user.vip_level = type.
 const VIP_PLANS = [ { id: 'none', label: 'None' }, { id: 'day', label: '1-Day Express' }, { id: 'month', label: '30-Day Express' } ];
 function vipPlanOf(v) { return !v || !Number(v.vip_flag) ? 'none' : Number(v.vip_type) === 1 ? 'day' : 'month'; }
-function setVipPlan(plan) {
+function setVipPlan(plan, restart) {
   const v = SAVE.soul.vip, now = Math.floor(Date.now() / 1e3);
   if (plan === 'none') {
-    v.vip_flag = 0; v.vip_type = 0; v.automatic_renewal = 0;
+    // off: keep the type the save had, so turning it back on returns to the same pass
+    v.vip_flag = 0; v.automatic_renewal = 0;
     if (Number(v.expired_time) > now) v.expired_time = now;
   } else {
     v.vip_flag = 1; v.vip_type = plan === 'day' ? 1 : 0;
-    if (!(Number(v.expired_time) > now)) v.expired_time = now + (plan === 'day' ? 86400 : 30 * 86400);
+    // a new pass (type changed) starts its own length; turning an existing pass back on keeps a future expiry
+    if (restart || !(Number(v.expired_time) > now)) v.expired_time = now + (plan === 'day' ? 86400 : 30 * 86400);
   }
   if (SAVE.user) SAVE.user.vip_level = v.vip_type;
 }
@@ -4634,7 +4636,7 @@ function blockVip() {
   const vip = SAVE.soul.vip;
   const expiresDate = vip.expired_time ? new Date(vip.expired_time * 1e3) : null;
   const expiresStr = expiresDate ? `${expiresDate.getMonth() + 1}/${expiresDate.getDate()}/${expiresDate.getFullYear()}` : '';
-  return `<section class="block">\n    <div class="block-head"><div><div class="eyebrow">Direct Hell Insurance</div><h2>VIP Express Pass</h2></div></div>\n    <div class="block-body">\n      <div class="grid">\n        <div class="field"><label>Express Pass</label><select id="vip-plan" style="width:100%; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);">${VIP_PLANS.map(p => `<option value="${p.id}" ${vipPlanOf(vip) === p.id ? 'selected' : ''}>${p.label}</option>`).join('')}</select></div>\n        <div class="field"><label>30-Day Passes held</label><input type="number" data-vip="vip_pass_num" value="${vip.vip_pass_num || 0}"></div>\n        <div class="field"><label>1-Day Passes held</label><input type="number" data-vip="oneday_vip_pass_num" value="${vip.oneday_vip_pass_num || 0}"></div>\n        <div class="field"><label>Expires</label><input type="date" id="vip-expires-date" value="${expiresDate ? `${expiresDate.getFullYear()}-${String(expiresDate.getMonth() + 1).padStart(2, '0')}-${String(expiresDate.getDate()).padStart(2, '0')}` : ''}" style="width:100%; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono); color-scheme:dark;"></div>\n        <div class="field"><label>Auto-renew</label><select data-vip="automatic_renewal" style="width:100%; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);"><option value="1" ${vip.automatic_renewal ? 'selected' : ''}>On</option><option value="0" ${vip.automatic_renewal ? '' : 'selected'}>Off</option></select></div>\n      </div>\n      <div class="toolbar" style="margin-top:10px;"><button class="subtle" id="vip-renew" ${vipPlanOf(vip) === 'none' ? 'disabled style="opacity:.35;"' : ''}>Renew: expires ${vipPlanOf(vip) === 'day' ? '24 hours' : '30 days'} from now</button></div>\n      <div class="capNote">None = not a member. 1-Day Express lasts 24 hours, 30-Day Express lasts 30 days; auto-renew uses your held passes of that kind when it runs out. (In the save: type 1 = 1-Day, type 0 = 30-Day, worked out from saves.)</div>\n    </div>\n  </section>`;
+  return `<section class="block">\n    <div class="block-head"><div><div class="eyebrow">Direct Hell Insurance</div><h2>VIP Express Pass</h2></div></div>\n    <div class="block-body">\n      <div class="grid">\n        <div class="field"><label>Express Pass</label><select id="vip-active" style="width:100%; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);"><option value="1" ${Number(vip.vip_flag) ? 'selected' : ''}>On</option><option value="0" ${Number(vip.vip_flag) ? '' : 'selected'}>Off</option></select></div>\n        <div class="field"><label>Type${Number(vip.vip_flag) ? '' : ' <span class="id">(turn the pass on first)</span>'}</label><select id="vip-plan" ${Number(vip.vip_flag) ? '' : 'disabled'} style="width:100%; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);${Number(vip.vip_flag) ? '' : ' opacity:.4;'}"><option value="day" ${Number(vip.vip_type) === 1 ? 'selected' : ''}>1-Day Express</option><option value="month" ${Number(vip.vip_type) === 1 ? '' : 'selected'}>30-Day Express</option></select></div>\n        <div class="field"><label>30-Day Passes held</label><input type="number" data-vip="vip_pass_num" value="${vip.vip_pass_num || 0}"></div>\n        <div class="field"><label>1-Day Passes held</label><input type="number" data-vip="oneday_vip_pass_num" value="${vip.oneday_vip_pass_num || 0}"></div>\n        <div class="field"><label>Expires</label><input type="date" id="vip-expires-date" value="${expiresDate ? `${expiresDate.getFullYear()}-${String(expiresDate.getMonth() + 1).padStart(2, '0')}-${String(expiresDate.getDate()).padStart(2, '0')}` : ''}" style="width:100%; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono); color-scheme:dark;"></div>\n        <div class="field"><label>Auto-renew</label><select data-vip="automatic_renewal" style="width:100%; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);"><option value="1" ${vip.automatic_renewal ? 'selected' : ''}>On</option><option value="0" ${vip.automatic_renewal ? '' : 'selected'}>Off</option></select></div>\n      </div>\n      <div class="toolbar" style="margin-top:10px;"><button class="subtle" id="vip-renew" ${vipPlanOf(vip) === 'none' ? 'disabled style="opacity:.35;"' : ''}>Renew: expires ${vipPlanOf(vip) === 'day' ? '24 hours' : '30 days'} from now</button></div>\n      <div class="capNote">Off = not a member (the type box is locked until it's on). 1-Day Express lasts 24 hours, 30-Day Express lasts 30 days; auto-renew uses your held passes of that kind when it runs out. (In the save: type 1 = 1-Day, type 0 = 30-Day, worked out from saves.)</div>\n    </div>\n  </section>`;
 }
 
 function wireVip() {
@@ -4647,8 +4649,14 @@ function wireVip() {
   // 0 = 1-Day Express / none (fresh game) -- inferred from saves, not named in
   // the game data. user.vip_level has matched the type in every save seen, so
   // it's kept in step when it currently matches.
+  document.getElementById('vip-active').addEventListener('change', e => {
+    const on = e.target.value === '1';
+    setVipPlan(on ? (Number(SAVE.soul.vip.vip_type) === 1 ? 'day' : 'month') : 'none');
+    renderAll();
+    toast(on ? `Express Pass on (${Number(SAVE.soul.vip.vip_type) === 1 ? '1-Day' : '30-Day'} Express), expires ${dtFmt(SAVE.soul.vip.expired_time)}` : 'Express Pass off');
+  });
   document.getElementById('vip-plan').addEventListener('change', e => {
-    setVipPlan(e.target.value);
+    setVipPlan(e.target.value, true);
     renderAll();
     toast(e.target.value === 'none' ? 'Express Pass: none' : `Express Pass: ${e.target.value === 'day' ? '1-Day' : '30-Day'} Express, expires ${dtFmt(SAVE.soul.vip.expired_time)}`);
   });
