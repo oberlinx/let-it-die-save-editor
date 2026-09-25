@@ -1206,7 +1206,8 @@ function buildRawSavRootFromSave(SAVE, rawRoot, mainUid) {
       for (const k of Object.keys(zmbs)) for (const z of arr(zmbs[k])) if (z && z.name === oldName) z.name = newName;
     }
   }
-  root.fortzmbsetting = !SAVE.fortsetting.length && rawRoot.fortzmbsetting && !Array.isArray(rawRoot.fortzmbsetting) ? rawRoot.fortzmbsetting : SAVE.fortsetting;
+  // defense lineup (Defense tab): the game writes {} when nobody defends
+  root.fortzmbsetting = SAVE.fortsetting.length ? (typeof defRefreshSnapshots === 'function' ? defRefreshSnapshots(SAVE.fortsetting) : SAVE.fortsetting) : (Array.isArray(rawRoot.fortzmbsetting) && !rawRoot.fortzmbsetting.length ? [] : {});
   root.playlog = SAVE.playlog[0] || root.playlog;
   if (SAVE.teams.length) root.team = SAVE.teams;
   return root;
@@ -1363,7 +1364,7 @@ async function loadMastersBuffer(buf) {
       atkattr: all('SELECT * FROM master_part_atkattr'),
       bodydetail: all('SELECT * FROM master_body_detail')
     };
-    for (const [key, sql] of [['questParamText', 'SELECT qid, no, val FROM master_quest_param_text'], ['questParamDesc', 'SELECT qid, no, val FROM master_quest_param_desc_text'], ['rewards', 'SELECT * FROM master_reward'], ['questCats', 'SELECT * FROM master_quest_category'], ['bagGen', 'SELECT * FROM master_mysterybag_content_gen'], ['bagGenOdds', "SELECT * FROM master_mysterybag_content_gen_odds WHERE odds_id = (SELECT odds_id FROM master_mysterybag_content_odds ORDER BY expires DESC LIMIT 1)"], ['boxGen', 'SELECT * FROM master_deathbox_content_gen'], ['hubCustom', 'SELECT * FROM master_hubcustomize'], ['floorInfo', 'SELECT id, sname, stgid, stgpfx, name FROM master_floor'], ['freezer', 'SELECT * FROM master_freezer'], ['bodies', 'SELECT id, gender FROM master_body'], ['gasmasks', 'SELECT id, gender FROM master_gasmask']]) {
+    for (const [key, sql] of [['questParamText', 'SELECT qid, no, val FROM master_quest_param_text'], ['questParamDesc', 'SELECT qid, no, val FROM master_quest_param_desc_text'], ['rewards', 'SELECT * FROM master_reward'], ['questCats', 'SELECT * FROM master_quest_category'], ['bagGen', 'SELECT * FROM master_mysterybag_content_gen'], ['bagGenOdds', "SELECT * FROM master_mysterybag_content_gen_odds WHERE odds_id = (SELECT odds_id FROM master_mysterybag_content_odds ORDER BY expires DESC LIMIT 1)"], ['boxGen', 'SELECT * FROM master_deathbox_content_gen'], ['hubCustom', 'SELECT * FROM master_hubcustomize'], ['floorInfo', 'SELECT id, sname, stgid, stgpfx, name FROM master_floor'], ['freezer', 'SELECT * FROM master_freezer'], ['bodies', 'SELECT id, gender FROM master_body'], ['gasmasks', 'SELECT id, gender FROM master_gasmask'], ['fortWhistle', 'SELECT * FROM master_fort_whistle']]) {
       try { AP[key] = all(sql); } catch (err) { AP[key] = []; console.warn(`${key} not available in this masters.db:`, err); }
     }
     AP.stewOdds = [];
@@ -1886,6 +1887,9 @@ const TABS = [ {
   id: 'hub',
   label: 'Waiting Room'
 }, {
+  id: 'defense',
+  label: 'Defense'
+}, {
   id: 'photos',
   label: 'Screenshots'
 }, {
@@ -1920,7 +1924,7 @@ function renderAll() {
   app.querySelectorAll('[id]').forEach(el => {
     if (el.scrollTop > 0) scrollStates[el.id] = el.scrollTop;
   });
-  app.innerHTML = `\n    ${blockHealth()}\n    <div class="tabbar">\n      ${TABS.map(t => `<button class="tabbtn ${activeTab === t.id ? 'active' : ''}" data-tab-btn="${t.id}">${t.label}</button>`).join('')}\n    </div>\n    <div class="tabpanel" data-tab-panel="account" style="display:${activeTab === 'account' ? 'block' : 'none'}">${blockCurrency()}</div>\n    <div class="tabpanel" data-tab-panel="fighters" style="display:${activeTab === 'fighters' ? 'block' : 'none'}">${blockCharacters()}</div>\n    <div class="tabpanel" data-tab-panel="research" style="display:${activeTab === 'research' ? 'block' : 'none'}">${blockBlueprints()}</div>\n    <div class="tabpanel" data-tab-panel="decals" style="display:${activeTab === 'decals' ? 'block' : 'none'}">${blockSkillDecals()}</div>\n    <div class="tabpanel" data-tab-panel="stews" style="display:${activeTab === 'stews' ? 'block' : 'none'}">${blockStews()}</div>\n    <div class="tabpanel" data-tab-panel="bags" style="display:${activeTab === 'bags' ? 'block' : 'none'}">${blockBags()}</div>\n    <div class="tabpanel" data-tab-panel="boxes" style="display:${activeTab === 'boxes' ? 'block' : 'none'}">${blockBoxes()}</div>\n    <div class="tabpanel" data-tab-panel="hub" style="display:${activeTab === 'hub' ? 'block' : 'none'}">${blockHub()}</div>\n    <div class="tabpanel" data-tab-panel="photos" style="display:${activeTab === 'photos' ? 'block' : 'none'}">${blockPhotos()}</div>\n    <div class="tabpanel" data-tab-panel="graves" style="display:${activeTab === 'graves' ? 'block' : 'none'}">${blockGraves()}</div>\n    <div class="tabpanel" data-tab-panel="dates" style="display:${activeTab === 'dates' ? 'block' : 'none'}">${blockDates()}</div>\n    <div class="tabpanel" data-tab-panel="storage" style="display:${activeTab === 'storage' ? 'block' : 'none'}">${blockStorageBox()}</div>\n    <div class="tabpanel" data-tab-panel="rewards" style="display:${activeTab === 'rewards' ? 'block' : 'none'}">${blockRewardBox()}</div>\n    <div class="tabpanel" data-tab-panel="quests" style="display:${activeTab === 'quests' ? 'block' : 'none'}">${blockQuests()}</div>\n    <div class="tabpanel" data-tab-panel="vip" style="display:${activeTab === 'vip' ? 'block' : 'none'}">${blockVip()}</div>\n    <div class="tabpanel" data-tab-panel="compare" style="display:${activeTab === 'compare' ? 'block' : 'none'}">${blockCompare()}</div>\n  `;
+  app.innerHTML = `\n    ${blockHealth()}\n    <div class="tabbar">\n      ${TABS.map(t => `<button class="tabbtn ${activeTab === t.id ? 'active' : ''}" data-tab-btn="${t.id}">${t.label}</button>`).join('')}\n    </div>\n    <div class="tabpanel" data-tab-panel="account" style="display:${activeTab === 'account' ? 'block' : 'none'}">${blockCurrency()}</div>\n    <div class="tabpanel" data-tab-panel="fighters" style="display:${activeTab === 'fighters' ? 'block' : 'none'}">${blockCharacters()}</div>\n    <div class="tabpanel" data-tab-panel="research" style="display:${activeTab === 'research' ? 'block' : 'none'}">${blockBlueprints()}</div>\n    <div class="tabpanel" data-tab-panel="decals" style="display:${activeTab === 'decals' ? 'block' : 'none'}">${blockSkillDecals()}</div>\n    <div class="tabpanel" data-tab-panel="stews" style="display:${activeTab === 'stews' ? 'block' : 'none'}">${blockStews()}</div>\n    <div class="tabpanel" data-tab-panel="bags" style="display:${activeTab === 'bags' ? 'block' : 'none'}">${blockBags()}</div>\n    <div class="tabpanel" data-tab-panel="boxes" style="display:${activeTab === 'boxes' ? 'block' : 'none'}">${blockBoxes()}</div>\n    <div class="tabpanel" data-tab-panel="hub" style="display:${activeTab === 'hub' ? 'block' : 'none'}">${blockHub()}</div>\n    <div class="tabpanel" data-tab-panel="defense" style="display:${activeTab === 'defense' ? 'block' : 'none'}">${blockDefense()}</div>\n    <div class="tabpanel" data-tab-panel="photos" style="display:${activeTab === 'photos' ? 'block' : 'none'}">${blockPhotos()}</div>\n    <div class="tabpanel" data-tab-panel="graves" style="display:${activeTab === 'graves' ? 'block' : 'none'}">${blockGraves()}</div>\n    <div class="tabpanel" data-tab-panel="dates" style="display:${activeTab === 'dates' ? 'block' : 'none'}">${blockDates()}</div>\n    <div class="tabpanel" data-tab-panel="storage" style="display:${activeTab === 'storage' ? 'block' : 'none'}">${blockStorageBox()}</div>\n    <div class="tabpanel" data-tab-panel="rewards" style="display:${activeTab === 'rewards' ? 'block' : 'none'}">${blockRewardBox()}</div>\n    <div class="tabpanel" data-tab-panel="quests" style="display:${activeTab === 'quests' ? 'block' : 'none'}">${blockQuests()}</div>\n    <div class="tabpanel" data-tab-panel="vip" style="display:${activeTab === 'vip' ? 'block' : 'none'}">${blockVip()}</div>\n    <div class="tabpanel" data-tab-panel="compare" style="display:${activeTab === 'compare' ? 'block' : 'none'}">${blockCompare()}</div>\n  `;
   wireHealth();
   wireCurrency();
   wireCharacters();
@@ -1930,6 +1934,7 @@ function renderAll() {
   wireBags();
   wireBoxes();
   wireHub();
+  wireDefense();
   wirePhotos();
   wireGraves();
   wireDates();
@@ -1951,6 +1956,7 @@ function renderAll() {
       if (activeTab === 'bags') renderBags();
       if (activeTab === 'boxes') renderBoxes();
       if (activeTab === 'hub') renderHub();
+      if (activeTab === 'defense') renderDefense();
       if (activeTab === 'photos') renderPhotos();
       if (activeTab === 'graves') renderGraves();
       if (activeTab === 'compare') renderCompare();
@@ -6585,6 +6591,157 @@ function cmpWire() {
 }
 
 function wireCompare() { if (activeTab === 'compare') renderCompare(); }
+
+// ---------------------------------------------------------------------------
+// DEFENSE (Tokyo Death Metro). From real saves:
+//   root.fortzmbsetting = the defense lineup, one entry per defender:
+//     {wave 0|1, order 0.., cid, body, grade, type, lvl, max_limit_break, is_equip_whistle}
+//     ({} when nobody is set). Every defender's chr.state is "GUARD".
+//   soul.whistle_id    = the alarm bought (master_fort_whistle, e.g. ALARM_OC003_05)
+//   soul.whistle_limit = when the alarm runs out (unix time). Each purchase gives
+//     WHISTLE_AVAILABLE_SECOND (1 day); the most it can hold is
+//     WHISTLE_AVAILABLE_SECOND_LIMIT (5 days) -- master_const_int.
+//   is_equip_whistle   = the defender the alarm is set on (Set an alarm to a fighter)
+//   soul.abduct_guard_time = kidnap protection end (ABDUCT_GUARD_TIME = 12 h)
+// Lineups in saves use 2 waves with order 0-4 (5 places), seen in the attack
+// lineups (fortorder) of the same game.
+// ---------------------------------------------------------------------------
+
+const DEF_WAVES = 2, DEF_SLOTS = 5;
+let DEF_STATE = { root: null, msg: '' };
+
+function defConst(id, fb) { const r = arr(AP && AP.constInt).find(x => x.id === id); return r ? Number(r.value) : fb; }
+function defLineup() { SAVE.fortsetting = arr(SAVE.fortsetting); return SAVE.fortsetting; }
+function defChr(cid) { return arr(SAVE.soul.chrs).find(c => c.cid === cid) || null; }
+function defEligible(c) { return c && (c.state === 'FREE' || c.state === 'GUARD') && !c.abid; }
+function defAlarmName(id) {
+  const w = arr(AP && AP.fortWhistle).find(x => x.id === id);
+  if (!w) return id || 'None';
+  return `${resolveName('FORT_TERMINAL.' + w.name) || w.group} Lv${w.lvl}`;
+}
+function defSnapshot(c, wave, order, old) {
+  return Object.assign({}, old || {}, {
+    wave, order, cid: c.cid, body: c.body, grade: c.grade, type: c.type,
+    lvl: c.lvl != null ? c.lvl : (old && old.lvl) || 1,
+    max_limit_break: old && old.max_limit_break != null ? old.max_limit_break : 0,
+    is_equip_whistle: old && old.is_equip_whistle ? 1 : 0
+  });
+}
+// keep the lineup's copies of class/grade/level in step with the fighters
+function defRefreshSnapshots(list) {
+  for (const e of arr(list)) {
+    const c = defChr(e.cid);
+    if (!c) continue;
+    if (e.body !== c.body) e.body = c.body;
+    if (e.grade !== c.grade) e.grade = c.grade;
+    if (e.type !== c.type) e.type = c.type;
+    if (c.lvl != null && e.lvl !== c.lvl) e.lvl = c.lvl;
+  }
+  return list;
+}
+function defPlace(wave, order, cid) {
+  const list = defLineup();
+  const at = list.findIndex(e => e.wave === wave && e.order === order);
+  const old = at >= 0 ? list[at] : null;
+  if (old && old.cid === cid) return null;
+  if (cid) {
+    const c = defChr(cid);
+    if (!defEligible(c)) return `${(c && c.name) || 'That fighter'} can't defend (${c ? c.state : 'not found'})`;
+    // a fighter can only be in one place
+    const prev = list.findIndex(e => e.cid === cid);
+    let carried = 0;
+    if (prev >= 0) { carried = list[prev].is_equip_whistle ? 1 : 0; list.splice(prev, 1); }
+    const at2 = list.findIndex(e => e.wave === wave && e.order === order);
+    const replaced = at2 >= 0 ? list.splice(at2, 1)[0] : null;
+    if (replaced) { const rc = defChr(replaced.cid); if (rc && rc.state === 'GUARD') rc.state = 'FREE'; }
+    const e = defSnapshot(c, wave, order, replaced || null);
+    e.is_equip_whistle = carried || (replaced && replaced.is_equip_whistle) ? 1 : 0;
+    list.push(e);
+    c.state = 'GUARD';
+  } else if (old) {
+    list.splice(at, 1);
+    const oc = defChr(old.cid);
+    if (oc && oc.state === 'GUARD') oc.state = 'FREE';
+  }
+  list.sort((a, b) => a.wave - b.wave || a.order - b.order);
+  return null;
+}
+function defSetAlarmHolder(cid) {
+  for (const e of defLineup()) e.is_equip_whistle = e.cid === cid ? 1 : 0;
+}
+
+function blockDefense() {
+  return `<section class="block">
+    <div class="block-head"><div><div class="eyebrow">Tokyo Death Metro</div><h2>Defense</h2></div></div>
+    <div class="block-body">
+      <div class="capNote" style="margin-top:0;">Defense lineup, alarm and kidnap protection. Defenders are set to "on defense" in the freezer, and taken off defense when removed. Not yet confirmed in game; keep a backup.</div>
+      <div id="def-body"></div>
+    </div>
+  </section>`;
+}
+
+function renderDefense() {
+  const host = document.getElementById('def-body');
+  if (!host || !SAVE) return;
+  if (DEF_STATE.root !== RAW_SAV_ROOT) DEF_STATE = { root: RAW_SAV_ROOT, msg: '' };
+  const soul = SAVE.soul, now = Math.floor(Date.now() / 1000);
+  const list = defRefreshSnapshots(defLineup());
+  const maxAlarm = defConst('WHISTLE_AVAILABLE_SECOND_LIMIT', 432000), dayAlarm = defConst('WHISTLE_AVAILABLE_SECOND', 86400), kidnap = defConst('ABDUCT_GUARD_TIME', 43200);
+  const when = t => t > 0 ? `${escapeHtml(dtFmt(t))} (${t > now ? dtRel(t, now) : 'ended ' + dtRel(t, now)})` : 'not set';
+  const sel = 'background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:6px 8px; font-family:var(--mono); font-size:12px;';
+  let h = DEF_STATE.msg ? `<pre class="stewLog">${escapeHtml(DEF_STATE.msg)}</pre>` : '';
+  // alarm
+  const alarms = arr(AP && AP.fortWhistle);
+  const holder = list.find(e => e.is_equip_whistle);
+  h += `<div class="subDetails" style="padding:10px; margin-bottom:12px;"><b>Defense Alarm</b>
+    <div class="grid" style="margin-top:8px;">
+      <div class="field"><label>Alarm</label><select id="def-alarm" style="width:100%; ${sel}"><option value="" ${!soul.whistle_id ? 'selected' : ''}>None</option>${alarms.map(w => `<option value="${w.id}" ${w.id === soul.whistle_id ? 'selected' : ''}>${escapeHtml(defAlarmName(w.id))}</option>`).join('')}</select></div>
+      <div class="field"><label>Runs until</label><div style="padding:7px 0; font-size:12px;">${when(soul.whistle_limit || 0)}</div></div>
+      <div class="field"><label>Set on defender</label><select id="def-holder" style="width:100%; ${sel}"><option value="">Nobody</option>${list.map(e => `<option value="${e.cid}" ${holder && holder.cid === e.cid ? 'selected' : ''}>${escapeHtml((defChr(e.cid) || {}).name || e.cid)}</option>`).join('')}</select></div>
+    </div>
+    <div class="toolbar"><button class="action" id="def-alarm-max">Max time (${Math.round(maxAlarm / 86400)} days from now)</button><button class="subtle" id="def-alarm-day">+1 day (one purchase)</button><button class="subtle" id="def-alarm-off">End now</button></div>
+    <div class="capNote">The game gives ${Math.round(dayAlarm / 3600)} hours per purchase and holds at most ${Math.round(maxAlarm / 86400)} days. Buying a different alarm in game resets the time.</div></div>`;
+  // lineup
+  const fighters = arr(soul.chrs).filter(defEligible);
+  h += `<div class="subDetails" style="padding:10px; margin-bottom:12px;"><b>Defense Lineup</b> <span class="id">${list.length} defender${list.length === 1 ? '' : 's'}</span>
+    <div class="grid" style="margin-top:8px; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr));">`;
+  for (let w = 0; w < DEF_WAVES; w++) {
+    h += `<div class="field"><label>Wave ${w + 1}</label>`;
+    for (let o = 0; o < DEF_SLOTS; o++) {
+      const e = list.find(x => x.wave === w && x.order === o);
+      h += `<div style="display:flex; gap:6px; align-items:center; margin-bottom:4px;"><span class="id" style="width:18px;">${o + 1}.</span><select data-def-slot="${w}:${o}" style="flex:1; ${sel}"><option value="">— empty —</option>${fighters.map(c => `<option value="${c.cid}" ${e && e.cid === c.cid ? 'selected' : ''}>${escapeHtml(c.name || '?')} · ${escapeHtml(CLASS_NAMES[c.type] || c.type)} g${c.grade} Lv${c.lvl != null ? c.lvl : '?'}${c.state === 'GUARD' && !(e && e.cid === c.cid) ? ' (in another place)' : ''}</option>`).join('')}${e && !fighters.some(c => c.cid === e.cid) ? `<option value="${e.cid}" selected>${escapeHtml(e.cid)} (not a usable fighter)</option>` : ''}</select>${e && e.is_equip_whistle ? '<span class="badge" title="Alarm is set on this defender">alarm</span>' : ''}</div>`;
+    }
+    h += '</div>';
+  }
+  h += `</div><div class="toolbar"><button class="subtle" id="def-clear">Clear lineup</button></div>
+    <div class="capNote">Pick from fighters in the freezer that aren't being played, dead or kidnapped. Choosing a fighter already in the lineup moves it. Removed defenders go back to normal.</div></div>`;
+  // kidnap protection
+  h += `<div class="subDetails" style="padding:10px;"><b>Kidnap protection</b>
+    <div style="font-size:12px; margin:6px 0;">Protected until: ${when(soul.abduct_guard_time || 0)}</div>
+    <div class="toolbar"><button class="subtle" id="def-kid-max">Max (${Math.round(kidnap / 3600)} hours from now)</button><button class="subtle" id="def-kid-off">End now</button></div></div>`;
+  host.innerHTML = h;
+
+  const redo = msg => { DEF_STATE.msg = msg || ''; runSaveCheck(); renderAll(); if (msg) toast(msg.split('\n')[0]); };
+  document.getElementById('def-alarm').addEventListener('change', e => { soul.whistle_id = e.target.value; if (e.target.value && !(soul.whistle_limit > now)) soul.whistle_limit = now + dayAlarm; redo(e.target.value ? `Alarm set to ${defAlarmName(e.target.value)}.` : 'Alarm removed.'); });
+  document.getElementById('def-holder').addEventListener('change', e => { defSetAlarmHolder(e.target.value); redo(e.target.value ? `Alarm set on ${(defChr(e.target.value) || {}).name}.` : 'Alarm not set on any defender.'); });
+  document.getElementById('def-alarm-max').addEventListener('click', () => { soul.whistle_limit = now + maxAlarm; redo(`Alarm runs until ${dtFmt(soul.whistle_limit)} (the ${Math.round(maxAlarm / 86400)}-day max).`); });
+  document.getElementById('def-alarm-day').addEventListener('click', () => { soul.whistle_limit = Math.min(Math.max(soul.whistle_limit || 0, now) + dayAlarm, now + maxAlarm); redo(`Alarm runs until ${dtFmt(soul.whistle_limit)}.`); });
+  document.getElementById('def-alarm-off').addEventListener('click', () => { soul.whistle_limit = now - 60; redo('Alarm time ended.'); });
+  document.getElementById('def-kid-max').addEventListener('click', () => { soul.abduct_guard_time = now + kidnap; redo(`Kidnap protection until ${dtFmt(soul.abduct_guard_time)}.`); });
+  document.getElementById('def-kid-off').addEventListener('click', () => { soul.abduct_guard_time = now - 60; redo('Kidnap protection ended.'); });
+  document.getElementById('def-clear').addEventListener('click', () => {
+    for (const e of defLineup().slice()) defPlace(e.wave, e.order, '');
+    redo('Defense lineup cleared.');
+  });
+  host.querySelectorAll('[data-def-slot]').forEach(s => s.addEventListener('change', () => {
+    const [w, o] = s.dataset.defSlot.split(':').map(Number);
+    const err = defPlace(w, o, s.value);
+    if (err) { toast(err, true); renderDefense(); return; }
+    redo(s.value ? `${(defChr(s.value) || {}).name} defends wave ${w + 1}, place ${o + 1}.` : `Wave ${w + 1}, place ${o + 1} emptied.`);
+  }));
+}
+
+function wireDefense() { if (activeTab === 'defense') renderDefense(); }
 
 // The game writes an empty collection as {} in most places (and [] in a
 // few). The editor works on arrays, so a collection that was empty when the
