@@ -2232,6 +2232,16 @@ function deathBagCapacity(chr) {
   return Math.min(Math.max(R.bagBase + (bl.bag || 0), R.bagFloor), R.bagCap);
 }
 
+// Express Pass (VIP) adds VIP_INCREASE_DEATHBAG (10) Death Bag slots while it is active.
+function vipBagBonus() {
+  const v = SAVE && SAVE.soul && SAVE.soul.vip;
+  if (!v || !Number(v.vip_flag != null ? v.vip_flag : v.flag)) return 0;
+  if (Number(v.expired_time) > 0 && Number(v.expired_time) < Math.floor(Date.now() / 1000)) return 0;
+  const r = arr(AP && AP.constInt).find(x => x.id === 'VIP_INCREASE_DEATHBAG');
+  return r ? Number(r.value) || 0 : 10;
+}
+function deathBagLimit(chr) { const cap = deathBagCapacity(chr); return cap ? cap + vipBagBonus() : 0; }
+
 function fighterItemCount(chr) {
   return arr(chr.pspts).length + arr(chr.psmsrs).length + arr(chr.psbsts).length + arr(chr.psitems).length;
 }
@@ -2300,10 +2310,10 @@ function renderFiForm(chr) {
   const catType = fiCategory === 'pt' ? 'pt' : fiCategory === 'bp' ? 'bp' : fiCategory === 'msr' ? 'msr' : fiCategory === 'bst' ? 'bst' : 'item';
   wireAutocomplete(document.getElementById('fi-add-search'), document.getElementById('fi-add-acdrop'), catType, rec => {
     const wanted = Math.max(1, parseInt((document.getElementById('fi-qty') || {}).value, 10) || 1);
-    const free = Math.max(0, deathBagCapacity(chr) - fighterItemCount(chr));
+    const free = Math.max(0, deathBagLimit(chr) - fighterItemCount(chr));
     const qty = Math.min(wanted, free);
     if (!qty) {
-      toast(`Death Bag full (${deathBagCapacity(chr)} slots)`, true);
+      toast(`Death Bag full (${deathBagLimit(chr)} slots${vipBagBonus() ? ', incl. Express Pass' : ''})`, true);
       return;
     }
     for (let n = 0; n < qty; n++) {
@@ -5894,8 +5904,8 @@ function runSaveCheck() {
     const unknown = [];
     for (const c of arr(soul.chrs)) {
       const name = c.name || 'a fighter';
-      const cap = deathBagCapacity(c), n = fighterItemCount(c);
-      if (cap && n > cap) add('warning', `${escapeHtml(name)} is carrying ${n} items but their Death Bag only holds ${cap}.`, 'fighters');
+      const cap = deathBagLimit(c), n = fighterItemCount(c);
+      if (cap && n > cap) add('warning', `${escapeHtml(name)} is carrying ${n} items but their Death Bag only holds ${cap}${vipBagBonus() ? ' (with the Express Pass bonus)' : ''}.`, 'fighters');
       if (c.state !== 'DUMMY') {
         const gp = gearProblems(c);
         if (gp.length) add('warning', `${escapeHtml(name)} has ${gp.length} piece${gp.length === 1 ? '' : 's'} of gear equipped that the game wouldn't allow (${escapeHtml(gp[0].why)}${gp.length > 1 ? ', …' : ''}).`, 'fighters', {
@@ -6507,7 +6517,7 @@ function blockCompare() {
 
 function renderCompare() {
   const host = document.getElementById('cmp-body');
-  if (!host || !SAVE) return;
+  if (!host || !SAVE || !RAW_SAV_ROOT) return;   // a new save is still loading
   cmpSync();
   const uA = cmpUidA(), nmA = (RAW_SAV_ROOT.user || {}).nm || 'this save';
   let h = `<div class="toolbar"><label class="subtle" style="cursor:pointer; padding:6px 10px; border:1px solid var(--panel-border);">Load second save (.sav or .json)<input type="file" id="cmp-file" accept=".sav,.json" style="display:none;"></label>
