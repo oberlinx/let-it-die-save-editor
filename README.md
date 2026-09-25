@@ -24,7 +24,7 @@ PSN saves have to be decrypted first.
 | Tab | What it does |
 |---|---|
 | Account | Account name, TDM points/rank, Kill Coins and SPLithium with their bank levels |
-| Fighters | Fighter Freezer: fighter stats, levels, decals, bags and inventories; equipped weapons (all 6 weapon slots and which one is in each hand) and armor; raise the freezer level (adds hangers), add a new fighter into an empty hanger (the way the Fighter Depot does), delete a fighter the way the game does, and recover a dead fighter (Hater) for free |
+| Fighters | Fighter Freezer: fighter model and gas mask, stats, levels, decals, bags and inventories; equipped weapons (all 6 weapon slots and which one is in each hand) and armor; raise the freezer level (adds hangers), add a new fighter into an empty hanger (the way the Fighter Depot does), delete a fighter the way the game does, and recover a dead fighter (Hater) for free |
 | Research | Blueprint research (Chokufunsha) unlocks and levels. Armor researched to +4 unlocks its Armor Skin, as in the game |
 | Decals | Skill decal counts |
 | **Stews** | Mushroom Stew decal queue: see upcoming pulls, dedupe, move a rarity to the front, stack, reroll, clear, undo |
