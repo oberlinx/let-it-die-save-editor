@@ -4588,13 +4588,24 @@ function wireMastery() {
 }
 
 function stampBlockHtml() {
-  return `\n      <div class="eyebrow" style="margin:16px 0 6px;">Research Stamp</div>\n      <div class="toolbar"><button class="subtle" id="stamp-sync-all">Sync all from Research</button></div>\n      <div class="grid" style="grid-template-columns: repeat(3, 1fr);" id="stamp-grid"></div>`;
+  return `\n      <div class="eyebrow" style="margin:16px 0 6px;">Research Stamp (Funshots)</div><div id="stamp-note"></div>\n      <div class="toolbar"><button class="subtle" id="stamp-sync-all">Sync all from Research</button></div>\n      <div class="grid" style="grid-template-columns: repeat(3, 1fr);" id="stamp-grid"></div>`;
 }
 
 let REFRESH_STAMP_GRID = null;
 
+// The game runs a one-time "research stamp" setup (gameflg sv SGF_INIT_RESEARCH_STAMP = 1) the first time
+// you visit Choku-Funsha: it adds the Funshots (and rank points) for everything already researched.
+// Until that flag is set, anything the editor writes into researchstamp is added on top -> doubled.
+// Seen in game: a fresh account maxed by the editor showed doubled Funshots; the game then set the flag.
+function stampInitDone() {
+  const g = RAW_SAV_ROOT && RAW_SAV_ROOT.gameflg;
+  const list = g && typeof g === 'object' ? [].concat(...Object.values(g).filter(Array.isArray)) : [];
+  const f = list.find(x => x && x.var === 'SGF_INIT_RESEARCH_STAMP');
+  return !!f && Number(f.value) === 1;
+}
 function syncStampFromResearch() {
   if (!AP || !AP.pts || !AP.pts.length) return false;
+  if (RAW_SAV_ROOT && !stampInitDone()) return false;   // the game will add them itself
   SAVE.soul.researchstamp = arr(SAVE.soul.researchstamp);
   const computed = computeStampTotals();
   for (const type of RESEARCH_STAMP_TYPES) {
@@ -4615,7 +4626,10 @@ function syncStampFromResearch() {
 function wireStamp() {
   SAVE.soul.researchstamp = arr(SAVE.soul.researchstamp);
   function renderStampGrid() {
-    const computed = AP && AP.pts && AP.pts.length ? computeStampTotals() : null;
+    const pending = !!RAW_SAV_ROOT && !stampInitDone();
+    const computed = !pending && AP && AP.pts && AP.pts.length ? computeStampTotals() : null;
+    const noteEl = document.getElementById('stamp-note');
+    if (noteEl) noteEl.innerHTML = pending ? '<div class="warnNote">This save hasn\'t had the game\'s one-time Funshot setup yet. The first time you visit Choku-Funsha the game adds the Funshots (and rank points) for everything researched, so the editor leaves these at 0. Setting them here would double them in game.</div>' : '';
     document.getElementById('stamp-grid').innerHTML = RESEARCH_STAMP_TYPES.map(type => {
       const e = SAVE.soul.researchstamp.find(r => r.type === type);
       const raw = e ? e.rate : 0;
@@ -4642,6 +4656,7 @@ function wireStamp() {
   REFRESH_STAMP_GRID = renderStampGrid;
   renderStampGrid();
   document.getElementById('stamp-sync-all').addEventListener('click', () => {
+    if (RAW_SAV_ROOT && !stampInitDone()) { toast('Not needed on this save: the game adds the Funshots itself on your first Choku-Funsha visit', true); return; }
     if (!syncStampFromResearch()) {
       toast('Load masters.db first -- Research Stamp totals are computed from it', true);
       return;
@@ -6040,6 +6055,15 @@ function runSaveCheck() {
     const bad = arr(SAVE.presents).filter(presentPartEmpty);
     if (bad.length) add('warning', `${bad.length} weapon/armor reward${bad.length === 1 ? '' : 's'} in the Reward Box would arrive with 0 durability and no ammo.`, 'rewards', {
       label: 'Fill durability and ammo', run: () => { let k = 0; for (const p of arr(SAVE.presents)) if (presentPartEmpty(p) && presentPartFull(p)) k++; return `Set full durability and ammo on ${k} reward${k === 1 ? '' : 's'}.`; }
+    });
+  });
+
+  // Funshots written before the game's one-time setup get doubled in game
+  safe('stamps', () => {
+    if (!RAW_SAV_ROOT || stampInitDone()) return;
+    const set = arr(SAVE.soul.researchstamp).filter(e => Number(e.rate) > 0);
+    if (set.length) add('problem', `Funshots (research stamps) are set, but the game hasn't run its one-time Funshot setup on this save yet. On your first visit to Choku-Funsha it adds them again, doubling them.`, 'research', {
+      label: 'Set Funshots to 0 (the game fills them in)', run: () => { for (const e of arr(SAVE.soul.researchstamp)) e.rate = 0; if (REFRESH_STAMP_GRID) REFRESH_STAMP_GRID(); return 'Funshots set to 0; the game adds the right amount on your first Choku-Funsha visit.'; }
     });
   });
 
