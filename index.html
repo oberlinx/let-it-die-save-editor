@@ -4597,6 +4597,25 @@ let REFRESH_STAMP_GRID = null;
 // you visit Choku-Funsha: it adds the Funshots (and rank points) for everything already researched.
 // Until that flag is set, anything the editor writes into researchstamp is added on top -> doubled.
 // Seen in game: a fresh account maxed by the editor showed doubled Funshots; the game then set the flag.
+// Seen in game: that setup counts research written by the editor twice (a fresh account maxed by the
+// editor showed Slash 106.4 whatever researchstamp held; an account set up by the game shows exactly
+// the saved value, e.g. 49.2). So when the editor sets Funshots on a save without the flag, it also
+// marks the setup as done at download (STAMP_MARK), and the game keeps the editor's values.
+let STAMP_MARK = { root: null, on: false };
+function stampMarked() { return STAMP_MARK.root === RAW_SAV_ROOT && STAMP_MARK.on; }
+function stampFlagIn(root) {
+  const g = root && root.gameflg;
+  const list = g && typeof g === 'object' ? [].concat(...Object.values(g).filter(Array.isArray)) : [];
+  const f = list.find(x => x && x.var === 'SGF_INIT_RESEARCH_STAMP');
+  return !!f && Number(f.value) === 1;
+}
+function applyStampMark(root) {
+  if (!stampMarked() || stampFlagIn(root)) return root;
+  root.gameflg = root.gameflg && typeof root.gameflg === 'object' ? root.gameflg : {};
+  if (!Array.isArray(root.gameflg.sv)) root.gameflg.sv = [];
+  root.gameflg.sv.push({ var: 'SGF_INIT_RESEARCH_STAMP', value: 1, modified: Math.floor(Date.now() / 1e3) });
+  return root;
+}
 function stampInitDone() {
   const g = RAW_SAV_ROOT && RAW_SAV_ROOT.gameflg;
   const list = g && typeof g === 'object' ? [].concat(...Object.values(g).filter(Array.isArray)) : [];
@@ -4605,7 +4624,7 @@ function stampInitDone() {
 }
 function syncStampFromResearch() {
   if (!AP || !AP.pts || !AP.pts.length) return false;
-  if (RAW_SAV_ROOT && !stampInitDone()) return false;   // the game will add them itself
+  if (RAW_SAV_ROOT && !stampInitDone()) STAMP_MARK = { root: RAW_SAV_ROOT, on: true };   // see above
   SAVE.soul.researchstamp = arr(SAVE.soul.researchstamp);
   const computed = computeStampTotals();
   for (const type of RESEARCH_STAMP_TYPES) {
@@ -4627,9 +4646,11 @@ function wireStamp() {
   SAVE.soul.researchstamp = arr(SAVE.soul.researchstamp);
   function renderStampGrid() {
     const pending = !!RAW_SAV_ROOT && !stampInitDone();
-    const computed = !pending && AP && AP.pts && AP.pts.length ? computeStampTotals() : null;
+    const computed = AP && AP.pts && AP.pts.length ? computeStampTotals() : null;
     const noteEl = document.getElementById('stamp-note');
-    if (noteEl) noteEl.innerHTML = pending ? '<div class="warnNote">This save hasn\'t had the game\'s one-time Funshot setup yet. The first time you visit Choku-Funsha the game adds the Funshots (and rank points) for everything researched, so the editor leaves these at 0. Setting them here would double them in game.</div>' : '';
+    if (noteEl) noteEl.innerHTML = !pending ? '' : stampMarked()
+      ? '<div class="capNote">This save hadn\'t had the game\'s one-time Funshot setup. Because the editor set the Funshots, it marks that setup as done when you download, so the game keeps these values instead of re-counting (it counts editor research twice). The setup also grants rank points; set Rank on the Account tab if you want them.</div>'
+      : '<div class="capNote">This save hasn\'t had the game\'s one-time Funshot setup yet (it runs on the first Choku-Funsha visit). If you change research here, the editor sets the Funshots and marks that setup as done, because the game\'s setup counts editor research twice.</div>';
     document.getElementById('stamp-grid').innerHTML = RESEARCH_STAMP_TYPES.map(type => {
       const e = SAVE.soul.researchstamp.find(r => r.type === type);
       const raw = e ? e.rate : 0;
@@ -4656,7 +4677,6 @@ function wireStamp() {
   REFRESH_STAMP_GRID = renderStampGrid;
   renderStampGrid();
   document.getElementById('stamp-sync-all').addEventListener('click', () => {
-    if (RAW_SAV_ROOT && !stampInitDone()) { toast('Not needed on this save: the game adds the Funshots itself on your first Choku-Funsha visit', true); return; }
     if (!syncStampFromResearch()) {
       toast('Load masters.db first -- Research Stamp totals are computed from it', true);
       return;
@@ -6058,13 +6078,21 @@ function runSaveCheck() {
     });
   });
 
-  // Funshots written before the game's one-time setup get doubled in game
+  // Funshots: the game's one-time setup double-counts editor research; stored values above what research gives
   safe('stamps', () => {
-    if (!RAW_SAV_ROOT || stampInitDone()) return;
-    const set = arr(SAVE.soul.researchstamp).filter(e => Number(e.rate) > 0);
-    if (set.length) add('problem', `Funshots (research stamps) are set, but the game hasn't run its one-time Funshot setup on this save yet. On your first visit to Choku-Funsha it adds them again, doubling them.`, 'research', {
-      label: 'Set Funshots to 0 (the game fills them in)', run: () => { for (const e of arr(SAVE.soul.researchstamp)) e.rate = 0; if (REFRESH_STAMP_GRID) REFRESH_STAMP_GRID(); return 'Funshots set to 0; the game adds the right amount on your first Choku-Funsha visit.'; }
-    });
+    if (!RAW_SAV_ROOT || !AP || !AP.pts || !AP.pts.length) return;
+    const comp = computeStampTotals(), cur = {};
+    for (const e of arr(SAVE.soul.researchstamp)) cur[e.type] = Number(e.rate) || 0;
+    const high = RESEARCH_STAMP_TYPES.filter(t => (cur[t] || 0) > (comp[t] || 0) + 0.05);
+    if (!stampInitDone() && !stampMarked() && Object.values(cur).some(v => v > 0)) {
+      add('problem', `Funshots are set, but the game hasn't run its one-time Funshot setup on this save. When it does (first Choku-Funsha visit) it counts research made by the editor twice, doubling the Funshots.`, 'research', {
+        label: 'Set Funshots and mark the setup done', run: () => { syncStampFromResearch(); return 'Funshots set from research; the setup will be marked as done when you download.'; }
+      });
+    } else if (high.length) {
+      add('warning', `Funshots are higher than your research gives: ${high.map(t => `${STAMP_LABELS[t]} ${cur[t]} (research gives ${comp[t]})`).join(', ')}. This is what the game's setup does on research made by the editor.`, 'research', {
+        label: 'Set Funshots from research', run: () => { syncStampFromResearch(); return 'Funshots set from research.'; }
+      });
+    }
   });
 
   // armor skins in use must still be unlocked (R&D at +4)
@@ -7021,7 +7049,7 @@ function reviewFileName(ext, stamp) { return `brggame_${stamp || reviewStamp()}.
 function buildDownloadRoot() {
   normalizePresents(SAVE.presents);
   questOrdForSave();
-  return applyAccountChoice(restoreEmptyShapes(applyDateRules(buildRawSavRootFromSave(SAVE, RAW_SAV_ROOT, RAW_SAV_MAIN_UID)), RAW_SAV_ROOT));
+  return applyStampMark(applyAccountChoice(restoreEmptyShapes(applyDateRules(buildRawSavRootFromSave(SAVE, RAW_SAV_ROOT, RAW_SAV_MAIN_UID)), RAW_SAV_ROOT)));
 }
 
 const REVIEW_SOUL_LABELS = {
@@ -7216,6 +7244,7 @@ function reviewDiff(A, B, rawA, rawB) {
   }
   for (const k of [ 'all_quests', 'prison', 'playlog', 'hitchart', 'teams', 'dests' ]) if (JSON.stringify(A[k]) !== JSON.stringify(B[k])) note(k);
   if (DATE_RULES.length) ot.lines.push('Dates fixed by the Dates tab rules');
+  if (!stampFlagIn(rawA) && stampFlagIn(rawB)) ot.lines.push("Game's one-time Funshot setup marked as done (so it won't re-count research)");
   return S.filter(s => s.lines.length);
 }
 
