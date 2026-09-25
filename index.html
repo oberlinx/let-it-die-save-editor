@@ -2384,7 +2384,7 @@ function renderFiForm(chr) {
     }
     toast(qty < wanted ? `Death Bag full -- added ${qty} of ${wanted}x "${rec.name}"` : `Added ${qty}x "${rec.name}" to Fighter Inventory`, qty < wanted);
     renderAll();
-  });
+  }, undefined, 'fi-add-lvl');
 }
 
 // The game has no freezer-level field: the freezer's size is the number of
@@ -3039,18 +3039,37 @@ function fullRecordFor(entry) {
   return idx && idx[entry.id] || entry;
 }
 
-function wireAutocomplete(input, dropEl, category, onPick, ptType) {
-  let hiIdx = -1, results = [];
+// levelInputId (weapon/armor searches): only offer parts that can really be at the level typed
+// in that box (e.g. Iron Hammer tops out at +4, so at +5 only its uncapped versions are listed).
+function wireAutocomplete(input, dropEl, category, onPick, ptType, levelInputId) {
+  let hiIdx = -1, results = [], hiddenNote = '';
+  const levelEl = () => levelInputId ? document.getElementById(levelInputId) : null;
+  function search(q) {
+    const lv = levelEl();
+    if (category !== 'pt' || !lv || lv.value === '') { hiddenNote = ''; return searchNames(q, category, 30, ptType); }
+    const L = parseInt(lv.value, 10) || 0;
+    let hidden = 0;
+    const list = searchNames(q, category, 400, ptType).filter(r => {
+      const rec = PT_INDEX[r.id];
+      const ok = !rec || (L >= minDisplayLevel(rec) && L <= maxDisplayLevel(rec));
+      if (!ok) hidden++;
+      return ok;
+    });
+    hiddenNote = hidden ? `${hidden} more can't be +${L} and aren't listed (change the level to see them)` : '';
+    return list.slice(0, 30);
+  }
   function show(list) {
     results = list;
     hiIdx = -1;
     dropEl.innerHTML = list.map((r, i) => `<div class="acitem" data-i="${i}"><span>${escapeHtml(r.name)}${r.category === 'pt' && PT_INDEX[r.id] && PT_INDEX[r.id].is_limitbreak ? ' <span class="badge lb" style="margin-left:4px;">Uncap</span>' : ''}</span><span class="id">${r.id}</span></div>`).join('');
-    dropEl.classList.toggle('open', list.length > 0);
+    if (hiddenNote) dropEl.innerHTML += `<div class="acnote" style="padding:6px 10px; font-size:11px; color:var(--text-faint); cursor:default;">${escapeHtml(hiddenNote)}</div>`;
+    dropEl.classList.toggle('open', list.length > 0 || !!hiddenNote);
   }
-  input.addEventListener('input', () => show(searchNames(input.value, category, 30, ptType)));
+  input.addEventListener('input', () => show(search(input.value)));
   input.addEventListener('focus', () => {
-    if (input.value) show(searchNames(input.value, category, 30, ptType));
+    if (input.value) show(search(input.value));
   });
+  if (levelEl()) levelEl().addEventListener('input', () => { if (input.value) show(search(input.value)); });
   input.addEventListener('blur', () => setTimeout(() => dropEl.classList.remove('open'), 150));
   input.addEventListener('keydown', e => {
     if (!dropEl.classList.contains('open')) return;
@@ -4116,7 +4135,7 @@ function renderSbForm() {
   const catType = sbCategory === 'pt' ? 'pt' : sbCategory === 'bp' ? 'bp' : sbCategory === 'msr' ? 'msr' : sbCategory === 'bst' ? 'bst' : 'item';
   wireAutocomplete(addSearch, document.getElementById('sb-add-acdrop'), catType, rec => {
     depositToStorage(rec);
-  });
+  }, undefined, 'sb-add-lvl');
 }
 
 function storageFreeSlotIndex() {
@@ -4422,7 +4441,7 @@ function renderRbForm() {
       } else {
         addPresent(rbType, num, rec.id);
       }
-    });
+    }, undefined, 'rb-add-lvl');
   } else {
     document.getElementById('rb-add').addEventListener('click', () => {
       const num = Math.max(1, parseInt((document.getElementById('rb-num') || {}).value, 10) || 1);
