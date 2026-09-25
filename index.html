@@ -4395,6 +4395,7 @@ function wireRewardBox() {
       const p = SAVE.presents[parseInt(inp.dataset.rbIdx, 10)];
       const raw = parseInt(inp.value, 10) || 1;
       p.val1 = String(raw > 1 ? raw : 0);
+      presentPartFull(p);
       const rec = PT_INDEX[p.val0];
       toast(`${rec ? rec.name : 'Reward'} set to +${rec ? displayFromRaw(rec, raw) : raw - 1}`);
     });
@@ -4404,7 +4405,7 @@ function wireRewardBox() {
 
 function renderRbForm() {
   const isSearchType = [ 'ITEM', 'BP', 'MUSHROOM', 'BEAST', 'SKILL', 'PT' ].includes(rbType);
-  document.getElementById('rb-add-form').innerHTML = rbAddFormHtml() + (isSearchType ? qtyFirstNote(rbType === 'PT') : '') + (rbType === 'PT' ? '<div class="capNote">Weapons and armor are sent the way the game sends them (type = the part\'s slot). The level is set to the in-game +n you pick; the game\'s own weapon rewards always come at +0, so check the level when you claim it.</div>' : '');
+  document.getElementById('rb-add-form').innerHTML = rbAddFormHtml() + (isSearchType ? qtyFirstNote(rbType === 'PT') : '') + (rbType === 'PT' ? '<div class="capNote">Weapons and armor are sent the way the game sends them (type = the part\'s slot). They arrive at the in-game +n you pick, with full durability and full ammo.</div>' : '');
   bindFormState([ [ 'rb-num', RB_FORM, isSearchType ? 'searchNum' : 'amountNum' ], [ 'rb-add-unrevealed', RB_FORM, 'unrevealed' ], [ 'rb-add-lvl', RB_FORM, 'ptLvl' ] ]);
   const searchCat = rbType === 'ITEM' ? 'item' : rbType === 'BP' ? 'bp' : rbType === 'MUSHROOM' ? 'msr' : rbType === 'BEAST' ? 'bst' : rbType === 'SKILL' ? 'skl' : rbType === 'PT' ? 'pt' : null;
   if (searchCat) {
@@ -4416,6 +4417,8 @@ function renderRbForm() {
       } else if (rbType === 'PT') {
         const raw = rawFromDisplay(rec, (document.getElementById('rb-add-lvl') || {}).value);
         addPresent(rec.type || 'PTTP_ARM', num, rec.id, raw > 1 ? raw : 0);
+        presentPartFull(SAVE.presents[SAVE.presents.length - 1]);
+        renderAll();
       } else {
         addPresent(rbType, num, rec.id);
       }
@@ -4476,6 +4479,20 @@ function normalizePresents(list) {
   }
   return n;
 }
+
+// Weapon / armor rewards (type PTTP_*): val1 = level (save units, '0' = base), val2 = durability
+// (the raw number), val3 = loaded ammo, val4 = spare ammo -- confirmed in game by claiming test rewards.
+// The game's '0' there means 0 durability / no ammo, so the editor always fills them to full.
+function isPartPresent(p) { return !!p && (p.type === 'PT' || String(p.type).startsWith('PTTP_')) && !!PT_INDEX[p.val0]; }
+function presentPartFull(p) {
+  if (!isPartPresent(p)) return false;
+  const rec = PT_INDEX[p.val0], raw = Math.max(1, Number(p.val1) || 1);
+  const want = [ String(partMaxDur(rec, raw) || Number(rec.dur) || 0), String(Number(rec.capacity) || 0), String(Number(rec.spare) || 0) ];
+  const changed = p.val2 !== want[0] || p.val3 !== want[1] || p.val4 !== want[2];
+  p.val2 = want[0]; p.val3 = want[1]; p.val4 = want[2];
+  return changed;
+}
+function presentPartEmpty(p) { return isPartPresent(p) && !(Number(p.val2) > 0); }
 
 function addPresent(type, num, val0, val1) {
   SAVE.presents.push({
@@ -5996,6 +6013,14 @@ function runSaveCheck() {
     const n = normalizeResearchMarkers(JSON.parse(JSON.stringify(research)));
     if (n) add('warning', `${n} researched part${n === 1 ? ' is' : 's are'} missing the "next level" marker, so the game may not let you upgrade ${n === 1 ? 'it' : 'them'} further.`, 'research', {
       label: 'Fix markers', run: () => { const k = normalizeResearchMarkers(SAVE.user_research); return `Fixed the research markers on ${k} part${k === 1 ? '' : 's'}.`; }
+    });
+  });
+
+  // weapon / armor rewards with no durability (older editor versions sent them that way)
+  safe('rewards-parts', () => {
+    const bad = arr(SAVE.presents).filter(presentPartEmpty);
+    if (bad.length) add('warning', `${bad.length} weapon/armor reward${bad.length === 1 ? '' : 's'} in the Reward Box would arrive with 0 durability and no ammo.`, 'rewards', {
+      label: 'Fill durability and ammo', run: () => { let k = 0; for (const p of arr(SAVE.presents)) if (presentPartEmpty(p) && presentPartFull(p)) k++; return `Set full durability and ammo on ${k} reward${k === 1 ? '' : 's'}.`; }
     });
   });
 
