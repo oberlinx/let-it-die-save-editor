@@ -314,6 +314,9 @@ const FI_FORM = {
 };
 
 const RB_FORM = {
+  bagRarity: 'GOLD',
+  bagContent: '',
+  bagQty: 1,
   ptLvl: 0,
   searchNum: 1,
   amountNum: 1e3,
@@ -4366,6 +4369,9 @@ const PRESENT_TYPES = [ {
   id: 'BP',
   label: 'Blueprint'
 }, {
+  id: 'LOSTBAG',
+  label: 'Lost Bag'
+}, {
   id: 'PT',
   label: 'Weapon / Armor'
 }, {
@@ -4412,10 +4418,22 @@ function rewardRow(p, i) {
       levelInput = `<select class="rb-pt-level" data-rb-idx="${i}" title="Level (in-game +n)" style="width:80px; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:4px 6px; font-family:var(--mono);">${opts}</select>`;
     }
   }
-  return `<div class="listRow"><div class="name">${escapeHtml(p.type || '?')}: ${escapeHtml(detail)}</div><div class="id">${escapeHtml(p.from || '?')}${p.kind ? ' · ' + p.kind : ''}</div>${levelInput}<button class="subtle" data-rb-remove="${i}">✕</button></div>`;
+  const bagLbl = lostBagPresentLabel(p);
+  if (bagLbl) detail = `${cmpPresentLabel(p)}`;
+  return `<div class="listRow"><div class="name">${bagLbl ? `${bagChip(String(p.kind).replace('MYSTERYBAG_', ''))} Lost Bag → ` : escapeHtml(p.type || '?') + ': '}${escapeHtml(detail)}</div><div class="id">${escapeHtml(p.from || '?')}${p.kind ? ' · ' + p.kind : ''}</div>${levelInput}<button class="subtle" data-rb-remove="${i}">✕</button></div>`;
 }
 
 function rbAddFormHtml() {
+  if (rbType === 'LOSTBAG') {
+    const pool = bagPool(RB_FORM.bagRarity);
+    if (RB_FORM.bagContent && !pool.some(r => r.id === RB_FORM.bagContent)) RB_FORM.bagContent = '';
+    return `<div class="grid">
+      <div class="field"><label>Rarity</label><select id="rb-bag-rarity" style="width:100%; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);">${BAG_RARITIES.map(r => `<option value="${r}" ${r === RB_FORM.bagRarity ? 'selected' : ''}>${bagTitle(r)}</option>`).join('')}</select></div>
+      <div class="field" style="grid-column:span 2;"><label>Contents</label><select id="rb-bag-content" style="width:100%; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);"><option value="">Random (the game's odds for ${bagTitle(RB_FORM.bagRarity)})</option>${pool.slice().sort((a, b) => b.p - a.p).map(r => `<option value="${r.id}" ${r.id === RB_FORM.bagContent ? 'selected' : ''}>${escapeHtml(r.name)} (${(r.p * 100).toFixed(r.p < 0.01 ? 2 : 1)}%)</option>`).join('')}</select></div>
+      <div class="field"><label>How many bags</label><input type="number" id="rb-bag-qty" min="1" max="99" value="${escapeHtml(RB_FORM.bagQty)}"></div>
+      <div class="field" style="display:flex; align-items:end;"><button class="subtle" id="rb-bag-add">+ Add Lost Bag${Number(RB_FORM.bagQty) > 1 ? 's' : ''}</button></div>
+    </div>`;
+  }
   if ([ 'ITEM', 'BP', 'MUSHROOM', 'BEAST', 'SKILL', 'PT' ].includes(rbType)) {
     let extraField = '';
     if (rbType === 'BP') extraField = `<div class="field"><label><input type="checkbox" id="rb-add-unrevealed" style="width:auto; margin-right:6px;" ${RB_FORM.unrevealed ? 'checked' : ''}>Unrevealed</label></div>`;
@@ -4453,7 +4471,43 @@ function wireRewardBox() {
   renderRbForm();
 }
 
+// A Lost Bag in the Reward Box, as the game writes it when a bag is earned in Tokyo Death Metro:
+// from TDM_REWARD, kind MYSTERYBAG_<RARITY>, and the bag's contents as the reward itself
+// (type = the item's own itemtype for items, e.g. ITTP_MATERIAL; val0 = the id).
+function addLostBagPresent(rarity, genId) {
+  const g = bagGenIndex()[genId], rw = g && rwdRow(g.rwdid);
+  if (!rw) return null;
+  const p = {
+    pid: presentUuid(), from: 'TDM_REWARD', type: boxGameType(rw.type, rw.val0), created: Math.floor(Date.now() / 1e3),
+    num: Number(rw.num) || 1, fromval: '', kind: 'MYSTERYBAG_' + rarity,
+    val0: rw.val0 || '', val1: String(rw.val1 || 0), val2: String(rw.val2 || 0), val3: '0', val4: '0'
+  };
+  SAVE.presents.push(p);
+  presentPartFull(p);   // a weapon/armor inside arrives full
+  return p;
+}
+function lostBagPresentLabel(p) {
+  const m = /^MYSTERYBAG_(\w+)$/.exec(p && p.kind || '');
+  return m ? `${bagTitle(m[1])} Lost Bag` : '';
+}
+
 function renderRbForm() {
+  if (rbType === 'LOSTBAG') {
+    document.getElementById('rb-add-form').innerHTML = rbAddFormHtml() + '<div class="capNote">Sent the way Tokyo Death Metro sends a Lost Bag: it shows in the Reward Box as a bag of that rarity and gives its contents when you claim it. "Random" rolls each bag from the game\'s own odds.</div>';
+    document.getElementById('rb-bag-rarity').addEventListener('change', e => { RB_FORM.bagRarity = e.target.value; RB_FORM.bagContent = ''; renderRbForm(); });
+    document.getElementById('rb-bag-content').addEventListener('change', e => { RB_FORM.bagContent = e.target.value; });
+    document.getElementById('rb-bag-qty').addEventListener('change', e => { RB_FORM.bagQty = Math.max(1, Math.min(99, parseInt(e.target.value, 10) || 1)); renderRbForm(); });
+    document.getElementById('rb-bag-add').addEventListener('click', () => {
+      const n = Math.max(1, Math.min(99, parseInt(document.getElementById('rb-bag-qty').value, 10) || 1));
+      const pool = bagPool(RB_FORM.bagRarity);
+      if (!pool.length) { toast('No contents known for that rarity (load masters.db)', true); return; }
+      const ids = RB_FORM.bagContent ? Array(n).fill(RB_FORM.bagContent) : bagRoll(pool, n, Math.random);
+      const got = ids.map(id => addLostBagPresent(RB_FORM.bagRarity, id)).filter(Boolean);
+      renderAll();
+      toast(`Added ${got.length} ${bagTitle(RB_FORM.bagRarity)} Lost Bag${got.length === 1 ? '' : 's'}: ${[...new Set(got.map(p => cmpPresentLabel(p)))].slice(0, 4).join(', ')}${got.length > 4 ? '…' : ''}`);
+    });
+    return;
+  }
   const isSearchType = [ 'ITEM', 'BP', 'MUSHROOM', 'BEAST', 'SKILL', 'PT' ].includes(rbType);
   document.getElementById('rb-add-form').innerHTML = rbAddFormHtml() + (isSearchType ? qtyFirstNote(rbType === 'PT') : '') + (rbType === 'PT' ? '<div class="capNote">Weapons and armor are sent the way the game sends them (type = the part\'s slot). They arrive at the in-game +n you pick, with full durability and full ammo.</div>' : '');
   bindFormState([ [ 'rb-num', RB_FORM, isSearchType ? 'searchNum' : 'amountNum' ], [ 'rb-add-unrevealed', RB_FORM, 'unrevealed' ], [ 'rb-add-lvl', RB_FORM, 'ptLvl' ] ]);
@@ -7247,7 +7301,8 @@ function reviewDiff(A, B, rawA, rawB) {
   for (const id of new Set(Object.keys(hA).concat(Object.keys(hB)))) if (hubState(hA[id]) !== hubState(hB[id])) hb.lines.push(`${hubName(id)}: ${hubState(hA[id])} → ${hubState(hB[id])}`);
   // reward box
   const rw = sec('Reward Box');
-  const pa = new Map(arr(A.presents).map(p => [ p.pid, cmpPresentLabel(p) ])), pb = new Map(arr(B.presents).map(p => [ p.pid, cmpPresentLabel(p) ]));
+  const pl = p => lostBagPresentLabel(p) ? `${lostBagPresentLabel(p)} (${cmpPresentLabel(p)})` : cmpPresentLabel(p);
+  const pa = new Map(arr(A.presents).map(p => [ p.pid, pl(p) ])), pb = new Map(arr(B.presents).map(p => [ p.pid, pl(p) ]));
   const pd = reviewMapDiff(pa, pb);
   if (pd.added.length) rw.lines.push(`Added: ${reviewGroup(pd.added)}`);
   if (pd.removed.length) rw.lines.push(`Removed: ${reviewGroup(pd.removed)}`);

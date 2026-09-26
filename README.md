@@ -35,7 +35,7 @@ PSN saves have to be decrypted first.
 | **Dead Fighters** | Browse the dead fighter archive: yours and other players', when and where they died, Kill Coins carried, and stats, gear and decals when the game kept them (view only) |
 | **Dates** | Every date in the save, with fixes for time-jump damage (future dates, dates past 2038, overflowed negative dates) |
 | Storage | Storage Box contents and capacity; repair and refill ammo on everything stored |
-| Rewards | Reward Box items, including weapons and armor at a chosen in-game +n |
+| Rewards | Reward Box items, including weapons and armor at a chosen in-game +n, and Lost Bags of any rarity (random contents from the game's odds, or chosen) |
 | **Quests** | Current quests (progress, complete, drop), take a new quest, and quest history (times taken / cleared) |
 | VIP | Express Pass: None, 1-Day or 30-Day, passes held, expiry, auto-renew |
 | **Compare** | Load a second save, see what differs, and copy ticked parts into the save you're editing (account values, fighters with their gear, research, decal stock, Waiting Room decorations, Reward Box and Storage items). You can also choose which account the downloaded save belongs to, to move progress onto another account |
