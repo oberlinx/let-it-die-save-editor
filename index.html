@@ -3096,7 +3096,7 @@ function wireAutocomplete(input, dropEl, category, onPick, ptType, levelInputId,
   function show(list) {
     results = list;
     hiIdx = -1;
-    dropEl.innerHTML = list.map((r, i) => `<div class="acitem" data-i="${i}"><span>${escapeHtml(r.name)}${r.category === 'pt' && PT_INDEX[r.id] && PT_INDEX[r.id].is_limitbreak ? ' <span class="badge lb" style="margin-left:4px;">Uncap</span>' : ''}</span><span class="id">${r.id}</span></div>`).join('');
+    dropEl.innerHTML = list.map((r, i) => `<div class="acitem" data-i="${i}"><span>${escapeHtml(r.name)}${r.category === 'pt' && PT_INDEX[r.id] && PT_INDEX[r.id].is_limitbreak ? ' <span class="badge lb" style="margin-left:4px;">Uncap</span>' : ''}${r.category === 'skl' && SKL_INDEX[r.id] ? (Number(SKL_INDEX[r.id].premium) ? ' <span class="badge" style="margin-left:4px;" title="Kept when the fighter dies or the decal is taken off">Premium</span>' : ' <span class="badge" style="margin-left:4px; opacity:.7;" title="Lost when the fighter dies or the decal is taken off">Normal</span>') : ''}</span><span class="id">${r.id}</span></div>`).join('');
     if (hiddenNote) dropEl.innerHTML += `<div class="acnote" style="padding:6px 10px; font-size:11px; color:var(--text-faint); cursor:default;">${escapeHtml(hiddenNote)}</div>`;
     dropEl.classList.toggle('open', list.length > 0 || !!hiddenNote);
   }
@@ -3639,7 +3639,7 @@ function questReward(rwdid) {
   if (r.type === 'MONEY') return `${Number(r.num).toLocaleString()} Kill Coins`;
   const id = r.val0 || '';
   let nm = null;
-  if (r.type === 'SKILL') nm = SKL_INDEX[id] && SKL_INDEX[id].name && `Decal: ${SKL_INDEX[id].name}`;
+  if (r.type === 'SKILL') nm = SKL_INDEX[id] && SKL_INDEX[id].name && `Decal: ${decalNameP(id)}`;
   else if (ITEM_INDEX[id]) {
     const it = ITEM_INDEX[id];
     const bp = id.startsWith('ITMP_') && PT_INDEX[id.replace(/^ITMP_/, 'PT_')];
@@ -3877,6 +3877,12 @@ const DECAL_CAP = 99;
 // listed (tagged) so they can be seen and cleared. Decals with unlock ____SERVICE_IN are
 // normal: a genuine, unedited PSN save holds 11 of them with counts from 3 to 16.
 const DECAL_FORM = { includePs: false };
+// Decal name with (Premium) when it is the premium version -- most names exist as both.
+function decalNameP(id) {
+  const r = SKL_INDEX[id];
+  if (!r) return id;
+  return r.name + (Number(r.premium) ? ' (Premium)' : '');
+}
 function decalOddTag(id) {
   const r = SKL_INDEX[id];
   if (!r) return '';
@@ -3927,7 +3933,7 @@ function wireSkillDecals() {
       const e = entryFor(s.id);
       const cnt = e ? Math.min(Math.max(e.cnt || 0, 0), DECAL_CAP) : 0;
       const tag = decalOddTag(s.id);
-      return `<div class="listRow"><div class="name">${escapeHtml(s.name)}${tag ? ` <span class="badge" style="margin-left:4px;">${tag}</span>` : ''}</div><div class="id">${s.id}</div>\n        <input type="number" class="decal-cnt" data-decal="${s.id}" min="0" max="${DECAL_CAP}" value="${cnt}" style="width:55px;">\n        <button class="subtle" data-decal-max="${s.id}">Max</button>\n      </div>`;
+      return `<div class="listRow"><div class="name">${escapeHtml(s.name)}${Number(s.premium) ? ' <span class="badge" style="margin-left:4px;" title="Kept when the fighter dies or the decal is taken off">Premium</span>' : ''}${tag ? ` <span class="badge" style="margin-left:4px;">${tag}</span>` : ''}</div><div class="id">${s.id}</div>\n        <input type="number" class="decal-cnt" data-decal="${s.id}" min="0" max="${DECAL_CAP}" value="${cnt}" style="width:55px;">\n        <button class="subtle" data-decal-max="${s.id}">Max</button>\n      </div>`;
     }).join('') || '<div style="padding:10px; color:var(--text-faint); font-size:12px;">No matches.</div>';
     document.querySelectorAll('.decal-cnt').forEach(inp => {
       inp.addEventListener('change', () => {
@@ -5668,7 +5674,7 @@ function rewardLabel(type, num, v0) {
   if (type === 'MONEY') return `${Number(num).toLocaleString()} Kill Coins`;
   if (type === 'SPIRIT') return `${Number(num).toLocaleString()} SPLithium`;
   let nm = null;
-  if (type === 'SKILL') nm = SKL_INDEX[v0] && `Decal: ${SKL_INDEX[v0].name}`;
+  if (type === 'SKILL') nm = SKL_INDEX[v0] && `Decal: ${decalNameP(v0)}`;
   else if (type === 'MUSHROOM') nm = MSR_INDEX[v0] && `Mushroom: ${MSR_INDEX[v0].name}`;
   else if (type === 'BEAST') nm = BST_INDEX[v0] && `Beast: ${BST_INDEX[v0].name}`;
   else if (ITEM_INDEX[v0]) {
