@@ -4398,8 +4398,8 @@ function blockRewardBox() {
 function rewardRow(p, i) {
   let detail = `${p.num != null ? p.num.toLocaleString() : ''}`;
   let levelInput = '';
-  if (p.type === 'ITEM' && p.val0) {
-    detail = `${itemDisplayName(p.val0)} x${p.num || 1}`;
+  if ((p.type === 'ITEM' || String(p.type).startsWith('ITTP_')) && p.val0 && ITEM_INDEX[p.val0]) {
+    detail = `${String(itemDisplayName(p.val0)).replace(/^Blueprint\s*-\s*/, '')} x${p.num || 1}`;
   } else if (p.type === 'MUSHROOM' && p.val0) {
     detail = `${msrDisplayName(p.val0)} x${p.num || 1}`;
   } else if (p.type === 'BEAST' && p.val0) {
@@ -4420,7 +4420,7 @@ function rewardRow(p, i) {
   }
   const bagLbl = lostBagPresentLabel(p);
   if (bagLbl) detail = `${cmpPresentLabel(p)}`;
-  return `<div class="listRow"><div class="name">${bagLbl ? `${bagChip(String(p.kind).replace('MYSTERYBAG_', ''))} Lost Bag → ` : escapeHtml(p.type || '?') + ': '}${escapeHtml(detail)}</div><div class="id">${escapeHtml(p.from || '?')}${p.kind ? ' · ' + p.kind : ''}</div>${levelInput}<button class="subtle" data-rb-remove="${i}">✕</button></div>`;
+  return `<div class="listRow"><div class="name">${bagLbl ? `${bagChip(String(p.kind).replace('MYSTERYBAG_', ''))} Lost Bag → ` : escapeHtml(presentTypeLabel(p)) + ': '}${escapeHtml(detail)}</div><div class="id">${escapeHtml(p.from || '?')}${p.kind ? ' · ' + p.kind : ''}</div>${levelInput}<button class="subtle" data-rb-remove="${i}">✕</button></div>`;
 }
 
 function rbAddFormHtml() {
@@ -4517,7 +4517,11 @@ function renderRbForm() {
       const num = Math.max(1, parseInt((document.getElementById('rb-num') || {}).value, 10) || 1);
       if (rbType === 'BP') {
         const unrevealed = !!(document.getElementById('rb-add-unrevealed') || {}).checked;
-        addPresent('ITEM', num, rec.id + (unrevealed ? 'U' : ''));
+        // the game gives items (blueprints included) their own itemtype, e.g. ITTP_RMAP -- not 'ITEM'
+        const id = rec.id + (unrevealed ? 'U' : '');
+        addPresent(boxGameType('ITEM', id), num, id);
+      } else if (rbType === 'ITEM') {
+        addPresent(boxGameType('ITEM', rec.id), num, rec.id);
       } else if (rbType === 'PT') {
         const raw = rawFromDisplay(rec, (document.getElementById('rb-add-lvl') || {}).value);
         addPresent(rec.type || 'PTTP_ARM', num, rec.id, raw > 1 ? raw : 0);
@@ -4557,6 +4561,7 @@ function presentProblems(p) {
   for (const k of [ 'fromval', 'kind', 'val0' ]) if (typeof p[k] !== 'string') bad.push(k);
   if (typeof p.num !== 'number') bad.push('num');
   if (typeof p.created !== 'number') bad.push('created');
+  if (p.type === 'ITEM' && ITEM_INDEX[p.val0]) bad.push('type ITEM instead of the item\'s own type');
   return bad;
 }
 function normalizePresents(list) {
@@ -4568,7 +4573,7 @@ function normalizePresents(list) {
     list[i] = {
       pid: typeof p.pid === 'string' && PRESENT_UUID_RE.test(p.pid) ? p.pid : presentUuid(),
       from: p.from || 'LOGIN',
-      type: p.type || '',
+      type: p.type === 'ITEM' && ITEM_INDEX[p.val0] ? (ITEM_INDEX[p.val0].itemtype || 'ITEM') : (p.type || ''),
       created: Number(p.created) || Math.floor(Date.now() / 1e3),
       num: Number(p.num) || 0,
       fromval: s(p.fromval),
@@ -4597,6 +4602,16 @@ function presentPartFull(p) {
   return changed;
 }
 function presentPartEmpty(p) { return isPartPresent(p) && !(Number(p.val2) > 0); }
+
+function presentTypeLabel(p) {
+  const t = String(p && p.type || '');
+  if (t === 'ITTP_RMAP') return /U$/.test(p.val0 || '') ? 'Blueprint (unrevealed)' : 'Blueprint';
+  if (t === 'ITTP_MATERIAL') return 'Material';
+  if (t.startsWith('ITTP_')) return 'Item';
+  if (t === 'PTTP_ARM') return 'Weapon';
+  if (t.startsWith('PTTP_')) return 'Armor';
+  return { MONEY: 'Kill Coins', SPIRIT: 'SPLithium', SKILL: 'Decal', MUSHROOM: 'Mushroom', BEAST: 'Beast' }[t] || t || '?';
+}
 
 function addPresent(type, num, val0, val1) {
   SAVE.presents.push({
