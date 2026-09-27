@@ -1369,7 +1369,7 @@ async function loadMastersBuffer(buf) {
       atkattr: all('SELECT * FROM master_part_atkattr'),
       bodydetail: all('SELECT * FROM master_body_detail')
     };
-    for (const [key, sql] of [['questParamText', 'SELECT qid, no, val FROM master_quest_param_text'], ['questParamDesc', 'SELECT qid, no, val FROM master_quest_param_desc_text'], ['rewards', 'SELECT * FROM master_reward'], ['questCats', 'SELECT * FROM master_quest_category'], ['bagGen', 'SELECT * FROM master_mysterybag_content_gen'], ['bagGenOdds', "SELECT * FROM master_mysterybag_content_gen_odds WHERE odds_id = (SELECT odds_id FROM master_mysterybag_content_odds ORDER BY expires DESC LIMIT 1)"], ['boxGen', 'SELECT * FROM master_deathbox_content_gen'], ['hubCustom', 'SELECT * FROM master_hubcustomize'], ['floorInfo', 'SELECT id, sname, stgid, stgpfx, name FROM master_floor'], ['freezer', 'SELECT * FROM master_freezer'], ['bodies', 'SELECT id, gender FROM master_body'], ['gasmasks', 'SELECT id, gender FROM master_gasmask'], ['fortWhistle', 'SELECT * FROM master_fort_whistle']]) {
+    for (const [key, sql] of [['questParamText', 'SELECT qid, no, val FROM master_quest_param_text'], ['questParamDesc', 'SELECT qid, no, val FROM master_quest_param_desc_text'], ['rewards', 'SELECT * FROM master_reward'], ['expertLvl', 'SELECT ptarmtp, lvl, abp FROM master_expert_lvl_reward'], ['questCats', 'SELECT * FROM master_quest_category'], ['bagGen', 'SELECT * FROM master_mysterybag_content_gen'], ['bagGenOdds', "SELECT * FROM master_mysterybag_content_gen_odds WHERE odds_id = (SELECT odds_id FROM master_mysterybag_content_odds ORDER BY expires DESC LIMIT 1)"], ['boxGen', 'SELECT * FROM master_deathbox_content_gen'], ['hubCustom', 'SELECT * FROM master_hubcustomize'], ['floorInfo', 'SELECT id, sname, stgid, stgpfx, name FROM master_floor'], ['freezer', 'SELECT * FROM master_freezer'], ['bodies', 'SELECT id, gender FROM master_body'], ['gasmasks', 'SELECT id, gender FROM master_gasmask'], ['fortWhistle', 'SELECT * FROM master_fort_whistle']]) {
       try { AP[key] = all(sql); } catch (err) { AP[key] = []; console.warn(`${key} not available in this masters.db:`, err); }
     }
     AP.stewOdds = [];
@@ -4720,6 +4720,34 @@ function addPresent(type, num, val0, val1) {
   renderAll();
 }
 
+// Weapon mastery is stored as points (abp) plus a level. The game's table
+// (master_expert_lvl_reward) gives the points each level needs; genuine saves
+// always have the level that matches the points, and the game works the level
+// out from the points. So whenever the editor sets a level it also sets the points.
+// abp -1 = weapon type never used (level 1).
+function mstThreshold(ptarmtp, lvl) {
+  if (lvl <= 1) return 0;
+  const r = arr(AP && AP.expertLvl).find(x => x.ptarmtp === ptarmtp && Number(x.lvl) === lvl);
+  return r ? Number(r.abp) : null;
+}
+function mstHasTable(ptarmtp) { return mstThreshold(ptarmtp, 2) != null; }
+function mstLevelFromAbp(ptarmtp, abp) {
+  let L = 1;
+  for (let l = 2; l <= 20; l++) { const t = mstThreshold(ptarmtp, l); if (t != null && abp >= t) L = l; }
+  return L;
+}
+function mstSetLevel(e, lvl) {
+  e.lvl = lvl;
+  if (!mstHasTable(e.ptarmtp)) return;
+  const abp = Number(e.abp);
+  if (mstLevelFromAbp(e.ptarmtp, abp) === lvl) return;   // points already fit this level
+  if (lvl <= 1) { e.abp = abp < 0 ? abp : 0; return; }
+  e.abp = mstThreshold(e.ptarmtp, lvl);
+}
+function mstMismatches() {
+  return arr(SAVE && SAVE.soul && SAVE.soul.mstlvl).filter(e => e && mstHasTable(e.ptarmtp) && mstLevelFromAbp(e.ptarmtp, Number(e.abp)) !== Number(e.lvl || 1));
+}
+
 function masteryBlockHtml() {
   return `\n      <div class="eyebrow" style="margin:16px 0 6px;">Weapon Mastery</div>\n      <div class="toolbar"><input type="text" id="mst-filter" placeholder="Filter by weapon name..." style="flex:1; max-width:280px; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);"><button class="subtle" id="mst-max-all">Max all to 20</button></div>\n      <div class="listBlock" id="mst-list" style="max-height:320px;"></div>`;
 }
@@ -4749,7 +4777,8 @@ function wireMastery() {
     document.getElementById('mst-list').innerHTML = shown.map(p => {
       const e = mstlvl.find(m => m.ptarmtp === p.ptarmtp);
       const lvl = e ? e.lvl : 1;
-      return `<div class="listRow"><div class="name">${escapeHtml(p.name)}</div><select class="mst-lvl" data-mst="${p.ptarmtp}" style="width:90px; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);">${fighterOpts(1, 20, Number(lvl) || 1, v => 'Lv ' + v)}</select></div>`;
+      const pts = e && Number(e.abp) > 0 ? Number(e.abp).toLocaleString() + ' pts' : '0 pts';
+      return `<div class="listRow"><div class="name">${escapeHtml(p.name)}</div><div class="id" data-mst-pts="${p.ptarmtp}">${pts}</div><select class="mst-lvl" data-mst="${p.ptarmtp}" style="width:90px; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);">${fighterOpts(1, 20, Number(lvl) || 1, v => 'Lv ' + v)}</select></div>`;
     }).join('');
     document.querySelectorAll('.mst-lvl').forEach(inp => {
       inp.addEventListener('change', () => {
@@ -4760,7 +4789,10 @@ function wireMastery() {
           toast('Mastery caps at lvl 20');
         }
         inp.value = v;
-        ensureEntry(inp.dataset.mst).lvl = v;
+        const e = ensureEntry(inp.dataset.mst);
+        mstSetLevel(e, v);
+        const ptsEl = document.querySelector(`[data-mst-pts="${inp.dataset.mst}"]`);
+        if (ptsEl) ptsEl.textContent = (Number(e.abp) > 0 ? Number(e.abp).toLocaleString() : '0') + ' pts';
       });
     });
   }
@@ -4768,7 +4800,7 @@ function wireMastery() {
   document.getElementById('mst-filter').addEventListener('input', e => renderMst(e.target.value));
   document.getElementById('mst-max-all').addEventListener('click', () => {
     for (const p of AP.ptarmtps || []) {
-      if (resolveName(p.name)) ensureEntry(p.id).lvl = 20;
+      if (resolveName(p.name)) mstSetLevel(ensureEntry(p.id), 20);
     }
     renderMst(document.getElementById('mst-filter').value);
     toast('All 54 real mastery categories maxed to 20');
@@ -6291,6 +6323,16 @@ function runSaveCheck() {
         label: 'Set Funshots from research', run: () => { syncStampFromResearch(); return 'Funshots set from research.'; }
       });
     }
+  });
+
+  // weapon mastery: the level must match the mastery points (the game works it out from them)
+  safe('mastery', () => {
+    const bad = mstMismatches();
+    if (!bad.length) return;
+    const nm = id => { const r = arr(AP && AP.ptarmtps).find(x => x.id === id); return (r && resolveName(r.name)) || id; };
+    add('warning', `Weapon mastery level doesn't match its mastery points on ${bad.length} weapon type${bad.length === 1 ? '' : 's'} (${bad.slice(0, 4).map(e => `${escapeHtml(nm(e.ptarmtp))} Lv ${e.lvl} with ${Number(e.abp)} pts`).join(', ')}${bad.length > 4 ? ', …' : ''}). Older editor versions set only the level; the game goes by the points.`, 'account', {
+      label: 'Set points to match the levels', run: () => { for (const e of bad) mstSetLevel(e, Number(e.lvl) || 1); return `Mastery points set for ${bad.length} weapon type${bad.length === 1 ? '' : 's'}.`; }
+    });
   });
 
   // armor skins in use must still be unlocked (R&D at +4)
