@@ -15,18 +15,18 @@ You can also download `index.html` and open it straight from your PC.
    The browser remembers it after the first time. Use **Forget masters.db** to stop that.
 4. Click **2. Load your save** and pick your `.sav` from
    `...\steamapps\common\LET IT DIE\Savedata\`.
-5. Make your changes, then click **Download .sav**. A list of everything you changed appears first so you can check it; you can also save a backup of the original from there. The file downloads as `brggame_<date>_<time>.sav` so older downloads are never replaced. Rename it to your save's name (e.g. `brggame.sav`) and put it in place of your save.
+5. Check the **Save check** panel (see below), make your changes, then click **Download .sav**. A list of everything you changed appears first so you can check it; you can also save a backup of the original from there. The file downloads as `brggame_<date>_<time>.sav` so older downloads are never replaced. Rename it to your save's name (e.g. `brggame.sav`) and put it in place of your save.
 
-PSN saves have to be decrypted first.
+**PSN players:** your save has to be decrypted first. You'll also need a copy of `masters.db`, which only comes with the PC version. If you don't have the PC game, ask in the [LET IT DIE Discord](https://discordapp.com/invite/gdMZBbK) or DM u/Oberlinx on Reddit.
 
 ## Tabs
 
 | Tab | What it does |
 |---|---|
-| Account | Account name, TDM points/rank, Kill Coins and SPLithium with their bank levels |
-| Fighters | Fighter Freezer: fighter model and gas mask, stats, levels, decals, bags and inventories; equipped weapons (all 6 weapon slots and which one is in each hand) and armor; raise the freezer level (adds hangers), add a new fighter into an empty hanger (the way the Fighter Depot does), delete a fighter the way the game does, and recover a dead fighter (Hater) for free |
+| Account | Kill Coins and SPLithium with their bank and tank levels, TDM points and rank, and weapon mastery. The account name and ID are shown but locked |
+| Fighters | Fighter Freezer: fighter model and gas mask; grade and limit break; stats as dropdowns limited to what the grade and limit break allow, with level worked out from the stats; decals, bags and inventories, with **Repair & refill all** (full durability and ammo); equipped weapons (all 6 weapon slots and which one is in each hand) and armor; raise the freezer level (adds hangers), add a new fighter into an empty hanger (the way the Fighter Depot does), delete a fighter the way the game does, and recover a dead fighter (Hater) for free |
 | Research | Blueprint research (Chokufunsha) unlocks and levels. Armor researched to +4 unlocks its Armor Skin, as in the game |
-| Decals | Skill decal counts |
+| Decals | Skill decal stock. Premium decals are marked. PlayStation-only decals are hidden unless **Include PS-only** is ticked (for modded PC games); ones already in the save are tagged and can be set to 0 |
 | **Stews** | Mushroom Stew decal queue: see upcoming pulls, dedupe, move a rarity to the front, stack, reroll, clear, undo |
 | **Mystery Bags** | Lost Bags from Tokyo Death Metro: see what each rarity will give, set any slot, fill all, or reroll from the game's odds |
 | **Death Boxes** | See each box's reward and unlock time, open now, change or reroll the reward, add or remove boxes |
@@ -35,10 +35,10 @@ PSN saves have to be decrypted first.
 | **Dead Fighters** | Browse the dead fighter archive: yours and other players', when and where they died, Kill Coins carried, and stats, gear and decals when the game kept them (view only) |
 | **Dates** | Every date in the save, with fixes for time-jump damage (future dates, dates past 2038, overflowed negative dates) |
 | Storage | Storage Box contents and capacity; repair and refill ammo on everything stored |
-| Rewards | Reward Box items, including weapons and armor at a chosen in-game +n, and Lost Bags of any rarity (random contents from the game's odds, or chosen) |
+| Rewards | Send to the Reward Box: weapons and armor at a chosen in-game +n (arriving with full durability and ammo), blueprints (normal or unrevealed), items, mushrooms, beasts, decals (marked Premium or Normal), Kill Coins, SPLithium, and Lost Bags of any rarity (random contents from the game's odds, or chosen). Only things the PC game can hand out are offered, and levels an item can't reach are hidden. PS-only parts, blueprints and decals need **Include PS-only** |
 | **Quests** | Current quests (progress, complete, drop), take a new quest, and quest history (times taken / cleared) |
 | VIP | Express Pass: None, 1-Day or 30-Day, passes held, expiry, auto-renew |
-| **Compare** | Load a second save, see what differs, and copy ticked parts into the save you're editing (account values, fighters with their gear, research, decal stock, Waiting Room decorations, Reward Box and Storage items). You can also choose which account the downloaded save belongs to, to move progress onto another account |
+| **Compare** | Load a second save, see what differs, and copy ticked parts into the save you're editing (account values, fighters with their gear, research, decal stock, Waiting Room decorations, Reward Box and Storage items). You can also choose which account the downloaded save belongs to, to move progress onto another account, or **clone the whole second save onto the account you're editing**: everything comes from the other save, but the account ID, name and Steam/PSN IDs stay yours, so the game loads it as your save. Cloning a PlayStation save onto a PC account warns you first and lists any PS-only content |
 | **Defense** | Tokyo Death Metro defense: set the lineup (up to 9 defenders: one wave 5, the other 4) from your freezer fighters, choose the defense alarm and which defender carries it, max the alarm time (5 days) and kidnap protection (12 hours). Only alarms unlocked at your deepest floor can be picked, and the tab stays locked until Tokyo Death Metro is open |
 
 ### Save check
