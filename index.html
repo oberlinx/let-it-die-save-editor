@@ -6669,6 +6669,7 @@ async function cmpLoadFile(file) {
   CMP.file = file.name;
   CMP.account = 'A';
   CMP.msg = '';
+  CLONE_ARMED = false;
 }
 
 const cmpClone = o => JSON.parse(JSON.stringify(o));
@@ -6920,6 +6921,108 @@ function cmpCopyFighter(cid) {
   return null;
 }
 
+// ---- clone the whole second save onto this account ----------------------------
+// Everything comes from the second save (fighters, gear, research, decals, money,
+// quests, flags, settings...). Only the account itself stays: the uid everywhere
+// the save is keyed by it, plus the account name, Steam/PSN ids and login ids.
+// The clone is then loaded as if it were opened from a file, so every tab, the
+// save check and the download work on it as usual. Nothing is written until you
+// download, and neither original file is changed.
+let CLONE_NOTE = { root: null, text: '' };
+let CLONE_ARMED = false;
+function savePlatform(root) {
+  const u = (root && root.user) || {};
+  if (/^7656119\d{10}$/.test(String(u.psnacid || ''))) return 'PC';
+  if (u.olid || u.psnacid) return 'PS';
+  return '?';
+}
+const platformName = p => p === 'PC' ? 'PC (Steam)' : p === 'PS' ? 'PlayStation' : 'unknown platform';
+// PlayStation-only things in an adapted save, grouped by where they are
+function psOnlyContent(ad) {
+  const out = [];
+  const ptPs = id => PT_INDEX[id] && Number(PT_INDEX[id].platform) === 1;
+  const sklPs = id => SKL_INDEX[id] && Number(SKL_INDEX[id].platform) === 1;
+  const ptName = id => (PT_INDEX[id] && PT_INDEX[id].name) || id;
+  const add = (where, names) => { if (names.length) out.push({ where, names }); };
+  for (const c of arr(ad.soul && ad.soul.chrs)) {
+    if (c.state === 'DUMMY') continue;
+    add(`${c.name || 'fighter'}'s gear and Death Bag`, arr(c.pspts).filter(p => ptPs(p.ptid)).map(p => ptName(p.ptid)));
+    add(`${c.name || 'fighter'}'s equipped decals`, arr(c.eqskls).map(x => x.id || x.sklid).filter(sklPs).map(id => SKL_INDEX[id].name));
+  }
+  add('Storage Box', arr(ad.cl && ad.cl.pts).filter(p => ptPs(p.ptid)).map(p => ptName(p.ptid)));
+  add('Decal stock (Decals tab)', arr(ad.soul && ad.soul.psskls).filter(x => x.cnt > 0 && sklPs(x.id)).map(x => `${SKL_INDEX[x.id].name} ×${x.cnt}`));
+  const res = new Set(arr(ad.user_research).filter(r => r.research_type === 'FINISHED' && ptPs(r.ptid)).map(r => r.ptid));
+  add('Research', [ ...new Set([ ...res ].map(ptName)) ]);
+  const meta = hubMeta();
+  add('Waiting Room decorations', arr(ad.soul && ad.soul.hubcustom).filter(e => hubOwned(e) && meta[e.cstmid] && Number(meta[e.cstmid].platform) === 1).map(e => resolveName(meta[e.cstmid].name) || e.cstmid));
+  add('Reward Box', arr(ad.presents).filter(p => {
+    const t = String(p.type || ''), v = p.val0;
+    if (t === 'SKILL') return sklPs(v);
+    if (t === 'PT' || t.startsWith('PTTP_')) return ptPs(v);
+    if (t === 'ITTP_RMAP') return ptPs('PT_' + String(v).replace(/^ITMP_/, '').replace(/U$/, ''));
+    return false;
+  }).map(cmpPresentLabel));
+  return out;
+}
+function cmpBuildClone() {
+  const A = RAW_SAV_ROOT, uA = cmpUidA(), uB = CMP.uidB;
+  const root = cmpClone(CMP.rootB);
+  const nmB = (root.user || {}).nm;
+  if (uA && uB && uA !== uB) cmpRekeyUid(root, uB, uA, 0);
+  const ua = A.user || {};
+  root.user = root.user || {};
+  for (const f of [ 'uid', ...CMP_IDENTITY_FIELDS ]) {
+    if (f in ua) root.user[f] = cmpClone(ua[f]);
+    else delete root.user[f];
+  }
+  // the save's own zombies carry the player's name
+  const zm = root.zombie && root.zombie.zmbs;
+  if (zm && nmB && ua.nm != null) for (const k of Object.keys(zm)) for (const z of arr(zm[k])) if (z && z.name === nmB) z.name = ua.nm;
+  return root;
+}
+async function cmpCloneWhole() {
+  const nmA = (RAW_SAV_ROOT.user || {}).nm || 'this account', uA = cmpUidA();
+  const platA = savePlatform(RAW_SAV_ROOT), platB = savePlatform(CMP.rootB);
+  const fileB = CMP.file, nmB = (CMP.rootB.user || {}).nm || 'other save';
+  const ps = psOnlyContent(CMP.adB);
+  const root = cmpBuildClone();
+  const left = JSON.stringify(root).split('"' + CMP.uidB + '"').length - 1;
+  const file = new File([ JSON.stringify(root) ], `clone of ${fileB.replace(/\.(sav|json)$/i, '')}.json`, { type: 'application/json' });
+  const inp = document.getElementById('file-save');
+  const dt = new DataTransfer();
+  dt.items.add(file);
+  inp.files = dt.files;
+  const before = RAW_SAV_ROOT, origBefore = ORIG_SAVE;
+  inp.dispatchEvent(new Event('change'));
+  for (let i = 0; i < 200 && RAW_SAV_ROOT === before; i++) await new Promise(r => setTimeout(r, 50));
+  if (RAW_SAV_ROOT === before) { toast('The clone could not be loaded', true); return; }
+  // the pre-download review compares against the save you had loaded, so it shows what the clone replaces
+  ORIG_SAVE = Object.assign({}, origBefore, { root: RAW_SAV_ROOT });
+  let t = `This save is now a full copy of ${fileB} (${nmB}, ${platformName(platB)}) on ${nmA}'s account (uid ${uA}, ${platformName(platA)}). Nothing is written until you download the .sav; both original files are unchanged.`;
+  if (left) t += `\nNote: the other account's uid still appears ${left} time${left === 1 ? '' : 's'} as a plain value (not a uid field) -- usually harmless.`;
+  if (platB === 'PS' && platA !== 'PS') t += `\n\nWARNING: the cloned save is a PlayStation save.${ps.length ? ' It has PlayStation-only content that an unmodded PC game doesn\'t have -- it may not show up or may cause problems:' : ' No PlayStation-only weapons, armor, decals, research, decorations or rewards were found in it.'}`;
+  else if (ps.length) t += '\n\nIt has PlayStation-only content that an unmodded PC game doesn\'t have:';
+  for (const g of ps) t += `\n  - ${g.where}: ${g.names.slice(0, 12).join(', ')}${g.names.length > 12 ? ` and ${g.names.length - 12} more` : ''}`;
+  if (ps.length) t += '\nTo clean up: Decals tab "Set them to 0", the save check\'s Reward Box fix, and remove PS-only gear from the fighters and Storage Box tabs.';
+  CLONE_NOTE = { root: RAW_SAV_ROOT, text: t };
+  activeTab = 'compare';
+  renderAll();
+  toast(`Cloned ${fileB} onto ${nmA}'s account -- check it, then download`);
+}
+function cloneBlockHtml() {
+  const nmA = (RAW_SAV_ROOT.user || {}).nm || 'this save', nmB = (CMP.rootB.user || {}).nm || 'other save';
+  const platA = savePlatform(RAW_SAV_ROOT), platB = savePlatform(CMP.rootB);
+  const ps = psOnlyContent(CMP.adB);
+  const psCount = ps.reduce((n, g) => n + g.names.length, 0);
+  let warn = '';
+  if (platB === 'PS' && platA !== 'PS') warn = `<div class="warnNote" style="margin:6px 0;"><b>${escapeHtml(nmB)}'s save is a PlayStation save</b> and this account is ${platformName(platA)}. ${psCount ? `It has ${psCount} PlayStation-only thing${psCount === 1 ? '' : 's'} an unmodded PC game doesn't have (${ps.map(g => escapeHtml(g.where)).slice(0, 5).join('; ')}${ps.length > 5 ? '…' : ''}). They'll be listed after cloning so you can clean them up.` : 'No PlayStation-only weapons, armor, decals, research, decorations or rewards were found in it.'}</div>`;
+  else if (psCount) warn = `<div class="warnNote" style="margin:6px 0;">${escapeHtml(nmB)}'s save has ${psCount} PlayStation-only thing${psCount === 1 ? '' : 's'} an unmodded PC game doesn't have. They'll be listed after cloning.</div>`;
+  return `<div class="subDetails" style="padding:10px; margin-bottom:12px;"><div class="eyebrow" style="margin-bottom:6px;">Clone the whole save</div>
+    <div class="capNote" style="margin-top:0;">Replace everything in the save you're editing with <b>${escapeHtml(nmB)}</b>'s save (${platformName(platB)}): fighters, gear, research, decals, money, quests, settings and flags. Only the account stays <b>${escapeHtml(nmA)}</b>'s (uid ${escapeHtml(cmpUidA())}, ${platformName(platA)}): the account id is moved everywhere the save uses it, and the name, Steam/PSN ids and login ids are kept. Changes you made to this save that you haven't downloaded are lost. Nothing is written until you download.</div>
+    ${warn}
+    <button class="action" id="cmp-clone">${CLONE_ARMED ? 'Click again to replace this save with the clone' : `Clone ${escapeHtml(nmB)}'s save onto ${escapeHtml(nmA)}'s account`}</button></div>`;
+}
+
 // ---- UI ---------------------------------------------------------------------
 function blockCompare() {
   return `<section class="block">
@@ -6938,8 +7041,10 @@ function renderCompare() {
   const uA = cmpUidA(), nmA = (RAW_SAV_ROOT.user || {}).nm || 'this save';
   let h = `<div class="toolbar"><label class="subtle" style="cursor:pointer; padding:6px 10px; border:1px solid var(--panel-border);">Load second save (.sav or .json)<input type="file" id="cmp-file" accept=".sav,.json" style="display:none;"></label>
     <span class="count">${CMP.rootB ? `Comparing with <b>${escapeHtml(CMP.file)}</b>` : 'No second save loaded'}</span></div>`;
+  if (CLONE_NOTE.root === RAW_SAV_ROOT && CLONE_NOTE.text) h += `<pre class="stewLog"${/WARNING|PlayStation-only/.test(CLONE_NOTE.text) ? ' style="border-color:var(--accent);"' : ''}>${escapeHtml(CLONE_NOTE.text)}</pre>`;
   if (CMP.msg) h += `<pre class="stewLog">${escapeHtml(CMP.msg)}</pre>`;
   if (!CMP.rootB) { host.innerHTML = h; cmpWire(); return; }
+  h += cloneBlockHtml();
   const nmB = (CMP.rootB.user || {}).nm || 'other save';
   const same = uA === CMP.uidB;
   h += `<div class="subDetails" style="padding:10px; margin-bottom:12px;"><div class="field" style="max-width:520px;"><label>The downloaded save belongs to</label>
@@ -6985,6 +7090,12 @@ function cmpWire() {
     if (!f) return;
     try { await cmpLoadFile(f); toast(`Loaded ${f.name} for comparing`); } catch (e) { CMP.rootB = null; CMP.adB = null; CMP.msg = `Couldn't read ${f.name}: ${e.message}`; }
     renderCompare();
+  });
+  const cl = document.getElementById('cmp-clone');
+  if (cl) cl.addEventListener('click', () => {
+    if (!CLONE_ARMED) { CLONE_ARMED = true; renderCompare(); setTimeout(() => { if (CLONE_ARMED) { CLONE_ARMED = false; if (activeTab === 'compare') renderCompare(); } }, 8000); return; }
+    CLONE_ARMED = false;
+    cmpCloneWhole();
   });
   const acc = document.getElementById('cmp-account');
   if (acc) acc.addEventListener('change', () => { CMP.account = acc.value; renderCompare(); toast(acc.value === 'B' ? 'The download will use the other save\'s account' : 'The download keeps this save\'s account'); });
