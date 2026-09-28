@@ -1369,7 +1369,7 @@ async function loadMastersBuffer(buf) {
       atkattr: all('SELECT * FROM master_part_atkattr'),
       bodydetail: all('SELECT * FROM master_body_detail')
     };
-    for (const [key, sql] of [['questParamText', 'SELECT qid, no, val FROM master_quest_param_text'], ['questParamDesc', 'SELECT qid, no, val FROM master_quest_param_desc_text'], ['rewards', 'SELECT * FROM master_reward'], ['expertLvl', 'SELECT ptarmtp, lvl, abp FROM master_expert_lvl_reward'], ['questCats', 'SELECT * FROM master_quest_category'], ['bagGen', 'SELECT * FROM master_mysterybag_content_gen'], ['bagGenOdds', "SELECT * FROM master_mysterybag_content_gen_odds WHERE odds_id = (SELECT odds_id FROM master_mysterybag_content_odds ORDER BY expires DESC LIMIT 1)"], ['boxGen', 'SELECT * FROM master_deathbox_content_gen'], ['hubCustom', 'SELECT * FROM master_hubcustomize'], ['floorInfo', 'SELECT id, sname, stgid, stgpfx, name FROM master_floor'], ['freezer', 'SELECT * FROM master_freezer'], ['bodies', 'SELECT id, gender FROM master_body'], ['gasmasks', 'SELECT id, gender FROM master_gasmask'], ['fortWhistle', 'SELECT * FROM master_fort_whistle']]) {
+    for (const [key, sql] of [['questParamText', 'SELECT qid, no, val FROM master_quest_param_text'], ['questParamDesc', 'SELECT qid, no, val FROM master_quest_param_desc_text'], ['rewards', 'SELECT * FROM master_reward'], ['expertLvl', 'SELECT ptarmtp, lvl, abp FROM master_expert_lvl_reward'], ['stampBonus', 'SELECT * FROM master_stamp_bonus'], ['stampFloors', 'SELECT * FROM master_stamp'], ['questCats', 'SELECT * FROM master_quest_category'], ['bagGen', 'SELECT * FROM master_mysterybag_content_gen'], ['bagGenOdds', "SELECT * FROM master_mysterybag_content_gen_odds WHERE odds_id = (SELECT odds_id FROM master_mysterybag_content_odds ORDER BY expires DESC LIMIT 1)"], ['boxGen', 'SELECT * FROM master_deathbox_content_gen'], ['hubCustom', 'SELECT * FROM master_hubcustomize'], ['floorInfo', 'SELECT id, sname, stgid, stgpfx, name FROM master_floor'], ['freezer', 'SELECT * FROM master_freezer'], ['bodies', 'SELECT id, gender FROM master_body'], ['gasmasks', 'SELECT id, gender FROM master_gasmask'], ['fortWhistle', 'SELECT * FROM master_fort_whistle']]) {
       try { AP[key] = all(sql); } catch (err) { AP[key] = []; console.warn(`${key} not available in this masters.db:`, err); }
     }
     AP.stewOdds = [];
@@ -1915,6 +1915,9 @@ const TABS = [ {
   id: 'quests',
   label: 'Quests'
 }, {
+  id: 'rally',
+  label: 'Stamp Rally'
+}, {
   id: 'vip',
   label: 'VIP'
 }, {
@@ -1931,7 +1934,7 @@ function renderAll() {
   app.querySelectorAll('[id]').forEach(el => {
     if (el.scrollTop > 0) scrollStates[el.id] = el.scrollTop;
   });
-  app.innerHTML = `\n    ${blockHealth()}\n    <div class="tabbar">\n      ${TABS.map(t => `<button class="tabbtn ${activeTab === t.id ? 'active' : ''}" data-tab-btn="${t.id}">${t.label}</button>`).join('')}\n    </div>\n    <div class="tabpanel" data-tab-panel="account" style="display:${activeTab === 'account' ? 'block' : 'none'}">${blockCurrency()}</div>\n    <div class="tabpanel" data-tab-panel="fighters" style="display:${activeTab === 'fighters' ? 'block' : 'none'}">${blockCharacters()}</div>\n    <div class="tabpanel" data-tab-panel="research" style="display:${activeTab === 'research' ? 'block' : 'none'}">${blockBlueprints()}</div>\n    <div class="tabpanel" data-tab-panel="decals" style="display:${activeTab === 'decals' ? 'block' : 'none'}">${blockSkillDecals()}</div>\n    <div class="tabpanel" data-tab-panel="stews" style="display:${activeTab === 'stews' ? 'block' : 'none'}">${blockStews()}</div>\n    <div class="tabpanel" data-tab-panel="bags" style="display:${activeTab === 'bags' ? 'block' : 'none'}">${blockBags()}</div>\n    <div class="tabpanel" data-tab-panel="boxes" style="display:${activeTab === 'boxes' ? 'block' : 'none'}">${blockBoxes()}</div>\n    <div class="tabpanel" data-tab-panel="hub" style="display:${activeTab === 'hub' ? 'block' : 'none'}">${blockHub()}</div>\n    <div class="tabpanel" data-tab-panel="defense" style="display:${activeTab === 'defense' ? 'block' : 'none'}">${blockDefense()}</div>\n    <div class="tabpanel" data-tab-panel="photos" style="display:${activeTab === 'photos' ? 'block' : 'none'}">${blockPhotos()}</div>\n    <div class="tabpanel" data-tab-panel="graves" style="display:${activeTab === 'graves' ? 'block' : 'none'}">${blockGraves()}</div>\n    <div class="tabpanel" data-tab-panel="dates" style="display:${activeTab === 'dates' ? 'block' : 'none'}">${blockDates()}</div>\n    <div class="tabpanel" data-tab-panel="storage" style="display:${activeTab === 'storage' ? 'block' : 'none'}">${blockStorageBox()}</div>\n    <div class="tabpanel" data-tab-panel="rewards" style="display:${activeTab === 'rewards' ? 'block' : 'none'}">${blockRewardBox()}</div>\n    <div class="tabpanel" data-tab-panel="quests" style="display:${activeTab === 'quests' ? 'block' : 'none'}">${blockQuests()}</div>\n    <div class="tabpanel" data-tab-panel="vip" style="display:${activeTab === 'vip' ? 'block' : 'none'}">${blockVip()}</div>\n    <div class="tabpanel" data-tab-panel="compare" style="display:${activeTab === 'compare' ? 'block' : 'none'}">${blockCompare()}</div>\n  `;
+  app.innerHTML = `\n    ${blockHealth()}\n    <div class="tabbar">\n      ${TABS.map(t => `<button class="tabbtn ${activeTab === t.id ? 'active' : ''}" data-tab-btn="${t.id}">${t.label}</button>`).join('')}\n    </div>\n    <div class="tabpanel" data-tab-panel="account" style="display:${activeTab === 'account' ? 'block' : 'none'}">${blockCurrency()}</div>\n    <div class="tabpanel" data-tab-panel="fighters" style="display:${activeTab === 'fighters' ? 'block' : 'none'}">${blockCharacters()}</div>\n    <div class="tabpanel" data-tab-panel="research" style="display:${activeTab === 'research' ? 'block' : 'none'}">${blockBlueprints()}</div>\n    <div class="tabpanel" data-tab-panel="decals" style="display:${activeTab === 'decals' ? 'block' : 'none'}">${blockSkillDecals()}</div>\n    <div class="tabpanel" data-tab-panel="stews" style="display:${activeTab === 'stews' ? 'block' : 'none'}">${blockStews()}</div>\n    <div class="tabpanel" data-tab-panel="bags" style="display:${activeTab === 'bags' ? 'block' : 'none'}">${blockBags()}</div>\n    <div class="tabpanel" data-tab-panel="boxes" style="display:${activeTab === 'boxes' ? 'block' : 'none'}">${blockBoxes()}</div>\n    <div class="tabpanel" data-tab-panel="hub" style="display:${activeTab === 'hub' ? 'block' : 'none'}">${blockHub()}</div>\n    <div class="tabpanel" data-tab-panel="defense" style="display:${activeTab === 'defense' ? 'block' : 'none'}">${blockDefense()}</div>\n    <div class="tabpanel" data-tab-panel="photos" style="display:${activeTab === 'photos' ? 'block' : 'none'}">${blockPhotos()}</div>\n    <div class="tabpanel" data-tab-panel="graves" style="display:${activeTab === 'graves' ? 'block' : 'none'}">${blockGraves()}</div>\n    <div class="tabpanel" data-tab-panel="dates" style="display:${activeTab === 'dates' ? 'block' : 'none'}">${blockDates()}</div>\n    <div class="tabpanel" data-tab-panel="storage" style="display:${activeTab === 'storage' ? 'block' : 'none'}">${blockStorageBox()}</div>\n    <div class="tabpanel" data-tab-panel="rewards" style="display:${activeTab === 'rewards' ? 'block' : 'none'}">${blockRewardBox()}</div>\n    <div class="tabpanel" data-tab-panel="quests" style="display:${activeTab === 'quests' ? 'block' : 'none'}">${blockQuests()}</div>\n    <div class="tabpanel" data-tab-panel="rally" style="display:${activeTab === 'rally' ? 'block' : 'none'}">${blockRally()}</div>\n    <div class="tabpanel" data-tab-panel="vip" style="display:${activeTab === 'vip' ? 'block' : 'none'}">${blockVip()}</div>\n    <div class="tabpanel" data-tab-panel="compare" style="display:${activeTab === 'compare' ? 'block' : 'none'}">${blockCompare()}</div>\n  `;
   wireHealth();
   wireCurrency();
   wireCharacters();
@@ -1948,6 +1951,7 @@ function renderAll() {
   wireStorageBox();
   wireRewardBox();
   wireQuests();
+  wireRally();
   wireVip();
   wireCompare();
   document.querySelectorAll('[data-tab-btn]').forEach(btn => {
@@ -1960,6 +1964,7 @@ function renderAll() {
       if (activeTab === 'stews') renderStewReport();
       if (activeTab === 'dates') renderDates();
       if (activeTab === 'quests') renderQuests();
+      if (activeTab === 'rally') renderRally();
       if (activeTab === 'bags') renderBags();
       if (activeTab === 'boxes') renderBoxes();
       if (activeTab === 'hub') renderHub();
@@ -3860,6 +3865,122 @@ function wireQuestEvents(q) {
     redo(`Marked ${n} quest${n === 1 ? '' : 's'} as cleared.`);
   });
 }
+
+// ---------------------------------------------------------------------------
+// Stamp Rally (Kiwako's Tower Stamp Rally)
+// Save: floor.stamp.stamps = [{idx, offset, created}], one per stamped floor.
+//   idx 0-49 = floors 1F-50F (master_stamp); 0-39 is Stamp Rally I, 40-49 (41F-50F) is Stamp Rally II.
+//   offset = how far off the stamp landed; 0 = a perfect stamp.
+// gameflg.sv SGF_STAMP_BONUS = bitmask of bonuses already given (master_stamp_bonus.flg):
+//   50,000 Kill Coins per 5 floors, a blueprint for completing each rally, another for a perfect one.
+// Edits are kept here and written into the save at download.
+// ---------------------------------------------------------------------------
+let RALLY = { root: null, stamps: [], bonus: 0, orig: '', has: false, msg: '' };
+function rallyFlagEntry(root) {
+  const g = root && root.gameflg;
+  if (!g || typeof g !== 'object') return null;
+  for (const k of Object.keys(g)) if (Array.isArray(g[k])) { const f = g[k].find(x => x && x.var === 'SGF_STAMP_BONUS'); if (f) return f; }
+  return null;
+}
+function rallySync() {
+  if (RALLY.root === RAW_SAV_ROOT) return;
+  const st = RAW_SAV_ROOT && RAW_SAV_ROOT.floor && RAW_SAV_ROOT.floor.stamp;
+  const f = rallyFlagEntry(RAW_SAV_ROOT);
+  RALLY = { root: RAW_SAV_ROOT, stamps: st ? JSON.parse(JSON.stringify(arr(st.stamps))) : [], bonus: f ? Number(f.value) || 0 : 0, has: !!st, msg: '' };
+  RALLY.orig = JSON.stringify([ RALLY.stamps, RALLY.bonus ]);
+}
+function rallyChanged() { return RALLY.root === RAW_SAV_ROOT && JSON.stringify([ RALLY.stamps, RALLY.bonus ]) !== RALLY.orig; }
+function applyStampRally(root) {
+  if (!rallyChanged() || !RALLY.has) return root;
+  root.floor = root.floor || {};
+  root.floor.stamp = root.floor.stamp || { stamps: [], flrstamps: {} };
+  root.floor.stamp.stamps = JSON.parse(JSON.stringify(RALLY.stamps));
+  const now = Math.floor(Date.now() / 1e3);
+  let f = rallyFlagEntry(root);
+  if (!f && RALLY.bonus) {
+    root.gameflg = root.gameflg && typeof root.gameflg === 'object' ? root.gameflg : {};
+    if (!Array.isArray(root.gameflg.sv)) root.gameflg.sv = [];
+    root.gameflg.sv.push(f = { var: 'SGF_STAMP_BONUS', value: 0, modified: now });
+  }
+  if (f && Number(f.value) !== RALLY.bonus) { f.value = RALLY.bonus; f.modified = now; }
+  return root;
+}
+const RALLY_SECTIONS = [ [ 0, 9, 'TXT_FLOOR_00', '1F-10F', 'I' ], [ 10, 19, 'TXT_FLOOR_01', '11F-20F', 'I' ], [ 20, 29, 'TXT_FLOOR_02', '21F-30F', 'I' ], [ 30, 39, 'TXT_FLOOR_03', '31F-40F', 'I' ], [ 40, 49, 'TXT_FLOOR_04', '41F-50F', 'II' ] ];
+const rallyStamp = idx => RALLY.stamps.find(x => x && Number(x.idx) === idx);
+function rallySet(idx, offset) {   // offset null = not stamped
+  const i = RALLY.stamps.findIndex(x => x && Number(x.idx) === idx);
+  if (offset == null) { if (i >= 0) RALLY.stamps.splice(i, 1); return; }
+  if (i >= 0) RALLY.stamps[i].offset = offset;
+  else RALLY.stamps.push({ idx, offset, created: Math.floor(Date.now() / 1e3) });
+}
+function rallyBonuses() {
+  return arr(AP && AP.stampBonus).slice().sort((a, b) => Number(a.flg) - Number(b.flg)).map(b => {
+    const st = Number(b.stidx), ed = Number(b.edidx), perfect = Number(b.perfect) === 1, flg = Number(b.flg);
+    let have = 0, perf = 0;
+    for (let i = st; i <= ed; i++) { const x = rallyStamp(i); if (x) { have++; if (Number(x.offset) === 0) perf++; } }
+    const need = ed - st + 1;
+    const rw = arr(AP && AP.rewards).find(r => r.rwdid === b.rwdid) || {};
+    const rally = st >= 40 ? 'II' : 'I';
+    const label = ed - st + 1 >= 10 ? `Stamp Rally ${rally} ${perfect ? 'perfect (every stamp perfect)' : 'complete'}` : `${st + 1}F-${ed + 1}F`;
+    return { id: b.bnsid, flg, perfect, st, ed, need, have, perf, met: perfect ? perf === need : have === need, claimed: (RALLY.bonus & flg) !== 0, rw, label };
+  });
+}
+function rallyRewardLabel(rw) {
+  if (!rw || !rw.type) return '?';
+  if (rw.type === 'MONEY') return `${Number(rw.num).toLocaleString()} Kill Coins`;
+  if (rw.type === 'ITEM') return itemDisplayName(rw.val0);
+  return rw.type + ' ' + (rw.val0 || '');
+}
+function blockRally() {
+  return `<section class="block">
+    <div class="block-head"><div><div class="eyebrow">Kiwako</div><h2>Stamp Rally</h2></div></div>
+    <div class="block-body"><div id="rally-body"></div></div>
+  </section>`;
+}
+function renderRally() {
+  const host = document.getElementById('rally-body');
+  if (!host || !SAVE || !RAW_SAV_ROOT) return;
+  rallySync();
+  if (!RALLY.has) { host.innerHTML = '<div class="capNote" style="margin-top:0;">This save has no Stamp Rally data yet (the game adds it when you reach the Tower).</div>'; return; }
+  const sel = 'background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:5px 6px; font-family:var(--mono);';
+  let h = `<div class="capNote" style="margin-top:0;">One stamp per floor, 1F-40F for Stamp Rally I and 41F-50F for Stamp Rally II. "Perfect" is a stamp that landed dead on (offset 0); "off by n" is how far off it landed, as the game stores it. The game gives each bonus once and remembers it; set a bonus back to <b>not given</b> to be able to earn it again, or use <b>Send reward</b> to put it in the Reward Box now.</div>`;
+  if (RALLY.msg) h += `<pre class="stewLog">${escapeHtml(RALLY.msg)}</pre>`;
+  h += `<div class="toolbar"><button class="subtle" id="rally-all-perfect">Stamp every floor (perfect)</button><button class="subtle" id="rally-clear">Clear all stamps</button><button class="subtle" id="rally-reset">Reset the rally (stamps and bonuses)</button><span class="count">${RALLY.stamps.length} / 50 stamped · ${RALLY.stamps.filter(x => Number(x.offset) === 0).length} perfect${rallyChanged() ? ' · changed' : ''}</span></div>`;
+  for (const [st, ed, txt, fallback, rally] of RALLY_SECTIONS) {
+    const title = resolveName('STAMPEX.' + txt) || fallback;
+    h += `<div class="eyebrow" style="margin:14px 0 6px;">Stamp Rally ${rally} · ${escapeHtml(title)} <button class="subtle" data-rally-sec-perfect="${st}">All perfect</button> <button class="subtle" data-rally-sec-clear="${st}">Clear</button></div><div class="grid" style="grid-template-columns: repeat(5, 1fr);">`;
+    for (let i = st; i <= ed; i++) {
+      const x = rallyStamp(i), v = x ? String(Number(x.offset) || 0) : '';
+      const opts = [ [ '', 'Not stamped' ], [ '0', 'Perfect' ] ].concat(Array.from({ length: 16 }, (_, k) => [ String(k + 1), `Off by ${k + 1}` ]));
+      h += `<div class="field"><label>${i + 1}F${x && x.created ? ` <span class="id">${new Date(Number(x.created) * 1000).toLocaleDateString()}</span>` : ''}</label><select data-rally-idx="${i}" style="width:100%; ${sel}">${opts.map(([val, t]) => `<option value="${val}" ${val === v ? 'selected' : ''}>${t}</option>`).join('')}</select></div>`;
+    }
+    h += '</div>';
+  }
+  const bs = rallyBonuses();
+  h += `<div class="eyebrow" style="margin:16px 0 6px;">Bonuses</div><table class="stewTable"><thead><tr><th>Bonus</th><th>Reward</th><th>Stamps</th><th>Given by the game</th><th></th></tr></thead><tbody>`;
+  h += bs.map(b => `<tr><td>${escapeHtml(b.label)}</td><td>${escapeHtml(rallyRewardLabel(b.rw))}</td><td>${b.perfect ? `${b.perf}/${b.need} perfect` : `${b.have}/${b.need}`}${b.met ? ' ✓' : ''}</td>
+    <td><select data-rally-bonus="${b.flg}" style="${sel}"><option value="1" ${b.claimed ? 'selected' : ''}>Given</option><option value="0" ${b.claimed ? '' : 'selected'}>Not given</option></select></td>
+    <td>${!b.claimed && b.met ? `<button class="subtle" data-rally-send="${b.flg}">Send reward</button>` : ''}</td></tr>`).join('');
+  h += '</tbody></table>';
+  host.innerHTML = h;
+  const done = msg => { RALLY.msg = msg || ''; renderRally(); if (msg) toast(msg); };
+  host.querySelectorAll('[data-rally-idx]').forEach(el => el.addEventListener('change', () => { rallySet(Number(el.dataset.rallyIdx), el.value === '' ? null : Number(el.value)); done(''); }));
+  host.querySelectorAll('[data-rally-sec-perfect]').forEach(el => el.addEventListener('click', () => { const st = Number(el.dataset.rallySecPerfect); for (let i = st; i < st + 10; i++) rallySet(i, 0); done(`${st + 1}F-${st + 10}F stamped perfect`); }));
+  host.querySelectorAll('[data-rally-sec-clear]').forEach(el => el.addEventListener('click', () => { const st = Number(el.dataset.rallySecClear); for (let i = st; i < st + 10; i++) rallySet(i, null); done(`${st + 1}F-${st + 10}F cleared`); }));
+  host.querySelector('#rally-all-perfect').addEventListener('click', () => { for (let i = 0; i < 50; i++) rallySet(i, 0); done('Every floor stamped perfect'); });
+  host.querySelector('#rally-clear').addEventListener('click', () => { RALLY.stamps = []; done('All stamps cleared'); });
+  host.querySelector('#rally-reset').addEventListener('click', () => { RALLY.stamps = []; RALLY.bonus = 0; done('Stamp Rally reset: no stamps, and every bonus can be earned again'); });
+  host.querySelectorAll('[data-rally-bonus]').forEach(el => el.addEventListener('change', () => { const f = Number(el.dataset.rallyBonus); RALLY.bonus = el.value === '1' ? (RALLY.bonus | f) : (RALLY.bonus & ~f); done(''); }));
+  host.querySelectorAll('[data-rally-send]').forEach(el => el.addEventListener('click', () => {
+    const b = rallyBonuses().find(x => x.flg === Number(el.dataset.rallySend));
+    if (!b || !b.rw || !b.rw.type) return;
+    if (b.rw.type === 'MONEY') addPresent('MONEY', Number(b.rw.num) || 0, '');
+    else if (b.rw.type === 'ITEM') addPresent(boxGameType('ITEM', b.rw.val0), Number(b.rw.num) || 1, b.rw.val0);
+    RALLY.bonus |= b.flg;
+    done(`${b.label}: ${rallyRewardLabel(b.rw)} sent to the Reward Box and marked as given`);
+  }));
+}
+function wireRally() { if (activeTab === 'rally') renderRally(); }
 
 function wireQuests() {
   if (activeTab === 'quests') renderQuests();
@@ -7423,7 +7544,7 @@ function reviewFileName(ext, stamp) { return `brggame_${stamp || reviewStamp()}.
 function buildDownloadRoot() {
   normalizePresents(SAVE.presents);
   questOrdForSave();
-  return applyStampMark(applyAccountChoice(restoreEmptyShapes(applyDateRules(buildRawSavRootFromSave(SAVE, RAW_SAV_ROOT, RAW_SAV_MAIN_UID)), RAW_SAV_ROOT)));
+  return applyStampRally(applyStampMark(applyAccountChoice(restoreEmptyShapes(applyDateRules(buildRawSavRootFromSave(SAVE, RAW_SAV_ROOT, RAW_SAV_MAIN_UID)), RAW_SAV_ROOT))));
 }
 
 const REVIEW_SOUL_LABELS = {
@@ -7582,6 +7703,15 @@ function reviewDiff(A, B, rawA, rawB) {
   const mkNames = xs => [ ...new Set(xs.map(x => { const id = x.split('|')[0]; return (PT_INDEX[id] && PT_INDEX[id].name) || id; })) ];
   if (mkAdd.length) rs.lines.push(`Can now be upgraded at Chokufunsha (${mkAdd.length}): ${mkNames(mkAdd).slice(0, 25).join(', ')}${mkAdd.length > 25 ? ', …' : ''}`);
   if (mkDel.length && mkDel.length !== mkAdd.length) rs.lines.push(`Next-level markers removed or moved (${mkDel.length})`);
+  const sr = sec('Stamp Rally');
+  const stA = arr(rawA.floor && rawA.floor.stamp && rawA.floor.stamp.stamps), stB = arr(rawB.floor && rawB.floor.stamp && rawB.floor.stamp.stamps);
+  const offA = new Map(stA.map(x => [ Number(x.idx), Number(x.offset) ])), offB = new Map(stB.map(x => [ Number(x.idx), Number(x.offset) ]));
+  const stTxt = o => o == null ? 'not stamped' : o === 0 ? 'perfect' : 'off by ' + o;
+  const stDiff = [];
+  for (let i = 0; i < 50; i++) if (offA.get(i) !== offB.get(i)) stDiff.push(`${i + 1}F: ${stTxt(offA.get(i))} → ${stTxt(offB.get(i))}`);
+  if (stDiff.length > 12) sr.lines.push(`Stamps: ${stA.length} → ${stB.length} stamped (${stDiff.length} floors changed)`); else sr.lines.push(...stDiff);
+  const bfA = rallyFlagEntry(rawA), bfB = rallyFlagEntry(rawB), bA = bfA ? Number(bfA.value) || 0 : 0, bB = bfB ? Number(bfB.value) || 0 : 0;
+  if (bA !== bB) for (const b of arr(AP && AP.stampBonus)) { const f = Number(b.flg); if ((bA & f) !== (bB & f)) sr.lines.push(`Bonus ${Number(b.stidx) + 1}F-${Number(b.edidx) + 1}F${Number(b.perfect) ? ' perfect' : ''}: ${(bA & f) ? 'given' : 'not given'} → ${(bB & f) ? 'given' : 'not given'}`); }
   const sk = sec('Armor Skins (unlocked by R&D at +4)');
   const skA = armorSkinsUnlocked(ra), skB = armorSkinsUnlocked(rb);
   const skNew = [ ...skB ].filter(x => !skA.has(x)).map(x => (PT_INDEX[x] || {}).name || x), skGone = [ ...skA ].filter(x => !skB.has(x)).map(x => (PT_INDEX[x] || {}).name || x);
