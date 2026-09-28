@@ -6293,6 +6293,26 @@ function runSaveCheck() {
     });
   });
 
+  // PC save: PS-only parts missing their "next level" marker. A normal PC game never writes
+  // these (it doesn't have the parts), so this is only a note -- it matters on PC games modded
+  // to have the PlayStation parts.
+  safe('research-ps', () => {
+    if (!RESEARCH_GAME_SKIP.size) return;
+    const found = [];
+    normalizeResearchMarkers(JSON.parse(JSON.stringify(arr(SAVE.user_research))), found, new Map());
+    const ids = [ ...new Set(found.map(f => f[0]).filter(id => RESEARCH_GAME_SKIP.has(id))) ];
+    if (!ids.length) return;
+    const names = [ ...new Set(ids.map(id => (PT_INDEX[id] && PT_INDEX[id].name) || id)) ];
+    add('note', `${ids.length} PlayStation-only part${ids.length === 1 ? ' is' : 's are'} missing the "next level" marker (${names.slice(0, 5).map(escapeHtml).join(', ')}${names.length > 5 ? ', …' : ''}). A normal PC game doesn't have these parts, so this only matters if your PC game is modded to have them.`, 'research', {
+      label: 'Fix PS-only markers', run: () => {
+        const keep = new Map([ ...RESEARCH_GAME_SKIP ].filter(([ id ]) => !ids.includes(id)));
+        const k = normalizeResearchMarkers(SAVE.user_research, null, keep);
+        RESEARCH_GAME_SKIP = keep;
+        return `Added the research markers on ${k} part${k === 1 ? '' : 's'}.`;
+      }
+    });
+  });
+
   // rewards the PC game can't hand over (placeholders, unnamed, PS-only)
   safe('rewards-unfit', () => {
     const bad = arr(SAVE.presents).map(p => [ p, presentUnfit(p, false) ]).filter(x => x[1]);
