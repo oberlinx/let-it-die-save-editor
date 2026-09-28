@@ -3913,6 +3913,17 @@ function rallySet(idx, offset) {   // offset null = not stamped
   if (i >= 0) RALLY.stamps[i].offset = offset;
   else RALLY.stamps.push({ idx, offset, created: Math.floor(Date.now() / 1e3) });
 }
+// Reset floors lo..hi: remove their stamps and set every bonus that includes one of them back to
+// "not given", so the game can hand it out again once those floors are stamped.
+function rallyResetFloors(lo, hi) {
+  for (let i = lo; i <= hi; i++) rallySet(i, null);
+  let n = 0;
+  for (const b of arr(AP && AP.stampBonus)) {
+    const f = Number(b.flg);
+    if (Number(b.stidx) <= hi && Number(b.edidx) >= lo && (RALLY.bonus & f)) { RALLY.bonus &= ~f; n++; }
+  }
+  return n;
+}
 function rallyBonuses() {
   return arr(AP && AP.stampBonus).slice().sort((a, b) => Number(a.flg) - Number(b.flg)).map(b => {
     const st = Number(b.stidx), ed = Number(b.edidx), perfect = Number(b.perfect) === 1, flg = Number(b.flg);
@@ -3943,16 +3954,16 @@ function renderRally() {
   rallySync();
   if (!RALLY.has) { host.innerHTML = '<div class="capNote" style="margin-top:0;">This save has no Stamp Rally data yet (the game adds it when you reach the Tower).</div>'; return; }
   const sel = 'background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:5px 6px; font-family:var(--mono);';
-  let h = `<div class="capNote" style="margin-top:0;">One stamp per floor, 1F-40F for Stamp Rally I and 41F-50F for Stamp Rally II. "Perfect" is a stamp that landed dead on (offset 0); "off by n" is how far off it landed, as the game stores it. The game gives each bonus once and remembers it; set a bonus back to <b>not given</b> to be able to earn it again, or use <b>Send reward</b> to put it in the Reward Box now.</div>`;
+  let h = `<div class="capNote" style="margin-top:0;">One stamp per floor, 1F-40F for Stamp Rally I and 41F-50F for Stamp Rally II. "Perfect" is a stamp that landed dead on (offset 0); "off by n" is how far off it landed, as the game stores it. The game gives each bonus once and remembers it. <b>Reset</b> on a floor or section removes those stamps and sets every bonus that includes them back to <b>not given</b>, so they can be earned again; <b>Reset all</b> does it for the whole rally. You can also set a bonus by hand, or use <b>Send reward</b> to put it in the Reward Box now.</div>`;
   if (RALLY.msg) h += `<pre class="stewLog">${escapeHtml(RALLY.msg)}</pre>`;
-  h += `<div class="toolbar"><button class="subtle" id="rally-all-perfect">Stamp every floor (perfect)</button><button class="subtle" id="rally-clear">Clear all stamps</button><button class="subtle" id="rally-reset">Reset the rally (stamps and bonuses)</button><span class="count">${RALLY.stamps.length} / 50 stamped · ${RALLY.stamps.filter(x => Number(x.offset) === 0).length} perfect${rallyChanged() ? ' · changed' : ''}</span></div>`;
+  h += `<div class="toolbar"><button class="subtle" id="rally-all-perfect">Stamp every floor (perfect)</button><button class="subtle" id="rally-clear">Clear all stamps</button><button class="subtle" id="rally-reset">Reset all (stamps and bonuses)</button><span class="count">${RALLY.stamps.length} / 50 stamped · ${RALLY.stamps.filter(x => Number(x.offset) === 0).length} perfect${rallyChanged() ? ' · changed' : ''}</span></div>`;
   for (const [st, ed, txt, fallback, rally] of RALLY_SECTIONS) {
     const title = resolveName('STAMPEX.' + txt) || fallback;
-    h += `<div class="eyebrow" style="margin:14px 0 6px;">Stamp Rally ${rally} · ${escapeHtml(title)} <button class="subtle" data-rally-sec-perfect="${st}">All perfect</button> <button class="subtle" data-rally-sec-clear="${st}">Clear</button></div><div class="grid" style="grid-template-columns: repeat(5, 1fr);">`;
+    h += `<div class="eyebrow" style="margin:14px 0 6px;">Stamp Rally ${rally} · ${escapeHtml(title)} <button class="subtle" data-rally-sec-perfect="${st}">All perfect</button> <button class="subtle" data-rally-sec-clear="${st}">Clear stamps</button> <button class="subtle" data-rally-sec-reset="${st}" title="Clear this section's stamps and set its bonuses back to not given">Reset</button></div><div class="grid" style="grid-template-columns: repeat(5, 1fr);">`;
     for (let i = st; i <= ed; i++) {
       const x = rallyStamp(i), v = x ? String(Number(x.offset) || 0) : '';
       const opts = [ [ '', 'Not stamped' ], [ '0', 'Perfect' ] ].concat(Array.from({ length: 16 }, (_, k) => [ String(k + 1), `Off by ${k + 1}` ]));
-      h += `<div class="field"><label>${i + 1}F${x && x.created ? ` <span class="id">${new Date(Number(x.created) * 1000).toLocaleDateString()}</span>` : ''}</label><select data-rally-idx="${i}" style="width:100%; ${sel}">${opts.map(([val, t]) => `<option value="${val}" ${val === v ? 'selected' : ''}>${t}</option>`).join('')}</select></div>`;
+      h += `<div class="field"><label>${i + 1}F${x && x.created ? ` <span class="id">${new Date(Number(x.created) * 1000).toLocaleDateString()}</span>` : ''}${x ? ` <button class="subtle" data-rally-floor-reset="${i}" title="Remove this stamp and set the bonuses that include ${i + 1}F back to not given" style="padding:0 6px; font-size:11px;">Reset</button>` : ''}</label><select data-rally-idx="${i}" style="width:100%; ${sel}">${opts.map(([val, t]) => `<option value="${val}" ${val === v ? 'selected' : ''}>${t}</option>`).join('')}</select></div>`;
     }
     h += '</div>';
   }
@@ -3967,6 +3978,9 @@ function renderRally() {
   host.querySelectorAll('[data-rally-idx]').forEach(el => el.addEventListener('change', () => { rallySet(Number(el.dataset.rallyIdx), el.value === '' ? null : Number(el.value)); done(''); }));
   host.querySelectorAll('[data-rally-sec-perfect]').forEach(el => el.addEventListener('click', () => { const st = Number(el.dataset.rallySecPerfect); for (let i = st; i < st + 10; i++) rallySet(i, 0); done(`${st + 1}F-${st + 10}F stamped perfect`); }));
   host.querySelectorAll('[data-rally-sec-clear]').forEach(el => el.addEventListener('click', () => { const st = Number(el.dataset.rallySecClear); for (let i = st; i < st + 10; i++) rallySet(i, null); done(`${st + 1}F-${st + 10}F cleared`); }));
+  const bonusMsg = n => n ? `; ${n} bonus${n === 1 ? '' : 'es'} set back to not given` : '';
+  host.querySelectorAll('[data-rally-floor-reset]').forEach(el => el.addEventListener('click', () => { const i = Number(el.dataset.rallyFloorReset); const n = rallyResetFloors(i, i); done(`${i + 1}F reset${bonusMsg(n)}`); }));
+  host.querySelectorAll('[data-rally-sec-reset]').forEach(el => el.addEventListener('click', () => { const st = Number(el.dataset.rallySecReset); const n = rallyResetFloors(st, st + 9); done(`${st + 1}F-${st + 10}F reset${bonusMsg(n)}`); }));
   host.querySelector('#rally-all-perfect').addEventListener('click', () => { for (let i = 0; i < 50; i++) rallySet(i, 0); done('Every floor stamped perfect'); });
   host.querySelector('#rally-clear').addEventListener('click', () => { RALLY.stamps = []; done('All stamps cleared'); });
   host.querySelector('#rally-reset').addEventListener('click', () => { RALLY.stamps = []; RALLY.bonus = 0; done('Stamp Rally reset: no stamps, and every bonus can be earned again'); });
