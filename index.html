@@ -3968,10 +3968,10 @@ function renderRally() {
     h += '</div>';
   }
   const bs = rallyBonuses();
-  h += `<div class="eyebrow" style="margin:16px 0 6px;">Bonuses</div><table class="stewTable"><thead><tr><th>Bonus</th><th>Reward</th><th>Stamps</th><th>Given by the game</th><th></th></tr></thead><tbody>`;
+  h += `<div class="eyebrow" style="margin:16px 0 6px;">Bonuses</div><div class="capNote" style="margin-top:0;">To put a bonus's reward in the Reward Box: finish its stamps (above), set it to <b>Not given</b>, then click <b>Send reward</b> on its row.</div><table class="stewTable"><thead><tr><th>Bonus</th><th>Reward</th><th>Stamps</th><th>Given by the game</th><th></th></tr></thead><tbody>`;
   h += bs.map(b => `<tr><td>${escapeHtml(b.label)}</td><td>${escapeHtml(rallyRewardLabel(b.rw))}</td><td>${b.perfect ? `${b.perf}/${b.need} perfect` : `${b.have}/${b.need}`}${b.met ? ' ✓' : ''}</td>
     <td><select data-rally-bonus="${b.flg}" style="${sel}"><option value="1" ${b.claimed ? 'selected' : ''}>Given</option><option value="0" ${b.claimed ? '' : 'selected'}>Not given</option></select></td>
-    <td>${!b.claimed && b.met ? `<button class="subtle" data-rally-send="${b.flg}">Send reward</button>` : ''}</td></tr>`).join('');
+    <td>${!b.claimed && b.met ? `<button class="action" data-rally-send="${b.flg}">Send reward</button>` : `<button class="subtle" disabled style="opacity:.45; cursor:not-allowed;" title="${b.claimed ? 'Already given. Set it to Not given first.' : 'Finish its stamps first.'}">Send reward</button><div class="id" style="margin-top:2px;">${b.claimed ? 'set to Not given first' : b.perfect ? `needs ${b.need - b.perf} more perfect` : `needs ${b.need - b.have} more stamp${b.need - b.have === 1 ? '' : 's'}`}</div>`}</td></tr>`).join('');
   h += '</tbody></table>';
   host.innerHTML = h;
   const done = msg => { RALLY.msg = msg || ''; renderRally(); if (msg) toast(msg); };
