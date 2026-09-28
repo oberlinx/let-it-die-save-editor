@@ -3269,14 +3269,17 @@ function sortByChainOrder(list) {
 // Without these the game shows the research as finished and won't let you
 // upgrade it. This rebuilds the markers for every blueprint from the
 // FINISHED entries. It is only run after the editor changes research.
-// Parts where the save, as the game wrote it, has no next-level marker for the top level
-// (e.g. the last Glider blueprint on a fully researched account: the game treats it as done).
-// Those are left alone until the part's level is changed in the editor.
+// PlayStation-only parts on a PC save that have no next-level marker for their top level
+// (e.g. the last Glider blueprint on a fully researched PC account: the PC game doesn't have the
+// Glider, so it never writes the marker). Those are left alone until the part's level is changed
+// in the editor. Anything else missing its marker is a real problem -- without it the game shows
+// the part as capped (e.g. an Uncap part stuck at +4 on a PS save) -- so the save check flags it.
 let RESEARCH_GAME_SKIP = new Map();
 function researchGameSkips(research) {
+  if (savePlatform(RAW_SAV_ROOT) !== 'PC') return new Map();
   const found = [];
   normalizeResearchMarkers(JSON.parse(JSON.stringify(arr(research))), found, new Map());
-  return new Map(found);
+  return new Map(found.filter(([ ptid ]) => PT_INDEX[ptid] && Number(PT_INDEX[ptid].platform) === 1));
 }
 // Armor Skins: the game's own rule (Barb's Bible): "Strengthening a piece of armor to +4 will make it
 // available as an Armor Skin." There is no unlock list in the save -- the game works it out from R&D --
@@ -7552,6 +7555,13 @@ function reviewDiff(A, B, rawA, rawB) {
     const r = PT_INDEX[ptid], lv = t => t ? '+' + displayFromRaw(r, t) : 'not researched';
     rs.lines.push(`${(r && r.name) || ptid}: ${lv(ta)} → ${lv(tb)}`);
   }
+  // "next level" / "next tier" markers (what Chokufunsha lets you research next)
+  const mk = list => new Set(list.filter(r => r.research_type === 'LEVELUP' || r.research_type === 'REMODEL').map(r => `${r.ptid}|${r.research_type}|${r.lvl}`));
+  const mkA = mk(ra), mkB = mk(rb);
+  const mkAdd = [ ...mkB ].filter(x => !mkA.has(x)), mkDel = [ ...mkA ].filter(x => !mkB.has(x));
+  const mkNames = xs => [ ...new Set(xs.map(x => { const id = x.split('|')[0]; return (PT_INDEX[id] && PT_INDEX[id].name) || id; })) ];
+  if (mkAdd.length) rs.lines.push(`Can now be upgraded at Chokufunsha (${mkAdd.length}): ${mkNames(mkAdd).slice(0, 25).join(', ')}${mkAdd.length > 25 ? ', …' : ''}`);
+  if (mkDel.length && mkDel.length !== mkAdd.length) rs.lines.push(`Next-level markers removed or moved (${mkDel.length})`);
   const sk = sec('Armor Skins (unlocked by R&D at +4)');
   const skA = armorSkinsUnlocked(ra), skB = armorSkinsUnlocked(rb);
   const skNew = [ ...skB ].filter(x => !skA.has(x)).map(x => (PT_INDEX[x] || {}).name || x), skGone = [ ...skA ].filter(x => !skB.has(x)).map(x => (PT_INDEX[x] || {}).name || x);
