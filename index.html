@@ -1921,6 +1921,12 @@ const TABS = [ {
   id: 'location',
   label: 'Location'
 }, {
+  id: 'collection',
+  label: 'Collection'
+}, {
+  id: 'stats',
+  label: 'Stats'
+}, {
   id: 'vip',
   label: 'VIP'
 }, {
@@ -1937,7 +1943,7 @@ function renderAll() {
   app.querySelectorAll('[id]').forEach(el => {
     if (el.scrollTop > 0) scrollStates[el.id] = el.scrollTop;
   });
-  app.innerHTML = `\n    ${blockHealth()}\n    <div class="tabbar">\n      ${TABS.map(t => `<button class="tabbtn ${activeTab === t.id ? 'active' : ''}" data-tab-btn="${t.id}">${t.label}</button>`).join('')}\n    </div>\n    <div class="tabpanel" data-tab-panel="account" style="display:${activeTab === 'account' ? 'block' : 'none'}">${blockCurrency()}</div>\n    <div class="tabpanel" data-tab-panel="fighters" style="display:${activeTab === 'fighters' ? 'block' : 'none'}">${blockCharacters()}</div>\n    <div class="tabpanel" data-tab-panel="research" style="display:${activeTab === 'research' ? 'block' : 'none'}">${blockBlueprints()}</div>\n    <div class="tabpanel" data-tab-panel="decals" style="display:${activeTab === 'decals' ? 'block' : 'none'}">${blockSkillDecals()}</div>\n    <div class="tabpanel" data-tab-panel="stews" style="display:${activeTab === 'stews' ? 'block' : 'none'}">${blockStews()}</div>\n    <div class="tabpanel" data-tab-panel="bags" style="display:${activeTab === 'bags' ? 'block' : 'none'}">${blockBags()}</div>\n    <div class="tabpanel" data-tab-panel="boxes" style="display:${activeTab === 'boxes' ? 'block' : 'none'}">${blockBoxes()}</div>\n    <div class="tabpanel" data-tab-panel="hub" style="display:${activeTab === 'hub' ? 'block' : 'none'}">${blockHub()}</div>\n    <div class="tabpanel" data-tab-panel="defense" style="display:${activeTab === 'defense' ? 'block' : 'none'}">${blockDefense()}</div>\n    <div class="tabpanel" data-tab-panel="photos" style="display:${activeTab === 'photos' ? 'block' : 'none'}">${blockPhotos()}</div>\n    <div class="tabpanel" data-tab-panel="graves" style="display:${activeTab === 'graves' ? 'block' : 'none'}">${blockGraves()}</div>\n    <div class="tabpanel" data-tab-panel="dates" style="display:${activeTab === 'dates' ? 'block' : 'none'}">${blockDates()}</div>\n    <div class="tabpanel" data-tab-panel="storage" style="display:${activeTab === 'storage' ? 'block' : 'none'}">${blockStorageBox()}</div>\n    <div class="tabpanel" data-tab-panel="rewards" style="display:${activeTab === 'rewards' ? 'block' : 'none'}">${blockRewardBox()}</div>\n    <div class="tabpanel" data-tab-panel="quests" style="display:${activeTab === 'quests' ? 'block' : 'none'}">${blockQuests()}</div>\n    <div class="tabpanel" data-tab-panel="rally" style="display:${activeTab === 'rally' ? 'block' : 'none'}">${blockRally()}</div>\n    <div class="tabpanel" data-tab-panel="location" style="display:${activeTab === 'location' ? 'block' : 'none'}">${blockLocation()}</div>\n    <div class="tabpanel" data-tab-panel="vip" style="display:${activeTab === 'vip' ? 'block' : 'none'}">${blockVip()}</div>\n    <div class="tabpanel" data-tab-panel="compare" style="display:${activeTab === 'compare' ? 'block' : 'none'}">${blockCompare()}</div>\n  `;
+  app.innerHTML = `\n    ${blockHealth()}\n    <div class="tabbar">\n      ${TABS.map(t => `<button class="tabbtn ${activeTab === t.id ? 'active' : ''}" data-tab-btn="${t.id}">${t.label}</button>`).join('')}\n    </div>\n    <div class="tabpanel" data-tab-panel="account" style="display:${activeTab === 'account' ? 'block' : 'none'}">${blockCurrency()}</div>\n    <div class="tabpanel" data-tab-panel="fighters" style="display:${activeTab === 'fighters' ? 'block' : 'none'}">${blockCharacters()}</div>\n    <div class="tabpanel" data-tab-panel="research" style="display:${activeTab === 'research' ? 'block' : 'none'}">${blockBlueprints()}</div>\n    <div class="tabpanel" data-tab-panel="decals" style="display:${activeTab === 'decals' ? 'block' : 'none'}">${blockSkillDecals()}</div>\n    <div class="tabpanel" data-tab-panel="stews" style="display:${activeTab === 'stews' ? 'block' : 'none'}">${blockStews()}</div>\n    <div class="tabpanel" data-tab-panel="bags" style="display:${activeTab === 'bags' ? 'block' : 'none'}">${blockBags()}</div>\n    <div class="tabpanel" data-tab-panel="boxes" style="display:${activeTab === 'boxes' ? 'block' : 'none'}">${blockBoxes()}</div>\n    <div class="tabpanel" data-tab-panel="hub" style="display:${activeTab === 'hub' ? 'block' : 'none'}">${blockHub()}</div>\n    <div class="tabpanel" data-tab-panel="defense" style="display:${activeTab === 'defense' ? 'block' : 'none'}">${blockDefense()}</div>\n    <div class="tabpanel" data-tab-panel="photos" style="display:${activeTab === 'photos' ? 'block' : 'none'}">${blockPhotos()}</div>\n    <div class="tabpanel" data-tab-panel="graves" style="display:${activeTab === 'graves' ? 'block' : 'none'}">${blockGraves()}</div>\n    <div class="tabpanel" data-tab-panel="dates" style="display:${activeTab === 'dates' ? 'block' : 'none'}">${blockDates()}</div>\n    <div class="tabpanel" data-tab-panel="storage" style="display:${activeTab === 'storage' ? 'block' : 'none'}">${blockStorageBox()}</div>\n    <div class="tabpanel" data-tab-panel="rewards" style="display:${activeTab === 'rewards' ? 'block' : 'none'}">${blockRewardBox()}</div>\n    <div class="tabpanel" data-tab-panel="quests" style="display:${activeTab === 'quests' ? 'block' : 'none'}">${blockQuests()}</div>\n    <div class="tabpanel" data-tab-panel="rally" style="display:${activeTab === 'rally' ? 'block' : 'none'}">${blockRally()}</div>\n    <div class="tabpanel" data-tab-panel="location" style="display:${activeTab === 'location' ? 'block' : 'none'}">${blockLocation()}</div>\n    <div class="tabpanel" data-tab-panel="collection" style="display:${activeTab === 'collection' ? 'block' : 'none'}">${blockCollection()}</div>\n    <div class="tabpanel" data-tab-panel="stats" style="display:${activeTab === 'stats' ? 'block' : 'none'}">${blockStats()}</div>\n    <div class="tabpanel" data-tab-panel="vip" style="display:${activeTab === 'vip' ? 'block' : 'none'}">${blockVip()}</div>\n    <div class="tabpanel" data-tab-panel="compare" style="display:${activeTab === 'compare' ? 'block' : 'none'}">${blockCompare()}</div>\n  `;
   wireHealth();
   wireCurrency();
   wireCharacters();
@@ -1956,6 +1962,8 @@ function renderAll() {
   wireQuests();
   wireRally();
   wireLocation();
+  wireCollection();
+  wireStats();
   wireVip();
   wireCompare();
   document.querySelectorAll('[data-tab-btn]').forEach(btn => {
@@ -1970,6 +1978,8 @@ function renderAll() {
       if (activeTab === 'quests') renderQuests();
       if (activeTab === 'rally') renderRally();
       if (activeTab === 'location') renderLocation();
+      if (activeTab === 'collection') renderCollection();
+      if (activeTab === 'stats') renderStats();
       if (activeTab === 'bags') renderBags();
       if (activeTab === 'boxes') renderBoxes();
       if (activeTab === 'hub') renderHub();
@@ -4229,6 +4239,153 @@ function renderLocation() {
   if (un) un.addEventListener('click', () => { FLOOR_MOVE.target = ''; FLOOR_MOVE.armed = false; FLOOR_MOVE.msg = ''; FLOOR_MOVE.rolls = null; renderLocation(); });
 }
 function wireLocation() { if (activeTab === 'location') renderLocation(); }
+
+// ---------------------------------------------------------------------------
+// Collection: Armor Skins in use, Mushroom book, Beast book
+// soul.armorskin = [{type: PTTP_HEAD|PTTP_BODY|PTTP_LEGS, ptid}] -- the skin shown on each armor
+//   slot; only skins unlocked by R&D at +4 are offered (armorSkinsUnlocked).
+// soul.msrbook / soul.bstbook = [{id, flag}] -- an entry per mushroom/beast you have come across;
+//   flag bits: 1 = eaten raw, 2 = eaten grilled, 4 = an older record the online game kept for
+//   everything found. Evidence: mushrooms that can't be grilled (enable_roast 0) never have bit 2,
+//   and a newer account has only bits 1/2 for exactly the kinds its play log says it has eaten.
+//   The editor sets bits 1/2 and leaves bit 4 as it is.
+// ---------------------------------------------------------------------------
+const SKIN_SLOTS = [ [ 'PTTP_HEAD', 'Head' ], [ 'PTTP_BODY', 'Body' ], [ 'PTTP_LEGS', 'Legs' ] ];
+let COLL_FORM = { filter: '' };
+function blockCollection() {
+  return `<section class="block">
+    <div class="block-head"><div><div class="eyebrow">Account</div><h2>Collection</h2></div></div>
+    <div class="block-body"><div id="coll-body"></div></div>
+  </section>`;
+}
+function bookRows(kind) {
+  const idx = kind === 'msr' ? MSR_INDEX : BST_INDEX;
+  const book = kind === 'msr' ? SAVE.soul.msrbook : SAVE.soul.bstbook;
+  const byId = new Map(arr(book).map(e => [ e.id, e ]));
+  return Object.values(idx).sort((a, b) => (Number(a.idx) || 0) - (Number(b.idx) || 0)).map(r => {
+    const e = byId.get(r.id);
+    const grill = kind === 'bst' || Number(r.enable_roast) !== 0;
+    const name = kind === 'msr' ? msrDisplayName(r.id, 0) : bstDisplayName(r.id, 0);
+    return { id: r.id, name, grill, e, flag: e ? Number(e.flag) || 0 : null };
+  });
+}
+function bookSet(kind, id, bits, on) {
+  const key = kind === 'msr' ? 'msrbook' : 'bstbook';
+  SAVE.soul[key] = arr(SAVE.soul[key]);
+  let e = SAVE.soul[key].find(x => x.id === id);
+  if (!e) SAVE.soul[key].push(e = { id, flag: 0 });
+  e.flag = on ? (Number(e.flag) | bits) : (Number(e.flag) & ~bits);
+}
+function bookComplete(kind) {
+  let n = 0;
+  for (const r of bookRows(kind)) {
+    const want = 1 | (r.grill ? 2 : 0);
+    if (r.flag == null || (r.flag & want) !== want) { bookSet(kind, r.id, want, true); n++; }
+  }
+  return n;
+}
+function renderCollection() {
+  const host = document.getElementById('coll-body');
+  if (!host || !SAVE) return;
+  const sel = 'background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono); width:100%;';
+  // armor skins
+  const unlocked = [ ...armorSkinsUnlocked(SAVE.user_research) ];
+  const inUse = arr(SAVE.soul.armorskin);
+  let h = `<div class="eyebrow" style="margin:0 0 6px;">Armor Skins in use</div>
+    <div class="capNote" style="margin-top:0;">The look shown on each armor slot. Only skins you've unlocked (armor researched to +4) are offered. ${unlocked.length} unlocked.</div>
+    <div class="grid" style="grid-template-columns: repeat(3, 1fr); margin-bottom:16px;">`;
+  for (const [ type, label ] of SKIN_SLOTS) {
+    const cur = (inUse.find(x => x && x.type === type) || {}).ptid || '';
+    const opts = unlocked.filter(id => PT_INDEX[id] && PT_INDEX[id].type === type).map(id => [ id, PT_INDEX[id].name ]).sort((a, b) => a[1].localeCompare(b[1]));
+    h += `<div class="field"><label>${label}</label><select data-skin="${type}" style="${sel}"><option value="">None (show the armor you wear)</option>${opts.map(([ id, nm ]) => `<option value="${id}" ${id === cur ? 'selected' : ''}>${escapeHtml(nm)}</option>`).join('')}${cur && !opts.some(o => o[0] === cur) ? `<option value="${cur}" selected>${escapeHtml((PT_INDEX[cur] || {}).name || cur)} (not unlocked)</option>` : ''}</select></div>`;
+  }
+  h += '</div>';
+  // books
+  h += `<div class="toolbar" style="margin:6px 0 0;"><input type="text" id="coll-filter" placeholder="Filter mushrooms and beasts by name..." value="${escapeHtml(COLL_FORM.filter)}" style="flex:1; max-width:320px; ${sel}"></div>`;
+  const filt = norm(COLL_FORM.filter || '');
+  for (const [ kind, title ] of [ [ 'msr', 'Mushroom book' ], [ 'bst', 'Beast book' ] ]) {
+    const rows = bookRows(kind);
+    const done = rows.filter(r => r.flag != null && (r.flag & (1 | (r.grill ? 2 : 0))) === (1 | (r.grill ? 2 : 0))).length;
+    const found = rows.filter(r => r.flag != null).length;
+    h += `<div class="toolbar" style="margin:14px 0 6px;"><div class="eyebrow" style="margin:0;">${title}</div><button class="subtle" data-book-complete="${kind}">Eat everything (raw and grilled)</button><span class="count">${found} / ${rows.length} found · ${done} fully eaten</span></div>`;
+    h += `<table class="stewTable"><thead><tr><th>${kind === 'msr' ? 'Mushroom' : 'Beast'}</th><th>In the book</th><th>Eaten raw</th><th>Eaten grilled</th></tr></thead><tbody>`;
+    h += rows.filter(r => !filt || norm(r.name).includes(filt)).map(r => `<tr><td>${escapeHtml(r.name)} <span class="id">${r.id}</span></td><td>${r.flag == null ? 'not found' : 'found'}${r.flag != null && (r.flag & 4) ? ' <span class="id">(older record)</span>' : ''}</td>
+      <td><input type="checkbox" data-book="${kind}" data-book-id="${r.id}" data-bit="1" ${r.flag != null && (r.flag & 1) ? 'checked' : ''}></td>
+      <td>${r.grill ? `<input type="checkbox" data-book="${kind}" data-book-id="${r.id}" data-bit="2" ${r.flag != null && (r.flag & 2) ? 'checked' : ''}>` : '<span class="id">can\'t be grilled</span>'}</td></tr>`).join('');
+    h += '</tbody></table>';
+  }
+  host.innerHTML = h;
+  host.querySelectorAll('[data-skin]').forEach(el => el.addEventListener('change', () => {
+    const type = el.dataset.skin;
+    const list = arr(SAVE.soul.armorskin).filter(x => x && x.type !== type);
+    if (el.value) list.push({ type, ptid: el.value });
+    list.sort((a, b) => SKIN_SLOTS.findIndex(x => x[0] === a.type) - SKIN_SLOTS.findIndex(x => x[0] === b.type));
+    SAVE.soul.armorskin = list;
+    toast(el.value ? `${SKIN_SLOTS.find(x => x[0] === type)[1]} skin: ${(PT_INDEX[el.value] || {}).name || el.value}` : `${SKIN_SLOTS.find(x => x[0] === type)[1]} skin removed`);
+  }));
+  host.querySelectorAll('[data-book]').forEach(el => el.addEventListener('change', () => { bookSet(el.dataset.book, el.dataset.bookId, Number(el.dataset.bit), el.checked); renderCollection(); }));
+  host.querySelectorAll('[data-book-complete]').forEach(el => el.addEventListener('click', () => { const n = bookComplete(el.dataset.bookComplete); renderCollection(); toast(n ? `${n} entr${n === 1 ? 'y' : 'ies'} completed` : 'Already complete'); }));
+  const fi = document.getElementById('coll-filter');
+  if (fi) fi.addEventListener('input', () => { COLL_FORM.filter = fi.value; const pos = fi.selectionStart; renderCollection(); const f2 = document.getElementById('coll-filter'); f2.focus(); f2.setSelectionRange(pos, pos); });
+}
+function wireCollection() { if (activeTab === 'collection') renderCollection(); }
+
+// ---------------------------------------------------------------------------
+// Stats (read only): the play log the game keeps (root.playlog: base, user, kill, died, fighter,
+// fort, money, chara, famous). Nothing here is written back.
+// ---------------------------------------------------------------------------
+const STATS_SECTIONS = [ [ 'base', 'Overall' ], [ 'user', 'Combat' ], [ 'kill', 'Kills' ], [ 'died', 'Deaths' ], [ 'fighter', 'Fighters' ], [ 'fort', 'Tokyo Death Metro' ], [ 'money', 'Money' ], [ 'chara', 'Fighters sent out' ] ];
+const STATS_LABELS = {
+  total_play_time: 'Play time', max_floor: 'Deepest floor', move_floor_cnt: 'Floors moved', elevator_cnt: 'Elevator rides', escalator_cnt: 'Escalator rides', interruption: 'Times quit mid-run', move_dist: 'Distance moved',
+  total_get_weapon_cnt: 'Weapons picked up', total_get_armor_cnt: 'Armor picked up', total_get_material_cnt: 'Materials picked up', total_research_cnt: 'Research done', total_skill_cnt: 'Decals obtained', exchange_skill_cnt: 'Decals exchanged',
+  total_mushroom_cnt: 'Mushrooms eaten', total_mushroom_kind: 'Mushroom kinds eaten', total_throw_mushroom_cnt: 'Mushrooms thrown', total_baked_mushroom_cnt: 'Mushrooms grilled', bad_condition_cnt: 'Bad status effects',
+  total_beast_cnt: 'Beasts eaten', total_beast_kind: 'Beast kinds eaten', total_throw_beast_cnt: 'Beasts thrown', total_baked_beast_cnt: 'Beasts grilled', total_purchase_cnt: 'Purchases', total_break_weapon_cnt: 'Weapons broken', total_break_armor_cnt: 'Armor broken',
+  total_damage: 'Damage taken', total_give_damage: 'Damage dealt', attack_cnt: 'Attacks', hit_cnt: 'Hits taken', total_died_cnt: 'Deaths', total_enemy_cnt: 'Enemies killed',
+  total_get_money: 'Kill Coins earned', total_use_money: 'Kill Coins spent', total_get_spirit: 'SPLithium earned', total_use_spirit: 'SPLithium spent'
+};
+function statsLabel(k) {
+  if (STATS_LABELS[k]) return STATS_LABELS[k];
+  let m;
+  if ((m = /^killed_(.+)_cnt$/.exec(k))) return 'Killed by ' + m[1].replace(/_/g, ' ');
+  if ((m = /^kill_(.+)_cnt$/.exec(k))) return 'Killed ' + m[1].replace(/_/g, ' ');
+  if ((m = /^use_(.+)_cnt$/.exec(k))) return 'Used ' + m[1].replace(/_/g, ' ');
+  const t = k.replace(/_cnt$/, '').replace(/^total_/, '').replace(/_/g, ' ');
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+function statsValue(k, v) {
+  if (k === 'total_play_time' || /_time$/.test(k)) { const n = Number(v) || 0; if (n > 3600) return `${Math.floor(n / 3600).toLocaleString()} h ${Math.floor(n % 3600 / 60)} m`; }
+  if (v !== '' && !isNaN(Number(v)) && typeof v !== 'object') return Number(v).toLocaleString();
+  return String(v);
+}
+function blockStats() {
+  return `<section class="block">
+    <div class="block-head"><div><div class="eyebrow">Read only</div><h2>Stats</h2></div></div>
+    <div class="block-body"><div id="stats-body"></div></div>
+  </section>`;
+}
+function renderStats() {
+  const host = document.getElementById('stats-body');
+  if (!host || !RAW_SAV_ROOT) return;
+  const pl = RAW_SAV_ROOT.playlog || {};
+  let h = '<div class="capNote" style="margin-top:0;">The records the game keeps about your play. This tab only shows them; nothing here is changed.</div>';
+  for (const [ key, title ] of STATS_SECTIONS) {
+    const sec = pl[key];
+    if (!sec || typeof sec !== 'object' || Array.isArray(sec)) continue;
+    const rows = Object.entries(sec).filter(([ , v ]) => v === null || typeof v !== 'object').filter(([ k, v ]) => !(typeof v === 'string' && /^[\[{]/.test(v)));
+    if (!rows.length) continue;
+    h += `<details class="subDetails" style="margin-bottom:10px;" ${key === 'base' ? 'open' : ''}><summary>▸ ${title} (${rows.length})</summary><div class="subDetailsBody"><table class="stewTable"><tbody>`;
+    h += rows.map(([ k, v ]) => `<tr><td>${escapeHtml(statsLabel(k))}</td><td style="text-align:right;">${escapeHtml(statsValue(k, v))}</td></tr>`).join('');
+    h += '</tbody></table></div></details>';
+  }
+  // most used decals (famous.skill is a JSON map of decal id -> count)
+  try {
+    const fam = JSON.parse((pl.famous || {}).skill || '{}');
+    const top = Object.entries(fam).sort((a, b) => b[1] - a[1]).slice(0, 15);
+    if (top.length) h += `<details class="subDetails"><summary>▸ Most used decals (top ${top.length})</summary><div class="subDetailsBody"><table class="stewTable"><tbody>${top.map(([ id, n ]) => `<tr><td>${escapeHtml(SKL_INDEX[id] ? decalNameP(id) : id)}</td><td style="text-align:right;">${Number(n).toLocaleString()}</td></tr>`).join('')}</tbody></table></div></details>`;
+  } catch (e) {}
+  host.innerHTML = h;
+}
+function wireStats() { if (activeTab === 'stats') renderStats(); }
 
 function wireQuests() {
   if (activeTab === 'quests') renderQuests();
@@ -7960,6 +8117,14 @@ function reviewDiff(A, B, rawA, rawB) {
   if (stDiff.length > 12) sr.lines.push(`Stamps: ${stA.length} → ${stB.length} stamped (${stDiff.length} floors changed)`); else sr.lines.push(...stDiff);
   const bfA = rallyFlagEntry(rawA), bfB = rallyFlagEntry(rawB), bA = bfA ? Number(bfA.value) || 0 : 0, bB = bfB ? Number(bfB.value) || 0 : 0;
   if (bA !== bB) for (const b of arr(AP && AP.stampBonus)) { const f = Number(b.flg); if ((bA & f) !== (bB & f)) sr.lines.push(`Bonus ${Number(b.stidx) + 1}F-${Number(b.edidx) + 1}F${Number(b.perfect) ? ' perfect' : ''}: ${(bA & f) ? 'given' : 'not given'} → ${(bB & f) ? 'given' : 'not given'}`); }
+  const cl = sec('Collection');
+  const skinOf = (so, t) => ((arr(so.armorskin).find(x => x && x.type === t) || {}).ptid) || '';
+  for (const [ t, lbl ] of SKIN_SLOTS) { const x = skinOf(aS, t), y = skinOf(bS, t); if (x !== y) cl.lines.push(`${lbl} skin: ${x ? (PT_INDEX[x] || {}).name || x : 'none'} → ${y ? (PT_INDEX[y] || {}).name || y : 'none'}`); }
+  for (const [ key, lbl, nm ] of [ [ 'msrbook', 'Mushroom book', id => msrDisplayName(id, 0) ], [ 'bstbook', 'Beast book', id => bstDisplayName(id, 0) ] ]) {
+    const fa = new Map(arr(aS[key]).map(e => [ e.id, Number(e.flag) || 0 ])), fb = new Map(arr(bS[key]).map(e => [ e.id, Number(e.flag) || 0 ]));
+    const ch = [ ...new Set([ ...fa.keys(), ...fb.keys() ]) ].filter(id => fa.get(id) !== fb.get(id));
+    if (ch.length) cl.lines.push(`${lbl}: ${ch.length} entr${ch.length === 1 ? 'y' : 'ies'} changed (${ch.slice(0, 6).map(nm).join(', ')}${ch.length > 6 ? ', …' : ''})`);
+  }
   const lc = sec('Location');
   const fa = rawA.soul && rawA.soul.flrid, fb = rawB.soul && rawB.soul.flrid;
   const locLbl = id => !id ? 'none' : hvnFloor(id) ? hvnFloorLabel(hvnFloor(id)) : id;
