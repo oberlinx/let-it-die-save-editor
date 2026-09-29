@@ -1369,7 +1369,7 @@ async function loadMastersBuffer(buf) {
       atkattr: all('SELECT * FROM master_part_atkattr'),
       bodydetail: all('SELECT * FROM master_body_detail')
     };
-    for (const [key, sql] of [['questParamText', 'SELECT qid, no, val FROM master_quest_param_text'], ['questParamDesc', 'SELECT qid, no, val FROM master_quest_param_desc_text'], ['rewards', 'SELECT * FROM master_reward'], ['expertLvl', 'SELECT ptarmtp, lvl, abp FROM master_expert_lvl_reward'], ['stampBonus', 'SELECT * FROM master_stamp_bonus'], ['stampFloors', 'SELECT * FROM master_stamp'], ['questCats', 'SELECT * FROM master_quest_category'], ['bagGen', 'SELECT * FROM master_mysterybag_content_gen'], ['bagGenOdds', "SELECT * FROM master_mysterybag_content_gen_odds WHERE odds_id = (SELECT odds_id FROM master_mysterybag_content_odds ORDER BY expires DESC LIMIT 1)"], ['boxGen', 'SELECT * FROM master_deathbox_content_gen'], ['hubCustom', 'SELECT * FROM master_hubcustomize'], ['floorInfo', 'SELECT id, sname, stgid, stgpfx, name FROM master_floor'], ['freezer', 'SELECT * FROM master_freezer'], ['bodies', 'SELECT id, gender FROM master_body'], ['gasmasks', 'SELECT id, gender FROM master_gasmask'], ['fortWhistle', 'SELECT * FROM master_fort_whistle']]) {
+    for (const [key, sql] of [['questParamText', 'SELECT qid, no, val FROM master_quest_param_text'], ['questParamDesc', 'SELECT qid, no, val FROM master_quest_param_desc_text'], ['rewards', 'SELECT * FROM master_reward'], ['expertLvl', 'SELECT ptarmtp, lvl, abp FROM master_expert_lvl_reward'], ['stampBonus', 'SELECT * FROM master_stamp_bonus'], ['stampFloors', 'SELECT * FROM master_stamp'], ['hvnFloors', "SELECT id, areaid, no, mbsmin, mbsmax, mbslvlmin, mbslvlmax FROM master_floor WHERE stgid = 'S_HVN'"], ['questCats', 'SELECT * FROM master_quest_category'], ['bagGen', 'SELECT * FROM master_mysterybag_content_gen'], ['bagGenOdds', "SELECT * FROM master_mysterybag_content_gen_odds WHERE odds_id = (SELECT odds_id FROM master_mysterybag_content_odds ORDER BY expires DESC LIMIT 1)"], ['boxGen', 'SELECT * FROM master_deathbox_content_gen'], ['hubCustom', 'SELECT * FROM master_hubcustomize'], ['floorInfo', 'SELECT id, sname, stgid, stgpfx, name FROM master_floor'], ['freezer', 'SELECT * FROM master_freezer'], ['bodies', 'SELECT id, gender FROM master_body'], ['gasmasks', 'SELECT id, gender FROM master_gasmask'], ['fortWhistle', 'SELECT * FROM master_fort_whistle']]) {
       try { AP[key] = all(sql); } catch (err) { AP[key] = []; console.warn(`${key} not available in this masters.db:`, err); }
     }
     AP.stewOdds = [];
@@ -1918,6 +1918,9 @@ const TABS = [ {
   id: 'rally',
   label: 'Stamp Rally'
 }, {
+  id: 'location',
+  label: 'Location'
+}, {
   id: 'vip',
   label: 'VIP'
 }, {
@@ -1934,7 +1937,7 @@ function renderAll() {
   app.querySelectorAll('[id]').forEach(el => {
     if (el.scrollTop > 0) scrollStates[el.id] = el.scrollTop;
   });
-  app.innerHTML = `\n    ${blockHealth()}\n    <div class="tabbar">\n      ${TABS.map(t => `<button class="tabbtn ${activeTab === t.id ? 'active' : ''}" data-tab-btn="${t.id}">${t.label}</button>`).join('')}\n    </div>\n    <div class="tabpanel" data-tab-panel="account" style="display:${activeTab === 'account' ? 'block' : 'none'}">${blockCurrency()}</div>\n    <div class="tabpanel" data-tab-panel="fighters" style="display:${activeTab === 'fighters' ? 'block' : 'none'}">${blockCharacters()}</div>\n    <div class="tabpanel" data-tab-panel="research" style="display:${activeTab === 'research' ? 'block' : 'none'}">${blockBlueprints()}</div>\n    <div class="tabpanel" data-tab-panel="decals" style="display:${activeTab === 'decals' ? 'block' : 'none'}">${blockSkillDecals()}</div>\n    <div class="tabpanel" data-tab-panel="stews" style="display:${activeTab === 'stews' ? 'block' : 'none'}">${blockStews()}</div>\n    <div class="tabpanel" data-tab-panel="bags" style="display:${activeTab === 'bags' ? 'block' : 'none'}">${blockBags()}</div>\n    <div class="tabpanel" data-tab-panel="boxes" style="display:${activeTab === 'boxes' ? 'block' : 'none'}">${blockBoxes()}</div>\n    <div class="tabpanel" data-tab-panel="hub" style="display:${activeTab === 'hub' ? 'block' : 'none'}">${blockHub()}</div>\n    <div class="tabpanel" data-tab-panel="defense" style="display:${activeTab === 'defense' ? 'block' : 'none'}">${blockDefense()}</div>\n    <div class="tabpanel" data-tab-panel="photos" style="display:${activeTab === 'photos' ? 'block' : 'none'}">${blockPhotos()}</div>\n    <div class="tabpanel" data-tab-panel="graves" style="display:${activeTab === 'graves' ? 'block' : 'none'}">${blockGraves()}</div>\n    <div class="tabpanel" data-tab-panel="dates" style="display:${activeTab === 'dates' ? 'block' : 'none'}">${blockDates()}</div>\n    <div class="tabpanel" data-tab-panel="storage" style="display:${activeTab === 'storage' ? 'block' : 'none'}">${blockStorageBox()}</div>\n    <div class="tabpanel" data-tab-panel="rewards" style="display:${activeTab === 'rewards' ? 'block' : 'none'}">${blockRewardBox()}</div>\n    <div class="tabpanel" data-tab-panel="quests" style="display:${activeTab === 'quests' ? 'block' : 'none'}">${blockQuests()}</div>\n    <div class="tabpanel" data-tab-panel="rally" style="display:${activeTab === 'rally' ? 'block' : 'none'}">${blockRally()}</div>\n    <div class="tabpanel" data-tab-panel="vip" style="display:${activeTab === 'vip' ? 'block' : 'none'}">${blockVip()}</div>\n    <div class="tabpanel" data-tab-panel="compare" style="display:${activeTab === 'compare' ? 'block' : 'none'}">${blockCompare()}</div>\n  `;
+  app.innerHTML = `\n    ${blockHealth()}\n    <div class="tabbar">\n      ${TABS.map(t => `<button class="tabbtn ${activeTab === t.id ? 'active' : ''}" data-tab-btn="${t.id}">${t.label}</button>`).join('')}\n    </div>\n    <div class="tabpanel" data-tab-panel="account" style="display:${activeTab === 'account' ? 'block' : 'none'}">${blockCurrency()}</div>\n    <div class="tabpanel" data-tab-panel="fighters" style="display:${activeTab === 'fighters' ? 'block' : 'none'}">${blockCharacters()}</div>\n    <div class="tabpanel" data-tab-panel="research" style="display:${activeTab === 'research' ? 'block' : 'none'}">${blockBlueprints()}</div>\n    <div class="tabpanel" data-tab-panel="decals" style="display:${activeTab === 'decals' ? 'block' : 'none'}">${blockSkillDecals()}</div>\n    <div class="tabpanel" data-tab-panel="stews" style="display:${activeTab === 'stews' ? 'block' : 'none'}">${blockStews()}</div>\n    <div class="tabpanel" data-tab-panel="bags" style="display:${activeTab === 'bags' ? 'block' : 'none'}">${blockBags()}</div>\n    <div class="tabpanel" data-tab-panel="boxes" style="display:${activeTab === 'boxes' ? 'block' : 'none'}">${blockBoxes()}</div>\n    <div class="tabpanel" data-tab-panel="hub" style="display:${activeTab === 'hub' ? 'block' : 'none'}">${blockHub()}</div>\n    <div class="tabpanel" data-tab-panel="defense" style="display:${activeTab === 'defense' ? 'block' : 'none'}">${blockDefense()}</div>\n    <div class="tabpanel" data-tab-panel="photos" style="display:${activeTab === 'photos' ? 'block' : 'none'}">${blockPhotos()}</div>\n    <div class="tabpanel" data-tab-panel="graves" style="display:${activeTab === 'graves' ? 'block' : 'none'}">${blockGraves()}</div>\n    <div class="tabpanel" data-tab-panel="dates" style="display:${activeTab === 'dates' ? 'block' : 'none'}">${blockDates()}</div>\n    <div class="tabpanel" data-tab-panel="storage" style="display:${activeTab === 'storage' ? 'block' : 'none'}">${blockStorageBox()}</div>\n    <div class="tabpanel" data-tab-panel="rewards" style="display:${activeTab === 'rewards' ? 'block' : 'none'}">${blockRewardBox()}</div>\n    <div class="tabpanel" data-tab-panel="quests" style="display:${activeTab === 'quests' ? 'block' : 'none'}">${blockQuests()}</div>\n    <div class="tabpanel" data-tab-panel="rally" style="display:${activeTab === 'rally' ? 'block' : 'none'}">${blockRally()}</div>\n    <div class="tabpanel" data-tab-panel="location" style="display:${activeTab === 'location' ? 'block' : 'none'}">${blockLocation()}</div>\n    <div class="tabpanel" data-tab-panel="vip" style="display:${activeTab === 'vip' ? 'block' : 'none'}">${blockVip()}</div>\n    <div class="tabpanel" data-tab-panel="compare" style="display:${activeTab === 'compare' ? 'block' : 'none'}">${blockCompare()}</div>\n  `;
   wireHealth();
   wireCurrency();
   wireCharacters();
@@ -1952,6 +1955,7 @@ function renderAll() {
   wireRewardBox();
   wireQuests();
   wireRally();
+  wireLocation();
   wireVip();
   wireCompare();
   document.querySelectorAll('[data-tab-btn]').forEach(btn => {
@@ -1965,6 +1969,7 @@ function renderAll() {
       if (activeTab === 'dates') renderDates();
       if (activeTab === 'quests') renderQuests();
       if (activeTab === 'rally') renderRally();
+      if (activeTab === 'location') renderLocation();
       if (activeTab === 'bags') renderBags();
       if (activeTab === 'boxes') renderBoxes();
       if (activeTab === 'hub') renderHub();
@@ -3995,6 +4000,148 @@ function renderRally() {
   }));
 }
 function wireRally() { if (activeTab === 'rally') renderRally(); }
+
+// ---------------------------------------------------------------------------
+// Location (EXPERIMENTAL): move a fighter paused on a Heaven boss floor to another boss floor
+// that uses the same map.
+// Save: a mid-run quit keeps soul.pause (e.g. HEAVEN_PAUSE), soul.stgid/flrid/areaid/unitid and the
+// exact position (pause_x/y/z, yaw). The run's floors live under root.floor: rlg.user (floors walked
+// this run, last = current), rlg.archive (each generated floor's layout), pop.* spawns, dust,
+// closed_area_flags, mboss (the boss waiting on the current floor); soul.hvntrinfo holds the boss
+// floors' reward info and the fighter's bloodnium_result names the deepest floor of the run.
+// Heaven routes (master_floor S_HVN): regular Heaven / TENGOKU = HVN_FLR_0001.. (51F-451F, boss map
+// HVN_AREA_017 every 5 floors); NEO routes R00 D.O.D, R01 W.E, R02 C.W, R03 M.I.L.K = HVN_FLR_R0x_..
+// (52F-140F; boss map A = HVN_AREA_001_R0x on 55,65..135F, boss map B = HVN_AREA_002_R0x on 60,70..140F).
+// Only floors with the same map (same areaid) are offered, so the saved position still fits.
+// The move is written at download: every reference to the current floor in soul and root.floor is
+// renamed to the new floor, anything left there from an earlier visit to the new floor is dropped,
+// and the waiting boss is set to the new floor's boss level. Records (clear_times, playlog) are kept.
+// ---------------------------------------------------------------------------
+let FLOOR_MOVE = { root: null, target: '', armed: false, msg: '' };
+function flmSync() { if (FLOOR_MOVE.root !== RAW_SAV_ROOT) FLOOR_MOVE = { root: RAW_SAV_ROOT, target: '', armed: false, msg: '' }; }
+function hvnFloor(id) { return arr(AP && AP.hvnFloors).find(f => f.id === id) || null; }
+function hvnRoute(id) {
+  const m = /^HVN_FLR_(R0\d)_/.exec(String(id || ''));
+  if (!m) return { key: 'main', name: 'Regular Heaven (TENGOKU)' };
+  const neo = resolveName('MOVE_MESSAGE.TXT_MOVE_NEO_' + m[1]);
+  return { key: m[1], name: neo && neo !== 'MOVE_MESSAGE.TXT_MOVE_NEO_' + m[1] ? neo.replace(/\s*area$/i, '') : 'NEO ' + m[1] };
+}
+function hvnMapLabel(areaid) {
+  if (/^HVN_AREA_001_R0\d$/.test(areaid)) return 'boss map A';
+  if (/^HVN_AREA_002_R0\d$/.test(areaid)) return 'boss map B';
+  if (areaid === 'HVN_AREA_017') return 'boss floor';
+  return '';
+}
+function hvnFloorLabel(f) {
+  if (!f) return '?';
+  const r = hvnRoute(f.id), map = hvnMapLabel(f.areaid);
+  return `${r.name} · ${f.no}F${map ? ' · ' + map : ''}`;
+}
+function flmCurrent() {
+  const s = RAW_SAV_ROOT && RAW_SAV_ROOT.soul;
+  if (!s) return null;
+  return { pause: s.pause || '', stgid: s.stgid || '', flrid: s.flrid || '', areaid: s.areaid || '' };
+}
+function flmTargets() {
+  const cur = flmCurrent();
+  if (!cur || !cur.pause || cur.stgid !== 'S_HVN') return [];
+  const f = hvnFloor(cur.flrid);
+  if (!f || !(Number(f.mbsmax) > 0)) return [];
+  const route = hvnRoute(f.id).key;
+  return arr(AP && AP.hvnFloors).filter(x => x.areaid === f.areaid && x.id !== f.id && hvnRoute(x.id).key === route).sort((a, b) => a.no - b.no);
+}
+// rename every reference to floor `from` under node to `to` (object flrid values, keys like
+// "<flrid>-<areaid>" or "<flrid>_<areaid>..."); drop array items / keys that already refer to `to`
+function flmRewrite(node, from, to, depth) {
+  if (!node || typeof node !== 'object' || depth > 10) return;
+  const keyIs = (k, id) => k === id || k.startsWith(id + '-') || k.startsWith(id + '_');
+  if (Array.isArray(node)) {
+    for (let i = node.length - 1; i >= 0; i--) { const v = node[i]; if (v && typeof v === 'object' && !Array.isArray(v) && v.flrid === to) node.splice(i, 1); }
+    for (const v of node) flmRewrite(v, from, to, depth + 1);
+    return;
+  }
+  for (const k of Object.keys(node)) if (keyIs(k, to)) delete node[k];
+  for (const k of Object.keys(node)) {
+    const v = node[k];
+    if (k === 'flrid' && v === from) node[k] = to;
+    else if (v && typeof v === 'object') flmRewrite(v, from, to, depth + 1);
+    if (keyIs(k, from)) { node[to + k.slice(from.length)] = node[k]; delete node[k]; }
+  }
+}
+function applyFloorMove(root) {
+  if (FLOOR_MOVE.root !== RAW_SAV_ROOT || !FLOOR_MOVE.target || !root || !root.soul) return root;
+  const from = root.soul.flrid, to = FLOOR_MOVE.target;
+  const f = hvnFloor(to);
+  if (!from || !f || from === to) return root;
+  root.soul.flrid = to;
+  if (Array.isArray(root.soul.hvntrinfo)) flmRewrite(root.soul.hvntrinfo, from, to, 0);
+  if (root.floor) {
+    const stamp = root.floor.stamp;
+    delete root.floor.stamp;           // the Stamp Rally has no floor ids; keep it out of the rewrite
+    flmRewrite(root.floor, from, to, 0);
+    if (stamp !== undefined) root.floor.stamp = stamp;
+    const lvl = Number(f.mbslvlmin) || 0;
+    if (lvl && root.floor.mboss && Array.isArray(root.floor.mboss.mbss)) for (const m of root.floor.mboss.mbss) if (m && m.lvl != null) m.lvl = lvl;
+  }
+  // the fighter's run summary names the deepest floor of this run
+  const chrs = root.soul.chr && root.soul.chr.chrs;
+  for (const list of chrs && typeof chrs === 'object' ? Object.values(chrs) : []) for (const c of arr(list)) {
+    if (c && typeof c.bloodnium_result === 'string' && c.bloodnium_result.includes('"' + from + '"')) c.bloodnium_result = c.bloodnium_result.split('"' + from + '"').join('"' + to + '"');
+  }
+  return root;
+}
+function blockLocation() {
+  return `<section class="block">
+    <div class="block-head"><div><div class="eyebrow">Experimental</div><h2>Location</h2></div></div>
+    <div class="block-body"><div id="loc-body"></div></div>
+  </section>`;
+}
+function renderLocation() {
+  const host = document.getElementById('loc-body');
+  if (!host || !SAVE || !RAW_SAV_ROOT) return;
+  flmSync();
+  const cur = flmCurrent();
+  const f = cur && hvnFloor(cur.flrid);
+  let h = `<div class="warnNote" style="margin:0 0 10px;"><b>Experimental — test on a backup first.</b> Moving floors hasn't been confirmed in game yet. Keep your original save.</div>`;
+  if (!cur || !cur.pause) {
+    h += `<div class="capNote" style="margin-top:0;">The fighter isn't paused in a run (the save is at the Waiting Room), so there's nothing to move. Quit the game while standing on a Heaven boss floor, then load that save here.</div>`;
+    host.innerHTML = h; return;
+  }
+  const where = f ? hvnFloorLabel(f) : `${cur.flrid || '?'} (${cur.stgid || '?'})`;
+  const chr = arr(SAVE.soul.chrs).find(c => c.state === 'USE');
+  h += `<div class="field" style="margin-bottom:10px;"><label>Paused on</label><div style="padding:6px 0; font-size:14px;"><b>${escapeHtml(where)}</b>${chr ? ` <span class="id">— ${escapeHtml(chr.name || '')}</span>` : ''}</div></div>`;
+  if (FLOOR_MOVE.msg) h += `<pre class="stewLog">${escapeHtml(FLOOR_MOVE.msg)}</pre>`;
+  const targets = flmTargets();
+  if (cur.stgid !== 'S_HVN' || !f) h += `<div class="capNote">Only Heaven boss floors can be moved (the fighter is paused outside Heaven).</div>`;
+  else if (!(Number(f.mbsmax) > 0)) h += `<div class="capNote">The fighter is on a normal Heaven floor, not a boss floor. Normal floors are built at random, so only boss floors (which always use the same map) can be moved.</div>`;
+  else if (!targets.length) h += `<div class="capNote">No other boss floor uses this map.</div>`;
+  else {
+    const sel = 'background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);';
+    const t = FLOOR_MOVE.target ? hvnFloor(FLOOR_MOVE.target) : null;
+    h += `<div class="capNote" style="margin-top:0;">Only boss floors of the same route that use the same map are listed (${escapeHtml(hvnRoute(f.id).name)}, ${escapeHtml(hvnMapLabel(f.areaid))}). The boss waiting on the floor is set to the new floor's boss level. Your records (deepest floor, clear times) are left as they are.</div>
+      <div class="toolbar"><select id="loc-target" style="${sel} min-width:340px;"><option value="">— keep ${escapeHtml(f.no + 'F')} —</option>${targets.map(x => `<option value="${x.id}" ${FLOOR_MOVE.target === x.id ? 'selected' : ''}>${escapeHtml(hvnFloorLabel(x))} · boss Lv ${x.mbslvlmin}${x.no < f.no ? ' (lower)' : ''}</option>`).join('')}</select>
+      <button class="action" id="loc-apply">${FLOOR_MOVE.armed ? 'Click again to confirm' : 'Move to this floor'}</button>${FLOOR_MOVE.target ? '<button class="subtle" id="loc-undo">Undo</button>' : ''}</div>`;
+    if (t) h += `<div class="capNote">On download the fighter will be on <b>${escapeHtml(hvnFloorLabel(t))}</b> (from ${escapeHtml(f.no + 'F')}), boss Lv ${t.mbslvlmin}.</div>`;
+  }
+  host.innerHTML = h;
+  const tsel = document.getElementById('loc-target');
+  let pick = FLOOR_MOVE.target;
+  if (tsel) tsel.addEventListener('change', () => { pick = tsel.value; FLOOR_MOVE.armed = false; });
+  const ap = document.getElementById('loc-apply');
+  if (ap) ap.addEventListener('click', () => {
+    pick = tsel ? tsel.value : '';
+    if (!pick) { FLOOR_MOVE.target = ''; FLOOR_MOVE.armed = false; FLOOR_MOVE.msg = ''; renderLocation(); toast('Staying on the current floor'); return; }
+    if (!FLOOR_MOVE.armed) { FLOOR_MOVE.armed = true; renderLocation(); document.getElementById('loc-target').value = pick; return; }
+    FLOOR_MOVE.armed = false;
+    FLOOR_MOVE.target = pick;
+    FLOOR_MOVE.msg = `Set to move to ${hvnFloorLabel(hvnFloor(pick))}. Download the .sav to apply it.`;
+    renderLocation();
+    toast('Floor move set — download to apply');
+  });
+  const un = document.getElementById('loc-undo');
+  if (un) un.addEventListener('click', () => { FLOOR_MOVE.target = ''; FLOOR_MOVE.armed = false; FLOOR_MOVE.msg = ''; renderLocation(); });
+}
+function wireLocation() { if (activeTab === 'location') renderLocation(); }
 
 function wireQuests() {
   if (activeTab === 'quests') renderQuests();
@@ -7558,7 +7705,7 @@ function reviewFileName(ext, stamp) { return `brggame_${stamp || reviewStamp()}.
 function buildDownloadRoot() {
   normalizePresents(SAVE.presents);
   questOrdForSave();
-  return applyStampRally(applyStampMark(applyAccountChoice(restoreEmptyShapes(applyDateRules(buildRawSavRootFromSave(SAVE, RAW_SAV_ROOT, RAW_SAV_MAIN_UID)), RAW_SAV_ROOT))));
+  return applyFloorMove(applyStampRally(applyStampMark(applyAccountChoice(restoreEmptyShapes(applyDateRules(buildRawSavRootFromSave(SAVE, RAW_SAV_ROOT, RAW_SAV_MAIN_UID)), RAW_SAV_ROOT)))));
 }
 
 const REVIEW_SOUL_LABELS = {
@@ -7726,6 +7873,10 @@ function reviewDiff(A, B, rawA, rawB) {
   if (stDiff.length > 12) sr.lines.push(`Stamps: ${stA.length} → ${stB.length} stamped (${stDiff.length} floors changed)`); else sr.lines.push(...stDiff);
   const bfA = rallyFlagEntry(rawA), bfB = rallyFlagEntry(rawB), bA = bfA ? Number(bfA.value) || 0 : 0, bB = bfB ? Number(bfB.value) || 0 : 0;
   if (bA !== bB) for (const b of arr(AP && AP.stampBonus)) { const f = Number(b.flg); if ((bA & f) !== (bB & f)) sr.lines.push(`Bonus ${Number(b.stidx) + 1}F-${Number(b.edidx) + 1}F${Number(b.perfect) ? ' perfect' : ''}: ${(bA & f) ? 'given' : 'not given'} → ${(bB & f) ? 'given' : 'not given'}`); }
+  const lc = sec('Location');
+  const fa = rawA.soul && rawA.soul.flrid, fb = rawB.soul && rawB.soul.flrid;
+  const locLbl = id => !id ? 'none' : hvnFloor(id) ? hvnFloorLabel(hvnFloor(id)) : id;
+  if (fa !== fb) lc.lines.push(`Paused floor: ${locLbl(fa)} → ${locLbl(fb)} (experimental)`);
   const sk = sec('Armor Skins (unlocked by R&D at +4)');
   const skA = armorSkinsUnlocked(ra), skB = armorSkinsUnlocked(rb);
   const skNew = [ ...skB ].filter(x => !skA.has(x)).map(x => (PT_INDEX[x] || {}).name || x), skGone = [ ...skA ].filter(x => !skB.has(x)).map(x => (PT_INDEX[x] || {}).name || x);
