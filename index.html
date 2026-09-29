@@ -1369,7 +1369,7 @@ async function loadMastersBuffer(buf) {
       atkattr: all('SELECT * FROM master_part_atkattr'),
       bodydetail: all('SELECT * FROM master_body_detail')
     };
-    for (const [key, sql] of [['questParamText', 'SELECT qid, no, val FROM master_quest_param_text'], ['questParamDesc', 'SELECT qid, no, val FROM master_quest_param_desc_text'], ['rewards', 'SELECT * FROM master_reward'], ['expertLvl', 'SELECT ptarmtp, lvl, abp FROM master_expert_lvl_reward'], ['stampBonus', 'SELECT * FROM master_stamp_bonus'], ['stampFloors', 'SELECT * FROM master_stamp'], ['hvnFloors', "SELECT id, areaid, no, mbsmin, mbsmax, mbslvlmin, mbslvlmax FROM master_floor WHERE stgid = 'S_HVN'"], ['jackals', 'SELECT * FROM master_jackal'], ['magazines', 'SELECT * FROM master_magazine'], ['magazineBonus', 'SELECT * FROM master_magazine_bonus'], ['hvnBossDrops', "SELECT d.flrid, d.areaid, d.refareaid, d.type, d.grp, d.freq FROM master_floor_drop_gen d JOIN master_floor f ON f.id = d.flrid AND f.areaid = d.areaid WHERE f.stgid = 'S_HVN' AND f.mbsmax > 0 AND (d.type IN ('PTGENTP_TRBOX_L', 'PTGENTP_TRBOX_SPXL_RARE') OR d.type LIKE 'PTGENTP_MBOSS%')"], ['questCats', 'SELECT * FROM master_quest_category'], ['bagGen', 'SELECT * FROM master_mysterybag_content_gen'], ['bagGenOdds', "SELECT * FROM master_mysterybag_content_gen_odds WHERE odds_id = (SELECT odds_id FROM master_mysterybag_content_odds ORDER BY expires DESC LIMIT 1)"], ['boxGen', 'SELECT * FROM master_deathbox_content_gen'], ['hubCustom', 'SELECT * FROM master_hubcustomize'], ['floorInfo', 'SELECT id, sname, stgid, stgpfx, name FROM master_floor'], ['freezer', 'SELECT * FROM master_freezer'], ['bodies', 'SELECT id, gender FROM master_body'], ['gasmasks', 'SELECT id, gender FROM master_gasmask'], ['fortWhistle', 'SELECT * FROM master_fort_whistle']]) {
+    for (const [key, sql] of [['questParamText', 'SELECT qid, no, val FROM master_quest_param_text'], ['questParamDesc', 'SELECT qid, no, val FROM master_quest_param_desc_text'], ['rewards', 'SELECT * FROM master_reward'], ['expertLvl', 'SELECT ptarmtp, lvl, abp FROM master_expert_lvl_reward'], ['stampBonus', 'SELECT * FROM master_stamp_bonus'], ['stampFloors', 'SELECT * FROM master_stamp'], ['hvnFloors', "SELECT id, areaid, no, mbsmin, mbsmax, mbslvlmin, mbslvlmax FROM master_floor WHERE stgid = 'S_HVN'"], ['jackals', 'SELECT * FROM master_jackal'], ['magazines', 'SELECT * FROM master_magazine'], ['magazineBonus', 'SELECT * FROM master_magazine_bonus'], ['hvnBossDrops', "SELECT d.flrid, d.areaid, d.refareaid, d.type, d.grp, d.freq FROM master_floor_drop_gen d JOIN master_floor f ON f.id = d.flrid AND f.areaid = d.areaid WHERE f.stgid = 'S_HVN' AND f.mbsmax > 0 AND (d.type IN ('PTGENTP_TRBOX_L', 'PTGENTP_TRBOX_SPXL_RARE', 'PTGENTP_SPXL') OR d.type LIKE 'PTGENTP_MBOSS%')"], ['questCats', 'SELECT * FROM master_quest_category'], ['bagGen', 'SELECT * FROM master_mysterybag_content_gen'], ['bagGenOdds', "SELECT * FROM master_mysterybag_content_gen_odds WHERE odds_id = (SELECT odds_id FROM master_mysterybag_content_odds ORDER BY expires DESC LIMIT 1)"], ['boxGen', 'SELECT * FROM master_deathbox_content_gen'], ['hubCustom', 'SELECT * FROM master_hubcustomize'], ['floorInfo', 'SELECT id, sname, stgid, stgpfx, name FROM master_floor'], ['freezer', 'SELECT * FROM master_freezer'], ['bodies', 'SELECT id, gender FROM master_body'], ['gasmasks', 'SELECT id, gender FROM master_gasmask'], ['fortWhistle', 'SELECT * FROM master_fort_whistle']]) {
       try { AP[key] = all(sql); } catch (err) { AP[key] = []; console.warn(`${key} not available in this masters.db:`, err); }
     }
     AP.stewOdds = [];
@@ -4062,11 +4062,59 @@ function flmDraw(flrid, areaid, refareaid, type) {
   for (const p of pool) { if ((x -= p.w) < 0) return p.items[Math.floor(Math.random() * p.items.length)].itemId || p.items[0].itemid; }
   return pool[pool.length - 1].items[0].itemId;
 }
+// soul.hvntrinfo holds the boss floor you're on plus the next three boss floors of the route (what the
+// map shows as upcoming rewards): {flrid, areaid, refareaid, rwdtype, rwdid (the featured reward),
+// is_rare, rwds: [{gentype, rwdid}]}. The game only adds the next one as you climb, so after a move the
+// whole block is shifted to the new floor and its next three boss floors (same route, same spacing, so
+// maps A/B stay in step). Without this the map shows no upcoming rewards for a while, and boss floors
+// with no entry fall back to Kill Coins in their chests.
+function flmRouteBoss(id) {
+  const key = hvnRoute(id).key;
+  return arr(AP && AP.hvnFloors).filter(f => Number(f.mbsmax) > 0 && hvnRoute(f.id).key === key).sort((a, b) => a.no - b.no);
+}
+function flmShiftHvn(root, from, to) {
+  const list = root && root.soul && root.soul.hvntrinfo;
+  if (!Array.isArray(list)) return;
+  const L = flmRouteBoss(from), iFrom = L.findIndex(f => f.id === from), iTo = L.findIndex(f => f.id === to);
+  if (iFrom < 0 || iTo < 0) { flmRewrite(list, from, to, 0); return; }
+  const d = iTo - iFrom;
+  for (let i = list.length - 1; i >= 0; i--) {
+    const e = list[i], j = e ? L.findIndex(f => f.id === e.flrid) : -1;
+    if (j < 0) continue;
+    const n = L[j + d];
+    if (!n) { list.splice(i, 1); continue; }
+    e.flrid = n.id;
+    e.areaid = n.areaid;
+  }
+}
+// upcoming boss floors after a move: [{oldId, id, entry}] from the save as loaded
+function flmUpcoming(target) {
+  const root = RAW_SAV_ROOT, cur = root && root.soul;
+  if (!cur) return [];
+  const L = flmRouteBoss(cur.flrid), iFrom = L.findIndex(f => f.id === cur.flrid), iTo = L.findIndex(f => f.id === target);
+  if (iFrom < 0 || iTo < 0) return [];
+  const out = [];
+  for (const e of arr(cur.hvntrinfo)) {
+    const j = L.findIndex(f => f.id === e.flrid);
+    if (j <= iFrom) continue;
+    const n = L[j + iTo - iFrom];
+    if (n) out.push({ oldId: e.flrid, id: n.id, floor: n, entry: e });
+  }
+  return out.sort((a, b) => a.floor.no - b.floor.no);
+}
 function flmRoll(target) {
   const root = RAW_SAV_ROOT, cur = root && root.soul, t = hvnFloor(target);
   if (!cur || !t) return null;
   const items = flmItemsOf(root), ref = flmRefArea(root, cur.flrid);
-  const out = { boxes: [], boss: null };
+  const out = { boxes: [], boss: null, featured: null, upcoming: [] };
+  const hCur = arr(cur.hvntrinfo).find(e => e && e.flrid === cur.flrid);
+  if (hCur && hCur.rwdid) { const to = flmDraw(t.id, t.areaid, hCur.refareaid || ref, Number(hCur.is_rare) ? 'PTGENTP_TRBOX_SPXL_RARE' : 'PTGENTP_SPXL'); if (to) out.featured = { from: hCur.rwdid, to }; }
+  for (const u of flmUpcoming(target)) {
+    const e = u.entry, refA = e.refareaid || '-';
+    const rw = arr(e.rwds).map(w => ({ gentype: w.gentype, from: w.rwdid, to: flmDraw(u.id, u.floor.areaid, refA, w.gentype) || w.rwdid }));
+    const fe = e.rwdid ? { from: e.rwdid, to: flmDraw(u.id, u.floor.areaid, refA, Number(e.is_rare) ? 'PTGENTP_TRBOX_SPXL_RARE' : 'PTGENTP_SPXL') || e.rwdid } : null;
+    out.upcoming.push({ id: u.id, no: u.floor.no, featured: fe, rare: Number(e.is_rare) === 1, rwds: rw });
+  }
   for (const b of arr(root.floor && root.floor.trbox)) {
     if (!b || b.rwdtype !== 'TBRWD_ITEM') continue;
     const inst = items.find(i => i.eid === b.contentid);
@@ -4094,6 +4142,14 @@ function flmApplyRolls(root, from, to) {
   if (pt && typeof pt === 'object') for (const k of Object.keys(pt)) if (k.startsWith(to + '-')) for (const e of arr(pt[k])) { const s = r.boxes.find(b => b.pntid === e.pntid); if (s && e.contentid === s.from) e.contentid = s.to; }
   // the boss floor's reward list (already renamed to the new floor)
   const h = arr(root.soul && root.soul.hvntrinfo).find(x => x && x.flrid === to);
+  if (h && r.featured && h.rwdid === r.featured.from) h.rwdid = r.featured.to;
+  // the next boss floors (already shifted): featured reward and box / boss rewards
+  for (const u of arr(r.upcoming)) {
+    const e = arr(root.soul && root.soul.hvntrinfo).find(x => x && x.flrid === u.id);
+    if (!e) continue;
+    if (u.featured && e.rwdid === u.featured.from) e.rwdid = u.featured.to;
+    arr(e.rwds).forEach((w, i) => { const n = u.rwds[i]; if (n && w && w.rwdid === n.from && w.gentype === n.gentype) w.rwdid = n.to; });
+  }
   if (h) {
     const used = new Set();
     for (const s of swaps) {
@@ -4157,7 +4213,7 @@ function applyFloorMove(root) {
   const f = hvnFloor(to);
   if (!from || !f || from === to) return root;
   root.soul.flrid = to;
-  if (Array.isArray(root.soul.hvntrinfo)) flmRewrite(root.soul.hvntrinfo, from, to, 0);
+  flmShiftHvn(root, from, to);
   if (root.floor) {
     const stamp = root.floor.stamp;
     delete root.floor.stamp;           // the Stamp Rally has no floor ids; keep it out of the rewrite
@@ -4208,13 +4264,17 @@ function renderLocation() {
     if (t) {
       h += `<div class="capNote">On download the fighter will be on <b>${escapeHtml(hvnFloorLabel(t))}</b> (from ${escapeHtml(f.no + 'F')}), boss Lv ${t.mbslvlmin}.</div>`;
       const r = FLOOR_MOVE.rolls, nm = id => escapeHtml(itemDisplayName(id));
-      const n = r ? r.boxes.length + (r.boss ? 1 : 0) : 0;
+      const n = r ? r.boxes.length + (r.boss ? 1 : 0) + (r.featured ? 1 : 0) + arr(r.upcoming).length : 0;
+      const up = flmUpcoming(t.id);
+      h += `<div class="capNote">The map's upcoming rewards move with you: ${up.length ? up.map(u => u.floor.no + 'F').join(', ') : 'no further boss floors on this route'}.</div>`;
       h += `<div class="subDetails" style="padding:10px; margin-top:8px;"><label style="cursor:pointer;"><input type="checkbox" id="loc-reroll" ${FLOOR_MOVE.reroll ? 'checked' : ''} style="width:auto; margin-right:6px;">Reroll the boss floor rewards for ${escapeHtml(t.no + 'F')}</label>`;
       if (!n) h += `<div class="capNote">No unopened rewards on this floor to reroll.</div>`;
       else if (FLOOR_MOVE.reroll) {
         h += `<table class="stewTable" style="margin-top:6px;"><thead><tr><th>Reward</th><th>Rolled for ${escapeHtml(f.no + 'F')}</th><th>Rerolled for ${escapeHtml(t.no + 'F')}</th></tr></thead><tbody>`;
         h += r.boxes.map((b, i) => `<tr><td>Treasure box ${i + 1}</td><td>${nm(b.from)}</td><td>${nm(b.to)}</td></tr>`).join('');
         if (r.boss) h += `<tr><td>Boss drop</td><td>${nm(r.boss.from)}</td><td>${nm(r.boss.to)}</td></tr>`;
+        if (r.featured) h += `<tr><td>Featured reward (map)</td><td>${nm(r.featured.from)}</td><td>${nm(r.featured.to)}</td></tr>`;
+        for (const u of arr(r.upcoming)) h += `<tr><td>Upcoming ${u.no}F${u.rare ? ' (rare)' : ''}</td><td class="id">shown on the map</td><td>${u.featured ? nm(u.featured.to) : '—'} <span class="id">· boxes: ${u.rwds.map(w => nm(w.to)).join(', ')}</span></td></tr>`;
         h += `</tbody></table><div class="toolbar" style="margin-top:6px;"><button class="subtle" id="loc-reroll-again">Reroll again</button><span class="capNote" style="margin:0;">Drawn from ${escapeHtml(t.no + 'F')}'s own drop table, the way the game rolls them.</span></div>`;
       } else h += `<div class="capNote">The rewards rolled for ${escapeHtml(f.no + 'F')} are kept.</div>`;
       h += '</div>';
