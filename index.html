@@ -4790,6 +4790,18 @@ function bstDisplayName(bstid, cooked) {
 
 // Full durability grows with the upgrade level: floor(dur * dur_c^(lvl-1)) -- matches every
 // full-durability part in the sample saves. Ammo: rest (loaded) up to capacity, spare up to spare.
+// research entries (FINISHED levels and next-level markers) above the part's highest level
+function researchOverCap() {
+  return arr(SAVE && SAVE.user_research).filter(r => { const rec = PT_INDEX[r.ptid], cap = maxPartLevel(rec); return rec && cap && Number(r.lvl) > cap; });
+}
+function fixResearchOverCap() {
+  const bad = new Set(researchOverCap());
+  if (!bad.size) return 0;
+  const n = bad.size;
+  SAVE.user_research = arr(SAVE.user_research).filter(r => !bad.has(r));
+  normalizeResearchMarkers(SAVE.user_research);
+  return n;
+}
 // every weapon / armor in the save whose stored level is above what its part allows (reflvllmt)
 function partsOverCap() {
   const out = [];
@@ -7155,6 +7167,17 @@ function runSaveCheck() {
     });
   });
 
+  // research (R&D) recorded above the highest level the part can reach
+  safe('research-levels', () => {
+    const over = researchOverCap();
+    if (!over.length) return;
+    const parts = [ ...new Set(over.map(r => r.ptid)) ];
+    const lbl = id => { const rec = PT_INDEX[id], top = Math.max(...over.filter(r => r.ptid === id).map(r => r.lvl)); return `${escapeHtml((rec || {}).name || id)} (researched to level ${top}, goes up to +${maxDisplayLevel(rec)})`; };
+    add('warning', `${parts.length} blueprint${parts.length === 1 ? ' is' : 's are'} researched past the highest level ${parts.length === 1 ? 'its' : 'their'} part can reach: ${parts.slice(0, 4).map(lbl).join('; ')}${parts.length > 4 ? '; …' : ''}. The game wasn't made for these levels.`, 'research', {
+      label: 'Cap the research at the highest level', run: () => { const n = fixResearchOverCap(); return `Removed ${n} research level${n === 1 ? '' : 's'} above the cap.`; }
+    });
+  });
+
   // weapons / armor above the highest level the part can reach (e.g. a +4 weapon at +10). The
   // editor and the game show them clamped to the part's cap, so they're easy to miss.
   safe('part-levels', () => {
@@ -8381,7 +8404,8 @@ function reviewDiff(A, B, rawA, rawB) {
     const ta = cmpTopFinished(ra, ptid), tb = cmpTopFinished(rb, ptid);
     if (ta === tb) continue;
     const r = PT_INDEX[ptid], lv = t => t ? '+' + displayFromRaw(r, t) : 'not researched';
-    rs.lines.push(`${(r && r.name) || ptid}: ${lv(ta)} → ${lv(tb)}`);
+    const cap = maxPartLevel(r);
+    rs.lines.push(r && cap && (ta > cap || tb > cap) ? `${r.name || ptid}: researched to level ${ta || 0} → ${tb || 0} (goes up to +${maxDisplayLevel(r)})` : `${(r && r.name) || ptid}: ${lv(ta)} → ${lv(tb)}`);
   }
   // "next level" / "next tier" markers (what Chokufunsha lets you research next)
   const mk = list => new Set(list.filter(r => r.research_type === 'LEVELUP' || r.research_type === 'REMODEL').map(r => `${r.ptid}|${r.research_type}|${r.lvl}`));
