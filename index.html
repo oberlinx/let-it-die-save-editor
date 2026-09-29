@@ -4449,6 +4449,14 @@ function jklOptions(type) {
   if (Number(r.drop_rmap_weapon_rate) && bw) out.push({ key: 'it:' + bw, w: Number(r.drop_rmap_weapon_rate), label: itemDisplayName(bw), loot: () => ({ kind: 'item', itemid: bw }) });
   if (Number(r.drop_rmap_armor_rate)) { const bps = armor.map(jklBpOf).filter(Boolean); for (const b of bps) out.push({ key: 'it:' + b, w: Number(r.drop_rmap_armor_rate) / bps.length, label: itemDisplayName(b), loot: () => ({ kind: 'item', itemid: b }) }); }
   for (const [ id, rate ] of [ [ r.drop_item_id_1, r.drop_item_1_rate ], [ r.drop_item_id_2, r.drop_item_2_rate ] ]) if (id && Number(rate) && ITEM_INDEX[id]) out.push({ key: 'it:' + id, w: Number(rate), label: itemDisplayName(id), loot: () => ({ kind: 'item', itemid: id }) });
+  // the game also hands out these blueprints unrevealed (seen in real saves); how often isn't in the
+  // game data, so they're offered to pick but a reroll never chooses them (w 0)
+  for (const o of out.slice()) {
+    const m = /^it:(ITMP_.+)$/.exec(o.key);
+    if (!m || /U$/.test(m[1]) || !ITEM_INDEX[m[1] + 'U']) continue;
+    const u = m[1] + 'U';
+    out.push({ key: 'it:' + u, w: 0, label: itemDisplayName(u), loot: () => ({ kind: 'item', itemid: u }) });
+  }
   return out;
 }
 function jklRoll(type) {
@@ -4511,7 +4519,7 @@ function renderJackals() {
   jklSync();
   const list = arr(RAW_SAV_ROOT.floor && RAW_SAV_ROOT.floor.jkls);
   let h = `<div class="warnNote" style="margin:0 0 10px;"><b>Experimental — test on a backup first.</b> Changing Jackal loot hasn't been confirmed in game yet. Keep your original save.</div>
-    <div class="capNote" style="margin-top:0;">Each Jackal carries one reward, rolled once and kept (also between runs) until you defeat it. Pick what it drops from what that Jackal can carry, or reroll it with the game's own odds. Weapons and armor drop at +0 with full durability and ammo.</div>`;
+    <div class="capNote" style="margin-top:0;">Each Jackal carries one reward, rolled once and kept (also between runs) until you defeat it. Pick what it drops from what that Jackal can carry, or reroll it with the game's own odds. Weapons and armor drop at +0 with full durability and ammo. Blueprints can also be set to drop unrevealed ("pick only": the game does hand them out unrevealed, but how often isn't in its data, so a reroll never picks them).</div>`;
   if (!list.length) { host.innerHTML = h + '<div class="capNote">This save has no Jackals yet.</div>'; return; }
   if (JKL.msg) h += `<pre class="stewLog">${escapeHtml(JKL.msg)}</pre>`;
   const sel = 'background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:6px 8px; font-family:var(--mono); width:100%;';
@@ -4523,7 +4531,7 @@ function renderJackals() {
     const name = String(j.type).replace(/^JACKAL_/, 'Jackal ');
     const tot = opts.reduce((n, o) => n + o.w, 0) || 1;
     h += `<tr><td>${escapeHtml(name)}${Number(j.killed) ? ' <span class="id">(defeated)</span>' : ''}</td><td>${escapeHtml(jklLootLabel(cur))}</td>
-      <td>${opts.length ? `<select data-jkl="${j.type}" style="${sel}">${opts.map(o => `<option value="${o.key}" ${o.key === pick ? 'selected' : ''}>${escapeHtml(o.key === 'money' && ed && ed.kind === 'money' ? `${Number(ed.money).toLocaleString()} Kill Coins` : o.key === 'money' && !ed && cur.kind === 'money' ? `${Number(cur.money).toLocaleString()} Kill Coins` : o.label)} · ${(o.w / tot * 100).toFixed(o.w / tot < 0.1 ? 1 : 0)}%</option>`).join('')}${!opts.some(o => o.key === pick) ? `<option value="" selected>${escapeHtml(jklLootLabel(ed || cur))}</option>` : ''}</select>` : '<span class="id">unknown Jackal</span>'}${ed ? ' <span class="id">changed</span>' : ''}</td>
+      <td>${opts.length ? `<select data-jkl="${j.type}" style="${sel}">${opts.map(o => `<option value="${o.key}" ${o.key === pick ? 'selected' : ''}>${escapeHtml(o.key === 'money' && ed && ed.kind === 'money' ? `${Number(ed.money).toLocaleString()} Kill Coins` : o.key === 'money' && !ed && cur.kind === 'money' ? `${Number(cur.money).toLocaleString()} Kill Coins` : o.label)} · ${o.w ? (o.w / tot * 100).toFixed(o.w / tot < 0.1 ? 1 : 0) + '%' : 'pick only'}</option>`).join('')}${!opts.some(o => o.key === pick) ? `<option value="" selected>${escapeHtml(jklLootLabel(ed || cur))}</option>` : ''}</select>` : '<span class="id">unknown Jackal</span>'}${ed ? ' <span class="id">changed</span>' : ''}</td>
       <td style="white-space:nowrap;"><button class="subtle" data-jkl-roll="${j.type}">Reroll</button>${ed ? ` <button class="subtle" data-jkl-undo="${j.type}">Undo</button>` : ''}</td></tr>`;
   }
   h += '</tbody></table>';
