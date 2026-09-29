@@ -4002,7 +4002,7 @@ function renderRally() {
 function wireRally() { if (activeTab === 'rally') renderRally(); }
 
 // ---------------------------------------------------------------------------
-// Location (EXPERIMENTAL): move a fighter paused on a Heaven boss floor to another boss floor
+// Location: move a fighter paused on a Heaven boss floor to another boss floor
 // that uses the same map.
 // Save: a mid-run quit keeps soul.pause (e.g. HEAVEN_PAUSE), soul.stgid/flrid/areaid/unitid and the
 // exact position (pause_x/y/z, yaw). The run's floors live under root.floor: rlg.user (floors walked
@@ -4161,7 +4161,7 @@ function applyFloorMove(root) {
 }
 function blockLocation() {
   return `<section class="block">
-    <div class="block-head"><div><div class="eyebrow">Experimental</div><h2>Location</h2></div></div>
+    <div class="block-head"><div><div class="eyebrow">Heaven</div><h2>Location</h2></div></div>
     <div class="block-body"><div id="loc-body"></div></div>
   </section>`;
 }
@@ -4171,7 +4171,7 @@ function renderLocation() {
   flmSync();
   const cur = flmCurrent();
   const f = cur && hvnFloor(cur.flrid);
-  let h = `<div class="warnNote" style="margin:0 0 10px;"><b>Experimental — test on a backup first.</b> Moving floors hasn't been confirmed in game yet. Keep your original save.</div>`;
+  let h = `<div class="capNote" style="margin-top:0;">Move a fighter paused on a Heaven boss floor to another boss floor of the same route and map (confirmed in game). Keep a backup of your save. The run's Exploration Bonus is based on the floor you end on, so moving deeper raises the Bloodnium bonus.</div>`;
   if (!cur || !cur.pause) {
     h += `<div class="capNote" style="margin-top:0;">The fighter isn't paused in a run (the save is at the Waiting Room), so there's nothing to move. Quit the game while standing on a Heaven boss floor, then load that save here.</div>`;
     host.innerHTML = h; return;
@@ -7963,7 +7963,7 @@ function reviewDiff(A, B, rawA, rawB) {
   const lc = sec('Location');
   const fa = rawA.soul && rawA.soul.flrid, fb = rawB.soul && rawB.soul.flrid;
   const locLbl = id => !id ? 'none' : hvnFloor(id) ? hvnFloorLabel(hvnFloor(id)) : id;
-  if (fa !== fb) lc.lines.push(`Paused floor: ${locLbl(fa)} → ${locLbl(fb)} (experimental)`);
+  if (fa !== fb) lc.lines.push(`Paused floor: ${locLbl(fa)} → ${locLbl(fb)}`);
   const sk = sec('Armor Skins (unlocked by R&D at +4)');
   const skA = armorSkinsUnlocked(ra), skB = armorSkinsUnlocked(rb);
   const skNew = [ ...skB ].filter(x => !skA.has(x)).map(x => (PT_INDEX[x] || {}).name || x), skGone = [ ...skA ].filter(x => !skB.has(x)).map(x => (PT_INDEX[x] || {}).name || x);
