@@ -1369,7 +1369,7 @@ async function loadMastersBuffer(buf) {
       atkattr: all('SELECT * FROM master_part_atkattr'),
       bodydetail: all('SELECT * FROM master_body_detail')
     };
-    for (const [key, sql] of [['questParamText', 'SELECT qid, no, val FROM master_quest_param_text'], ['questParamDesc', 'SELECT qid, no, val FROM master_quest_param_desc_text'], ['rewards', 'SELECT * FROM master_reward'], ['expertLvl', 'SELECT ptarmtp, lvl, abp FROM master_expert_lvl_reward'], ['stampBonus', 'SELECT * FROM master_stamp_bonus'], ['stampFloors', 'SELECT * FROM master_stamp'], ['hvnFloors', "SELECT id, areaid, no, mbsmin, mbsmax, mbslvlmin, mbslvlmax FROM master_floor WHERE stgid = 'S_HVN'"], ['jackals', 'SELECT * FROM master_jackal'], ['magazines', 'SELECT * FROM master_magazine'], ['magazineBonus', 'SELECT * FROM master_magazine_bonus'], ['hvnBossDrops', "SELECT d.flrid, d.areaid, d.refareaid, d.type, d.grp, d.freq FROM master_floor_drop_gen d JOIN master_floor f ON f.id = d.flrid AND f.areaid = d.areaid WHERE f.stgid = 'S_HVN' AND f.mbsmax > 0 AND (d.type IN ('PTGENTP_TRBOX_L', 'PTGENTP_TRBOX_SPXL_RARE', 'PTGENTP_SPXL') OR d.type LIKE 'PTGENTP_MBOSS%')"], ['questCats', 'SELECT * FROM master_quest_category'], ['bagGen', 'SELECT * FROM master_mysterybag_content_gen'], ['bagGenOdds', "SELECT * FROM master_mysterybag_content_gen_odds WHERE odds_id = (SELECT odds_id FROM master_mysterybag_content_odds ORDER BY expires DESC LIMIT 1)"], ['boxGen', 'SELECT * FROM master_deathbox_content_gen'], ['hubCustom', 'SELECT * FROM master_hubcustomize'], ['floorInfo', 'SELECT id, sname, stgid, stgpfx, name FROM master_floor'], ['freezer', 'SELECT * FROM master_freezer'], ['bodies', 'SELECT id, gender FROM master_body'], ['gasmasks', 'SELECT id, gender FROM master_gasmask'], ['fortWhistle', 'SELECT * FROM master_fort_whistle']]) {
+    for (const [key, sql] of [['questParamText', 'SELECT qid, no, val FROM master_quest_param_text'], ['questParamDesc', 'SELECT qid, no, val FROM master_quest_param_desc_text'], ['rewards', 'SELECT * FROM master_reward'], ['expertLvl', 'SELECT ptarmtp, lvl, abp FROM master_expert_lvl_reward'], ['stampBonus', 'SELECT * FROM master_stamp_bonus'], ['stampFloors', 'SELECT * FROM master_stamp'], ['hvnFloors', "SELECT id, areaid, no, mbsmin, mbsmax, mbslvlmin, mbslvlmax FROM master_floor WHERE stgid = 'S_HVN'"], ['jackals', 'SELECT * FROM master_jackal'], ['magazines', 'SELECT * FROM master_magazine'], ['magazineBonus', 'SELECT * FROM master_magazine_bonus'], ['hvnBossDrops', "SELECT d.flrid, d.areaid, d.refareaid, d.type, d.grp, d.freq FROM master_floor_drop_gen d JOIN master_floor f ON f.id = d.flrid AND f.areaid = d.areaid WHERE f.stgid = 'S_HVN' AND f.mbsmax > 0 AND (d.type IN ('PTGENTP_TRBOX_L', 'PTGENTP_TRBOX_SPXL_RARE', 'PTGENTP_SPXL', 'PTGENTP_TRZAKO') OR d.type LIKE 'PTGENTP_MBOSS%')"], ['questCats', 'SELECT * FROM master_quest_category'], ['bagGen', 'SELECT * FROM master_mysterybag_content_gen'], ['bagGenOdds', "SELECT * FROM master_mysterybag_content_gen_odds WHERE odds_id = (SELECT odds_id FROM master_mysterybag_content_odds ORDER BY expires DESC LIMIT 1)"], ['boxGen', 'SELECT * FROM master_deathbox_content_gen'], ['hubCustom', 'SELECT * FROM master_hubcustomize'], ['floorInfo', 'SELECT id, sname, stgid, stgpfx, name FROM master_floor'], ['freezer', 'SELECT * FROM master_freezer'], ['bodies', 'SELECT id, gender FROM master_body'], ['gasmasks', 'SELECT id, gender FROM master_gasmask'], ['fortWhistle', 'SELECT * FROM master_fort_whistle']]) {
       try { AP[key] = all(sql); } catch (err) { AP[key] = []; console.warn(`${key} not available in this masters.db:`, err); }
     }
     AP.stewOdds = [];
@@ -4115,19 +4115,41 @@ function flmRoll(target) {
     const fe = e.rwdid ? { from: e.rwdid, to: flmDraw(u.id, u.floor.areaid, refA, Number(e.is_rare) ? 'PTGENTP_TRBOX_SPXL_RARE' : 'PTGENTP_SPXL') || e.rwdid } : null;
     out.upcoming.push({ id: u.id, no: u.floor.no, featured: fe, rare: Number(e.is_rare) === 1, rwds: rw });
   }
+  // Which table each box on the boss floor uses (as the game places them, see master_stage_trbox and
+  // the floor's reward list): the extra-large box (TBTP_EXLARGE on the floor, TBTP_SPXL in the spawn
+  // list, point HVN_TB_TGT_00) holds the featured reward (hvntrinfo.rwdid: the SPXL table, or the rare
+  // SPXL table when is_rare); the large boxes (TBTP_LARGE) hold the TRBOX_L rewards. Anything else is
+  // left as it is rather than drawn from a table it doesn't come from.
+  const popType = {};
+  const pt0 = root.floor && root.floor.pop && root.floor.pop.trbox;
+  if (pt0 && typeof pt0 === 'object') for (const k of Object.keys(pt0)) if (k.startsWith(cur.flrid + '-')) for (const e of arr(pt0[k])) if (e && e.pntid) popType[e.pntid] = e.type;
   for (const b of arr(root.floor && root.floor.trbox)) {
     if (!b || b.rwdtype !== 'TBRWD_ITEM') continue;
     const inst = items.find(i => i.eid === b.contentid);
     if (!inst) continue;
-    const type = /SPXL/.test(String(b.type) + String(b.pntid)) ? 'PTGENTP_TRBOX_SPXL_RARE' : 'PTGENTP_TRBOX_L';
-    const to = flmDraw(t.id, t.areaid, ref, type);
-    if (to) out.boxes.push({ eid: b.contentid, pntid: b.pntid, from: inst.itemid, to });
+    const isFeatured = b.type === 'TBTP_EXLARGE' || b.type === 'TBTP_SPXL' || popType[b.pntid] === 'TBTP_SPXL';
+    if (isFeatured) {
+      if (!out.featured) { const to = flmDraw(t.id, t.areaid, (hCur && hCur.refareaid) || ref, hCur && Number(hCur.is_rare) ? 'PTGENTP_TRBOX_SPXL_RARE' : 'PTGENTP_SPXL'); if (to) out.featured = { from: (hCur && hCur.rwdid) || inst.itemid, to }; }
+      if (out.featured) out.boxes.push({ eid: b.contentid, pntid: b.pntid, from: inst.itemid, to: out.featured.to, gentype: 'featured' });
+    } else if (b.type === 'TBTP_LARGE') {
+      const to = flmDraw(t.id, t.areaid, ref, 'PTGENTP_TRBOX_L');
+      if (to) out.boxes.push({ eid: b.contentid, pntid: b.pntid, from: inst.itemid, to, gentype: 'PTGENTP_TRBOX_L' });
+    }
+  }
+  // treasure enemies (ZAKO_TREASURE, on the boss floors that have no large boxes): each carries a chest
+  // (floor.zako.trbox, contentid = an item owned by ZAKO) drawn from the TRZAKO table, plus Kill Coins the
+  // game rolled (left as they are)
+  for (const zb of arr(root.floor && root.floor.zako && root.floor.zako.trbox)) {
+    if (!zb || zb.rwdtype !== 'TBRWD_ITEM') continue;
+    const inst = items.find(i => i.eid === zb.contentid);
+    const to = inst && flmDraw(t.id, t.areaid, '-', 'PTGENTP_TRZAKO');
+    if (to) out.boxes.push({ eid: zb.contentid, pntid: 'treasure enemy', from: inst.itemid, to, gentype: 'PTGENTP_TRZAKO' });
   }
   for (const m of arr(root.floor && root.floor.mboss && root.floor.mboss.mbss)) {
     if (!m || !m.eitemid) continue;
     const inst = items.find(i => i.eid === m.eitemid);
     const to = inst && flmDraw(t.id, t.areaid, '-', 'PTGENTP_' + m.type);
-    if (to) out.boss = { eid: m.eitemid, from: inst.itemid, to };
+    if (to) out.boss = { eid: m.eitemid, from: inst.itemid, to, gentype: 'PTGENTP_' + m.type };
   }
   return out;
 }
@@ -4151,9 +4173,11 @@ function flmApplyRolls(root, from, to) {
     arr(e.rwds).forEach((w, i) => { const n = u.rwds[i]; if (n && w && w.rwdid === n.from && w.gentype === n.gentype) w.rwdid = n.to; });
   }
   if (h) {
+    // each large box / the boss drop matches one entry of its own gen type (the featured box is rwdid)
     const used = new Set();
     for (const s of swaps) {
-      const i = arr(h.rwds).findIndex((w, n) => !used.has(n) && w && w.rwdid === s.from);
+      if (s.gentype === 'featured') continue;
+      const i = arr(h.rwds).findIndex((w, n) => !used.has(n) && w && w.gentype === s.gentype && w.rwdid === s.from);
       if (i >= 0) { used.add(i); h.rwds[i].rwdid = s.to; }
     }
   }
@@ -4271,7 +4295,7 @@ function renderLocation() {
       if (!n) h += `<div class="capNote">No unopened rewards on this floor to reroll.</div>`;
       else if (FLOOR_MOVE.reroll) {
         h += `<table class="stewTable" style="margin-top:6px;"><thead><tr><th>Reward</th><th>Rolled for ${escapeHtml(f.no + 'F')}</th><th>Rerolled for ${escapeHtml(t.no + 'F')}</th></tr></thead><tbody>`;
-        h += r.boxes.map((b, i) => `<tr><td>Treasure box ${i + 1}</td><td>${nm(b.from)}</td><td>${nm(b.to)}</td></tr>`).join('');
+        h += r.boxes.map((b, i) => `<tr><td>${b.gentype === 'PTGENTP_TRZAKO' ? 'Treasure enemy' : b.gentype === 'featured' ? 'Featured box (extra large)' : 'Treasure box ' + (i + 1)}</td><td>${nm(b.from)}</td><td>${nm(b.to)}</td></tr>`).join('');
         if (r.boss) h += `<tr><td>Boss drop</td><td>${nm(r.boss.from)}</td><td>${nm(r.boss.to)}</td></tr>`;
         if (r.featured) h += `<tr><td>Featured reward (map)</td><td>${nm(r.featured.from)}</td><td>${nm(r.featured.to)}</td></tr>`;
         for (const u of arr(r.upcoming)) h += `<tr><td>Upcoming ${u.no}F${u.rare ? ' (rare)' : ''}</td><td class="id">shown on the map</td><td>${u.featured ? nm(u.featured.to) : '—'} <span class="id">· boxes: ${u.rwds.map(w => nm(w.to)).join(', ')}</span></td></tr>`;
