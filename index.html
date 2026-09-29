@@ -4790,6 +4790,28 @@ function bstDisplayName(bstid, cooked) {
 
 // Full durability grows with the upgrade level: floor(dur * dur_c^(lvl-1)) -- matches every
 // full-durability part in the sample saves. Ammo: rest (loaded) up to capacity, spare up to spare.
+// every weapon / armor in the save whose stored level is above what its part allows (reflvllmt)
+function partsOverCap() {
+  const out = [];
+  const chk = (inst, where, lvlKey) => {
+    const ptid = lvlKey === 'val1' ? inst.val0 : inst.ptid, rec = PT_INDEX[ptid];
+    const lvl = Number(inst[lvlKey]) || 0, cap = maxPartLevel(rec);
+    if (rec && cap && lvl > cap) out.push({ inst, ptid, lvl, cap, where, lvlKey });
+  };
+  for (const c of arr(SAVE && SAVE.soul && SAVE.soul.chrs)) for (const p of arr(c.pspts)) chk(p, `${c.name || 'a fighter'}'s Death Bag`, 'lvl');
+  for (const p of arr(SAVE && SAVE.cl && SAVE.cl.pts)) chk(p, 'Storage Box', 'lvl');
+  for (const p of arr(SAVE && SAVE.presents)) if (isPartPresent(p)) chk(p, 'Reward Box', 'val1');
+  return out;
+}
+function fixPartsOverCap() {
+  const over = partsOverCap();
+  for (const o of over) {
+    const rec = PT_INDEX[o.ptid], md = partMaxDur(rec, o.cap);
+    if (o.lvlKey === 'val1') { o.inst.val1 = String(o.cap); if (md && Number(o.inst.val2) > md) o.inst.val2 = String(md); }
+    else { o.inst.lvl = o.cap; if (md && Number(o.inst.dur) > md) o.inst.dur = md; }
+  }
+  return over.length;
+}
 function partMaxDur(rec, lvl) {
   if (!rec || !Number(rec.dur)) return 0;
   const c = Number(rec.dur_c) || 1, n = Math.max(0, (Number(lvl) || 1) - 1);
@@ -7133,6 +7155,17 @@ function runSaveCheck() {
     });
   });
 
+  // weapons / armor above the highest level the part can reach (e.g. a +4 weapon at +10). The
+  // editor and the game show them clamped to the part's cap, so they're easy to miss.
+  safe('part-levels', () => {
+    const over = partsOverCap();
+    if (!over.length) return;
+    const lbl = o => `${escapeHtml((PT_INDEX[o.ptid] || {}).name || o.ptid)} (${escapeHtml(o.where)}, stored as level ${o.lvl}, the part goes up to +${maxDisplayLevel(PT_INDEX[o.ptid])})`;
+    add('warning', `${over.length} weapon${over.length === 1 ? '' : 's'}/armor ${over.length === 1 ? 'is' : 'are'} above the highest level ${over.length === 1 ? 'its' : 'their'} part can reach: ${over.slice(0, 4).map(lbl).join('; ')}${over.length > 4 ? '; …' : ''}. The game wasn't made for these levels.`, 'storage', {
+      label: 'Set them to their highest level', run: () => { const n = fixPartsOverCap(); return `${n} weapon${n === 1 ? '' : 's'}/armor set to their highest level.`; }
+    });
+  });
+
   // armor skins in use must still be unlocked (R&D at +4)
   safe('armorskin', () => {
     const inUse = arr(SAVE.soul.armorskin).filter(x => x && x.ptid);
@@ -8366,6 +8399,10 @@ function reviewDiff(A, B, rawA, rawB) {
   if (stDiff.length > 12) sr.lines.push(`Stamps: ${stA.length} → ${stB.length} stamped (${stDiff.length} floors changed)`); else sr.lines.push(...stDiff);
   const bfA = rallyFlagEntry(rawA), bfB = rallyFlagEntry(rawB), bA = bfA ? Number(bfA.value) || 0 : 0, bB = bfB ? Number(bfB.value) || 0 : 0;
   if (bA !== bB) for (const b of arr(AP && AP.stampBonus)) { const f = Number(b.flg); if ((bA & f) !== (bB & f)) sr.lines.push(`Bonus ${Number(b.stidx) + 1}F-${Number(b.edidx) + 1}F${Number(b.perfect) ? ' perfect' : ''}: ${(bA & f) ? 'given' : 'not given'} → ${(bB & f) ? 'given' : 'not given'}`); }
+  // part instances whose stored level changed (e.g. set back to their cap by the save check)
+  { const pl = new Map(jklPartsOf(rawA).map(p => [ p.eid, p ])), lv = sec('Weapon and armor levels');
+    for (const p of jklPartsOf(rawB)) { const o = pl.get(p.eid); if (o && o.ptid === p.ptid && Number(o.lvl) !== Number(p.lvl)) lv.lines.push(`${(PT_INDEX[p.ptid] || {}).name || p.ptid}: stored level ${o.lvl} → ${p.lvl} (the part goes up to +${maxDisplayLevel(PT_INDEX[p.ptid])})`); }
+    if (lv.lines.length > 12) { const n = lv.lines.length; lv.lines.length = 0; lv.lines.push(`${n} weapons/armor had their stored level changed`); } }
   const cl = sec('Collection');
   const skinOf = (so, t) => ((arr(so.armorskin).find(x => x && x.type === t) || {}).ptid) || '';
   for (const [ t, lbl ] of SKIN_SLOTS) { const x = skinOf(aS, t), y = skinOf(bS, t); if (x !== y) cl.lines.push(`${lbl} skin: ${x ? (PT_INDEX[x] || {}).name || x : 'none'} → ${y ? (PT_INDEX[y] || {}).name || y : 'none'}`); }
