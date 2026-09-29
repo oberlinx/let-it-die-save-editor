@@ -1369,7 +1369,7 @@ async function loadMastersBuffer(buf) {
       atkattr: all('SELECT * FROM master_part_atkattr'),
       bodydetail: all('SELECT * FROM master_body_detail')
     };
-    for (const [key, sql] of [['questParamText', 'SELECT qid, no, val FROM master_quest_param_text'], ['questParamDesc', 'SELECT qid, no, val FROM master_quest_param_desc_text'], ['rewards', 'SELECT * FROM master_reward'], ['expertLvl', 'SELECT ptarmtp, lvl, abp FROM master_expert_lvl_reward'], ['stampBonus', 'SELECT * FROM master_stamp_bonus'], ['stampFloors', 'SELECT * FROM master_stamp'], ['hvnFloors', "SELECT id, areaid, no, mbsmin, mbsmax, mbslvlmin, mbslvlmax FROM master_floor WHERE stgid = 'S_HVN'"], ['questCats', 'SELECT * FROM master_quest_category'], ['bagGen', 'SELECT * FROM master_mysterybag_content_gen'], ['bagGenOdds', "SELECT * FROM master_mysterybag_content_gen_odds WHERE odds_id = (SELECT odds_id FROM master_mysterybag_content_odds ORDER BY expires DESC LIMIT 1)"], ['boxGen', 'SELECT * FROM master_deathbox_content_gen'], ['hubCustom', 'SELECT * FROM master_hubcustomize'], ['floorInfo', 'SELECT id, sname, stgid, stgpfx, name FROM master_floor'], ['freezer', 'SELECT * FROM master_freezer'], ['bodies', 'SELECT id, gender FROM master_body'], ['gasmasks', 'SELECT id, gender FROM master_gasmask'], ['fortWhistle', 'SELECT * FROM master_fort_whistle']]) {
+    for (const [key, sql] of [['questParamText', 'SELECT qid, no, val FROM master_quest_param_text'], ['questParamDesc', 'SELECT qid, no, val FROM master_quest_param_desc_text'], ['rewards', 'SELECT * FROM master_reward'], ['expertLvl', 'SELECT ptarmtp, lvl, abp FROM master_expert_lvl_reward'], ['stampBonus', 'SELECT * FROM master_stamp_bonus'], ['stampFloors', 'SELECT * FROM master_stamp'], ['hvnFloors', "SELECT id, areaid, no, mbsmin, mbsmax, mbslvlmin, mbslvlmax FROM master_floor WHERE stgid = 'S_HVN'"], ['hvnBossDrops', "SELECT d.flrid, d.areaid, d.refareaid, d.type, d.grp, d.freq FROM master_floor_drop_gen d JOIN master_floor f ON f.id = d.flrid AND f.areaid = d.areaid WHERE f.stgid = 'S_HVN' AND f.mbsmax > 0 AND (d.type IN ('PTGENTP_TRBOX_L', 'PTGENTP_TRBOX_SPXL_RARE') OR d.type LIKE 'PTGENTP_MBOSS%')"], ['questCats', 'SELECT * FROM master_quest_category'], ['bagGen', 'SELECT * FROM master_mysterybag_content_gen'], ['bagGenOdds', "SELECT * FROM master_mysterybag_content_gen_odds WHERE odds_id = (SELECT odds_id FROM master_mysterybag_content_odds ORDER BY expires DESC LIMIT 1)"], ['boxGen', 'SELECT * FROM master_deathbox_content_gen'], ['hubCustom', 'SELECT * FROM master_hubcustomize'], ['floorInfo', 'SELECT id, sname, stgid, stgpfx, name FROM master_floor'], ['freezer', 'SELECT * FROM master_freezer'], ['bodies', 'SELECT id, gender FROM master_body'], ['gasmasks', 'SELECT id, gender FROM master_gasmask'], ['fortWhistle', 'SELECT * FROM master_fort_whistle']]) {
       try { AP[key] = all(sql); } catch (err) { AP[key] = []; console.warn(`${key} not available in this masters.db:`, err); }
     }
     AP.stewOdds = [];
@@ -4017,8 +4017,76 @@ function wireRally() { if (activeTab === 'rally') renderRally(); }
 // renamed to the new floor, anything left there from an earlier visit to the new floor is dropped,
 // and the waiting boss is set to the new floor's boss level. Records (clear_times, playlog) are kept.
 // ---------------------------------------------------------------------------
-let FLOOR_MOVE = { root: null, target: '', armed: false, msg: '' };
-function flmSync() { if (FLOOR_MOVE.root !== RAW_SAV_ROOT) FLOOR_MOVE = { root: RAW_SAV_ROOT, target: '', armed: false, msg: '' }; }
+let FLOOR_MOVE = { root: null, target: '', armed: false, msg: '', reroll: true, rolls: null };
+function flmSync() { if (FLOOR_MOVE.root !== RAW_SAV_ROOT) FLOOR_MOVE = { root: RAW_SAV_ROOT, target: '', armed: false, msg: '', reroll: true, rolls: null }; }
+// Boss-floor rewards. The unopened treasure boxes on the floor (root.floor.trbox, contentid = an item with
+// owner TRBOX) and the boss's own drop (floor.mboss.mbss[].eitemid) were rolled by the game for the
+// floor you were on. master_floor_drop_gen gives, per floor / map / reference area / gen type, weighted
+// groups (grp = master_item.grp); deeper floors weight the better items higher. A reroll draws each
+// reward again from the NEW floor's table, the way the game rolls them.
+function flmItemsOf(root) {
+  const it = root && root.item && root.item.items;
+  return Array.isArray(it) ? it : it && typeof it === 'object' ? [].concat(...Object.values(it).filter(Array.isArray)) : [];
+}
+function flmRefArea(root, flrid) {
+  const h = arr(root && root.soul && root.soul.hvntrinfo).find(x => x && x.flrid === flrid);
+  if (h && h.refareaid) return h.refareaid;
+  const a = arr(root && root.floor && root.floor.rlg && root.floor.rlg.archive).find(x => x && x.flrid === flrid);
+  return (a && a.ref_areaid) || '-';
+}
+function flmDraw(flrid, areaid, refareaid, type) {
+  const rows = arr(AP && AP.hvnBossDrops).filter(r => r.flrid === flrid && r.areaid === areaid && r.type === type && (r.refareaid === refareaid || r.refareaid === '-'));
+  const pool = [];
+  for (const r of rows) {
+    const items = Object.values(ITEM_INDEX).filter(i => Number(i.grp) === Number(r.grp));
+    if (items.length) pool.push({ w: Number(r.freq) || 0, items });
+  }
+  const total = pool.reduce((n, p) => n + p.w, 0);
+  if (!total) return null;
+  let x = Math.random() * total;
+  for (const p of pool) { if ((x -= p.w) < 0) return p.items[Math.floor(Math.random() * p.items.length)].itemId || p.items[0].itemid; }
+  return pool[pool.length - 1].items[0].itemId;
+}
+function flmRoll(target) {
+  const root = RAW_SAV_ROOT, cur = root && root.soul, t = hvnFloor(target);
+  if (!cur || !t) return null;
+  const items = flmItemsOf(root), ref = flmRefArea(root, cur.flrid);
+  const out = { boxes: [], boss: null };
+  for (const b of arr(root.floor && root.floor.trbox)) {
+    if (!b || b.rwdtype !== 'TBRWD_ITEM') continue;
+    const inst = items.find(i => i.eid === b.contentid);
+    if (!inst) continue;
+    const type = /SPXL/.test(String(b.type) + String(b.pntid)) ? 'PTGENTP_TRBOX_SPXL_RARE' : 'PTGENTP_TRBOX_L';
+    const to = flmDraw(t.id, t.areaid, ref, type);
+    if (to) out.boxes.push({ eid: b.contentid, pntid: b.pntid, from: inst.itemid, to });
+  }
+  for (const m of arr(root.floor && root.floor.mboss && root.floor.mboss.mbss)) {
+    if (!m || !m.eitemid) continue;
+    const inst = items.find(i => i.eid === m.eitemid);
+    const to = inst && flmDraw(t.id, t.areaid, '-', 'PTGENTP_' + m.type);
+    if (to) out.boss = { eid: m.eitemid, from: inst.itemid, to };
+  }
+  return out;
+}
+function flmApplyRolls(root, from, to) {
+  const r = FLOOR_MOVE.reroll && FLOOR_MOVE.rolls;
+  if (!r) return;
+  const items = flmItemsOf(root);
+  const swaps = r.boxes.concat(r.boss ? [ r.boss ] : []);
+  for (const s of swaps) { const inst = items.find(i => i.eid === s.eid); if (inst) inst.itemid = s.to; }
+  // the floor's spawn list names the box contents by item id
+  const pt = root.floor && root.floor.pop && root.floor.pop.trbox;
+  if (pt && typeof pt === 'object') for (const k of Object.keys(pt)) if (k.startsWith(to + '-')) for (const e of arr(pt[k])) { const s = r.boxes.find(b => b.pntid === e.pntid); if (s && e.contentid === s.from) e.contentid = s.to; }
+  // the boss floor's reward list (already renamed to the new floor)
+  const h = arr(root.soul && root.soul.hvntrinfo).find(x => x && x.flrid === to);
+  if (h) {
+    const used = new Set();
+    for (const s of swaps) {
+      const i = arr(h.rwds).findIndex((w, n) => !used.has(n) && w && w.rwdid === s.from);
+      if (i >= 0) { used.add(i); h.rwds[i].rwdid = s.to; }
+    }
+  }
+}
 function hvnFloor(id) { return arr(AP && AP.hvnFloors).find(f => f.id === id) || null; }
 function hvnRoute(id) {
   const m = /^HVN_FLR_(R0\d)_/.exec(String(id || ''));
@@ -4083,6 +4151,7 @@ function applyFloorMove(root) {
     const lvl = Number(f.mbslvlmin) || 0;
     if (lvl && root.floor.mboss && Array.isArray(root.floor.mboss.mbss)) for (const m of root.floor.mboss.mbss) if (m && m.lvl != null) m.lvl = lvl;
   }
+  flmApplyRolls(root, from, to);
   // the fighter's run summary names the deepest floor of this run
   const chrs = root.soul.chr && root.soul.chr.chrs;
   for (const list of chrs && typeof chrs === 'object' ? Object.values(chrs) : []) for (const c of arr(list)) {
@@ -4121,7 +4190,20 @@ function renderLocation() {
     h += `<div class="capNote" style="margin-top:0;">Only boss floors of the same route that use the same map are listed (${escapeHtml(hvnRoute(f.id).name)}, ${escapeHtml(hvnMapLabel(f.areaid))}). The boss waiting on the floor is set to the new floor's boss level. Your records (deepest floor, clear times) are left as they are.</div>
       <div class="toolbar"><select id="loc-target" style="${sel} min-width:340px;"><option value="">— keep ${escapeHtml(f.no + 'F')} —</option>${targets.map(x => `<option value="${x.id}" ${FLOOR_MOVE.target === x.id ? 'selected' : ''}>${escapeHtml(hvnFloorLabel(x))} · boss Lv ${x.mbslvlmin}${x.no < f.no ? ' (lower)' : ''}</option>`).join('')}</select>
       <button class="action" id="loc-apply">${FLOOR_MOVE.armed ? 'Click again to confirm' : 'Move to this floor'}</button>${FLOOR_MOVE.target ? '<button class="subtle" id="loc-undo">Undo</button>' : ''}</div>`;
-    if (t) h += `<div class="capNote">On download the fighter will be on <b>${escapeHtml(hvnFloorLabel(t))}</b> (from ${escapeHtml(f.no + 'F')}), boss Lv ${t.mbslvlmin}.</div>`;
+    if (t) {
+      h += `<div class="capNote">On download the fighter will be on <b>${escapeHtml(hvnFloorLabel(t))}</b> (from ${escapeHtml(f.no + 'F')}), boss Lv ${t.mbslvlmin}.</div>`;
+      const r = FLOOR_MOVE.rolls, nm = id => escapeHtml(itemDisplayName(id));
+      const n = r ? r.boxes.length + (r.boss ? 1 : 0) : 0;
+      h += `<div class="subDetails" style="padding:10px; margin-top:8px;"><label style="cursor:pointer;"><input type="checkbox" id="loc-reroll" ${FLOOR_MOVE.reroll ? 'checked' : ''} style="width:auto; margin-right:6px;">Reroll the boss floor rewards for ${escapeHtml(t.no + 'F')}</label>`;
+      if (!n) h += `<div class="capNote">No unopened rewards on this floor to reroll.</div>`;
+      else if (FLOOR_MOVE.reroll) {
+        h += `<table class="stewTable" style="margin-top:6px;"><thead><tr><th>Reward</th><th>Rolled for ${escapeHtml(f.no + 'F')}</th><th>Rerolled for ${escapeHtml(t.no + 'F')}</th></tr></thead><tbody>`;
+        h += r.boxes.map((b, i) => `<tr><td>Treasure box ${i + 1}</td><td>${nm(b.from)}</td><td>${nm(b.to)}</td></tr>`).join('');
+        if (r.boss) h += `<tr><td>Boss drop</td><td>${nm(r.boss.from)}</td><td>${nm(r.boss.to)}</td></tr>`;
+        h += `</tbody></table><div class="toolbar" style="margin-top:6px;"><button class="subtle" id="loc-reroll-again">Reroll again</button><span class="capNote" style="margin:0;">Drawn from ${escapeHtml(t.no + 'F')}'s own drop table, the way the game rolls them.</span></div>`;
+      } else h += `<div class="capNote">The rewards rolled for ${escapeHtml(f.no + 'F')} are kept.</div>`;
+      h += '</div>';
+    }
   }
   host.innerHTML = h;
   const tsel = document.getElementById('loc-target');
@@ -4134,12 +4216,17 @@ function renderLocation() {
     if (!FLOOR_MOVE.armed) { FLOOR_MOVE.armed = true; renderLocation(); document.getElementById('loc-target').value = pick; return; }
     FLOOR_MOVE.armed = false;
     FLOOR_MOVE.target = pick;
+    FLOOR_MOVE.rolls = flmRoll(pick);
     FLOOR_MOVE.msg = `Set to move to ${hvnFloorLabel(hvnFloor(pick))}. Download the .sav to apply it.`;
     renderLocation();
     toast('Floor move set — download to apply');
   });
+  const rr = document.getElementById('loc-reroll');
+  if (rr) rr.addEventListener('change', () => { FLOOR_MOVE.reroll = rr.checked; if (rr.checked && !FLOOR_MOVE.rolls) FLOOR_MOVE.rolls = flmRoll(FLOOR_MOVE.target); renderLocation(); });
+  const ra = document.getElementById('loc-reroll-again');
+  if (ra) ra.addEventListener('click', () => { FLOOR_MOVE.rolls = flmRoll(FLOOR_MOVE.target); renderLocation(); });
   const un = document.getElementById('loc-undo');
-  if (un) un.addEventListener('click', () => { FLOOR_MOVE.target = ''; FLOOR_MOVE.armed = false; FLOOR_MOVE.msg = ''; renderLocation(); });
+  if (un) un.addEventListener('click', () => { FLOOR_MOVE.target = ''; FLOOR_MOVE.armed = false; FLOOR_MOVE.msg = ''; FLOOR_MOVE.rolls = null; renderLocation(); });
 }
 function wireLocation() { if (activeTab === 'location') renderLocation(); }
 
