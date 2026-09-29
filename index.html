@@ -1369,7 +1369,7 @@ async function loadMastersBuffer(buf) {
       atkattr: all('SELECT * FROM master_part_atkattr'),
       bodydetail: all('SELECT * FROM master_body_detail')
     };
-    for (const [key, sql] of [['questParamText', 'SELECT qid, no, val FROM master_quest_param_text'], ['questParamDesc', 'SELECT qid, no, val FROM master_quest_param_desc_text'], ['rewards', 'SELECT * FROM master_reward'], ['expertLvl', 'SELECT ptarmtp, lvl, abp FROM master_expert_lvl_reward'], ['stampBonus', 'SELECT * FROM master_stamp_bonus'], ['stampFloors', 'SELECT * FROM master_stamp'], ['hvnFloors', "SELECT id, areaid, no, mbsmin, mbsmax, mbslvlmin, mbslvlmax FROM master_floor WHERE stgid = 'S_HVN'"], ['jackals', 'SELECT * FROM master_jackal'], ['hvnBossDrops', "SELECT d.flrid, d.areaid, d.refareaid, d.type, d.grp, d.freq FROM master_floor_drop_gen d JOIN master_floor f ON f.id = d.flrid AND f.areaid = d.areaid WHERE f.stgid = 'S_HVN' AND f.mbsmax > 0 AND (d.type IN ('PTGENTP_TRBOX_L', 'PTGENTP_TRBOX_SPXL_RARE') OR d.type LIKE 'PTGENTP_MBOSS%')"], ['questCats', 'SELECT * FROM master_quest_category'], ['bagGen', 'SELECT * FROM master_mysterybag_content_gen'], ['bagGenOdds', "SELECT * FROM master_mysterybag_content_gen_odds WHERE odds_id = (SELECT odds_id FROM master_mysterybag_content_odds ORDER BY expires DESC LIMIT 1)"], ['boxGen', 'SELECT * FROM master_deathbox_content_gen'], ['hubCustom', 'SELECT * FROM master_hubcustomize'], ['floorInfo', 'SELECT id, sname, stgid, stgpfx, name FROM master_floor'], ['freezer', 'SELECT * FROM master_freezer'], ['bodies', 'SELECT id, gender FROM master_body'], ['gasmasks', 'SELECT id, gender FROM master_gasmask'], ['fortWhistle', 'SELECT * FROM master_fort_whistle']]) {
+    for (const [key, sql] of [['questParamText', 'SELECT qid, no, val FROM master_quest_param_text'], ['questParamDesc', 'SELECT qid, no, val FROM master_quest_param_desc_text'], ['rewards', 'SELECT * FROM master_reward'], ['expertLvl', 'SELECT ptarmtp, lvl, abp FROM master_expert_lvl_reward'], ['stampBonus', 'SELECT * FROM master_stamp_bonus'], ['stampFloors', 'SELECT * FROM master_stamp'], ['hvnFloors', "SELECT id, areaid, no, mbsmin, mbsmax, mbslvlmin, mbslvlmax FROM master_floor WHERE stgid = 'S_HVN'"], ['jackals', 'SELECT * FROM master_jackal'], ['magazines', 'SELECT * FROM master_magazine'], ['magazineBonus', 'SELECT * FROM master_magazine_bonus'], ['hvnBossDrops', "SELECT d.flrid, d.areaid, d.refareaid, d.type, d.grp, d.freq FROM master_floor_drop_gen d JOIN master_floor f ON f.id = d.flrid AND f.areaid = d.areaid WHERE f.stgid = 'S_HVN' AND f.mbsmax > 0 AND (d.type IN ('PTGENTP_TRBOX_L', 'PTGENTP_TRBOX_SPXL_RARE') OR d.type LIKE 'PTGENTP_MBOSS%')"], ['questCats', 'SELECT * FROM master_quest_category'], ['bagGen', 'SELECT * FROM master_mysterybag_content_gen'], ['bagGenOdds', "SELECT * FROM master_mysterybag_content_gen_odds WHERE odds_id = (SELECT odds_id FROM master_mysterybag_content_odds ORDER BY expires DESC LIMIT 1)"], ['boxGen', 'SELECT * FROM master_deathbox_content_gen'], ['hubCustom', 'SELECT * FROM master_hubcustomize'], ['floorInfo', 'SELECT id, sname, stgid, stgpfx, name FROM master_floor'], ['freezer', 'SELECT * FROM master_freezer'], ['bodies', 'SELECT id, gender FROM master_body'], ['gasmasks', 'SELECT id, gender FROM master_gasmask'], ['fortWhistle', 'SELECT * FROM master_fort_whistle']]) {
       try { AP[key] = all(sql); } catch (err) { AP[key] = []; console.warn(`${key} not available in this masters.db:`, err); }
     }
     AP.stewOdds = [];
@@ -4322,13 +4322,98 @@ function renderSkins() {
   }));
 }
 
+// My Collection: "Tales From The Barbs" (the four boss magazines, 6 pages each, type BOSS) and the
+// "YB Catalogue" (8 pages, type ZAKO), picked up on floors 1F-40F (master_magazine: idx, type, volume,
+// page, flrid). soul.magazine.status_list = comma list indexed by idx (0 and 7/14/21 unused):
+// -1 = not found, 1 = found (new), 2 = found and read -- seen in real saves, where every found page
+// is 1 or 2 regardless of whether its volume is complete. master_magazine_bonus gives 50,000 Kill Coins
+// per complete volume; the game hands that out when you pick up the last page (no flag is kept).
+const MAG_STAGE_OFS = { MET: 0, ARC: 10, AMS: 20, RFT: 30 };
+function magFloor(flrid) { const m = /^([A-Z]+)_FLR_(\d+)/.exec(String(flrid || '')); return m && MAG_STAGE_OFS[m[1]] != null ? MAG_STAGE_OFS[m[1]] + Number(m[2]) : null; }
+function magList() {
+  const m = SAVE.soul.magazine;
+  const raw = m && typeof m === 'object' ? String(m.status_list || '') : '';
+  const out = raw ? raw.split(',').map(x => Number(x)) : [];
+  const n = Math.max(out.length, ...arr(AP && AP.magazines).map(r => Number(r.idx) + 1), 36);
+  while (out.length < n) out.push(-1);
+  return out;
+}
+function magWrite(list) {
+  if (!SAVE.soul.magazine || typeof SAVE.soul.magazine !== 'object' || Array.isArray(SAVE.soul.magazine)) SAVE.soul.magazine = {};
+  SAVE.soul.magazine.status_list = list.map(v => String(v)).join(',');
+}
+let MAG_SENT = { root: null, keys: new Set(), orig: [] };
+// pages as the loaded save had them (the bonus is only offered for volumes finished here); taken from
+// the save text kept at load, since the live objects change as you edit
+function magOrigList() {
+  if (MAG_SENT.root !== RAW_SAV_ROOT) {
+    let orig = [];
+    try { const r = ORIG_SAVE.root === RAW_SAV_ROOT && ORIG_SAVE.text ? JSON.parse(ORIG_SAVE.text) : null; orig = String((((r || {}).soul || {}).magazine || {}).status_list || '').split(',').map(Number); } catch (e) {}
+    MAG_SENT = { root: RAW_SAV_ROOT, keys: new Set(), orig };
+  }
+  return MAG_SENT.orig;
+}
+function magVolumes() {
+  const vols = [];
+  for (const r of arr(AP && AP.magazines).slice().sort((a, b) => a.idx - b.idx)) {
+    const key = r.type + r.volume;
+    let v = vols.find(x => x.key === key);
+    if (!v) vols.push(v = { key, type: r.type, volume: Number(r.volume), pages: [] });
+    v.pages.push(r);
+  }
+  return vols;
+}
+function magVolTitle(v) {
+  const barbs = resolveName('BOOK_MYCOLLECTION.TXT_TOWEROFBARBS') || 'Tales From The Barbs';
+  const cat = resolveName('BOOK_MYCOLLECTION.TXT_CATALOG') || 'YB Catalogue';
+  return v.type === 'BOSS' ? `${barbs} Vol. ${v.volume}` : cat;
+}
+function magHtml() {
+  if (!arr(AP && AP.magazines).length) return '';
+  const list = magList();
+  const sel = 'background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:5px 6px; font-family:var(--mono); width:100%;';
+  const vols = magVolumes();
+  const found = vols.reduce((n, v) => n + v.pages.filter(p => list[p.idx] > 0).length, 0), total = vols.reduce((n, v) => n + v.pages.length, 0);
+  let h = `<div class="toolbar" style="margin:0 0 6px;"><div class="eyebrow" style="margin:0;">My Collection: magazines</div><button class="subtle" id="mag-all">Find and read every page</button><span class="count">${found} / ${total} pages found</span></div>
+    <div class="capNote" style="margin-top:0;">The pages you pick up on 1F–40F. "New" is a page found but not opened yet; "Read" is found and opened. The game pays 50,000 Kill Coins when you pick up the last page of a volume yourself; pages completed here don't trigger that, so for a volume you finish here <b>Send reward</b> puts it in the Reward Box instead (offered once, and only for volumes that weren't already complete).</div>`;
+  for (const v of vols) {
+    const done = v.pages.every(p => list[p.idx] > 0);
+    const bonus = arr(AP && AP.magazineBonus).find(b => Number(b.stidx) === Number(v.pages[0].idx));
+    const orig = magOrigList(), wasDone = v.pages.every(p => orig[p.idx] > 0), sent = MAG_SENT.keys.has(v.key);
+    h += `<div class="toolbar" style="margin:12px 0 6px;"><b>${escapeHtml(magVolTitle(v))}</b><button class="subtle" data-mag-vol="${v.key}">Find all</button>${done && bonus && !wasDone && !sent ? `<button class="subtle" data-mag-bonus="${v.key}">Send reward (50,000 Kill Coins)</button>` : ''}${sent ? '<span class="id">reward sent</span>' : ''}<span class="count">${v.pages.filter(p => list[p.idx] > 0).length} / ${v.pages.length}${done ? ' ✓' : ''}</span></div>`;
+    h += `<div class="grid" style="grid-template-columns: repeat(${Math.min(v.pages.length, 4)}, 1fr);">`;
+    for (const p of v.pages) {
+      const f = magFloor(p.flrid), st = list[p.idx] > 0 ? String(list[p.idx]) : '-1';
+      h += `<div class="field"><label>Page ${p.page}${f ? ` <span class="id">${f}F</span>` : ''}</label><select data-mag-idx="${p.idx}" style="${sel}"><option value="-1" ${st === '-1' ? 'selected' : ''}>Not found</option><option value="1" ${st === '1' ? 'selected' : ''}>New</option><option value="2" ${st === '2' ? 'selected' : ''}>Read</option></select></div>`;
+    }
+    h += '</div>';
+  }
+  return h;
+}
+function magWire(host, rerender) {
+  const setPages = (pages, v) => { const l = magList(); for (const p of pages) if (!(l[p.idx] > 0)) l[p.idx] = v; magWrite(l); };
+  host.querySelectorAll('[data-mag-idx]').forEach(el => el.addEventListener('change', () => { const l = magList(); l[Number(el.dataset.magIdx)] = Number(el.value); magWrite(l); rerender(); }));
+  host.querySelectorAll('[data-mag-vol]').forEach(el => el.addEventListener('click', () => { const v = magVolumes().find(x => x.key === el.dataset.magVol); if (v) { setPages(v.pages, 2); rerender(); toast(`${magVolTitle(v)}: every page found`); } }));
+  const all = host.querySelector('#mag-all');
+  if (all) all.addEventListener('click', () => { const l = magList(); for (const p of arr(AP.magazines)) l[p.idx] = 2; magWrite(l); rerender(); toast('Every magazine page found and read'); });
+  host.querySelectorAll('[data-mag-bonus]').forEach(el => el.addEventListener('click', () => {
+    const v = magVolumes().find(x => x.key === el.dataset.magBonus);
+    const b = v && arr(AP.magazineBonus).find(x => Number(x.stidx) === Number(v.pages[0].idx));
+    const rw = b && arr(AP.rewards).find(r => r.rwdid === b.rwdid);
+    if (!rw) return;
+    addPresent(rw.type, Number(rw.num) || 0, rw.val0 || '');
+    MAG_SENT.keys.add(v.key);
+    renderCollection();
+    toast(`${magVolTitle(v)}: ${Number(rw.num).toLocaleString()} Kill Coins sent to the Reward Box`);
+  }));
+}
 function renderCollection() {
   const host = document.getElementById('coll-body');
   if (!host || !SAVE) return;
   const sel = 'background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono); width:100%;';
-  let h = '';
+  let h = magHtml();
   // books
-  h += `<div class="toolbar" style="margin:6px 0 0;"><input type="text" id="coll-filter" placeholder="Filter mushrooms and beasts by name..." value="${escapeHtml(COLL_FORM.filter)}" style="flex:1; max-width:320px; ${sel}"></div>`;
+  h += `<div class="toolbar" style="margin:16px 0 0;"><input type="text" id="coll-filter" placeholder="Filter mushrooms and beasts by name..." value="${escapeHtml(COLL_FORM.filter)}" style="flex:1; max-width:320px; ${sel}"></div>`;
   const filt = norm(COLL_FORM.filter || '');
   for (const [ kind, title ] of [ [ 'msr', 'Mushroom book' ], [ 'bst', 'Beast book' ] ]) {
     const rows = bookRows(kind);
@@ -4342,6 +4427,7 @@ function renderCollection() {
     h += '</tbody></table>';
   }
   host.innerHTML = h;
+  magWire(host, renderCollection);
   host.querySelectorAll('[data-book]').forEach(el => el.addEventListener('change', () => { bookSet(el.dataset.book, el.dataset.bookId, Number(el.dataset.bit), el.checked); renderCollection(); }));
   host.querySelectorAll('[data-book-complete]').forEach(el => el.addEventListener('click', () => { const n = bookComplete(el.dataset.bookComplete); renderCollection(); toast(n ? `${n} entr${n === 1 ? 'y' : 'ies'} completed` : 'Already complete'); }));
   const fi = document.getElementById('coll-filter');
@@ -8283,6 +8369,11 @@ function reviewDiff(A, B, rawA, rawB) {
   const cl = sec('Collection');
   const skinOf = (so, t) => ((arr(so.armorskin).find(x => x && x.type === t) || {}).ptid) || '';
   for (const [ t, lbl ] of SKIN_SLOTS) { const x = skinOf(aS, t), y = skinOf(bS, t); if (x !== y) cl.lines.push(`${lbl} skin: ${x ? (PT_INDEX[x] || {}).name || x : 'none'} → ${y ? (PT_INDEX[y] || {}).name || y : 'none'}`); }
+  { const ma = String((aS.magazine || {}).status_list || '').split(','), mb = String((bS.magazine || {}).status_list || '').split(',');
+    const txt = v => Number(v) === 2 ? 'read' : Number(v) === 1 ? 'new' : 'not found';
+    const ch = arr(AP && AP.magazines).filter(p => (Number(ma[p.idx]) > 0 ? ma[p.idx] : '-1') !== (Number(mb[p.idx]) > 0 ? mb[p.idx] : '-1'));
+    if (ch.length > 8) cl.lines.push(`Magazines: ${ch.length} pages changed`);
+    else for (const p of ch) cl.lines.push(`${p.type === 'BOSS' ? 'Tales From The Barbs Vol. ' + p.volume : 'YB Catalogue'} page ${p.page}: ${txt(ma[p.idx])} → ${txt(mb[p.idx])}`); }
   for (const [ key, lbl, nm ] of [ [ 'msrbook', 'Mushroom book', id => msrDisplayName(id, 0) ], [ 'bstbook', 'Beast book', id => bstDisplayName(id, 0) ] ]) {
     const fa = new Map(arr(aS[key]).map(e => [ e.id, Number(e.flag) || 0 ])), fb = new Map(arr(bS[key]).map(e => [ e.id, Number(e.flag) || 0 ]));
     const ch = [ ...new Set([ ...fa.keys(), ...fb.keys() ]) ].filter(id => fa.get(id) !== fb.get(id));
