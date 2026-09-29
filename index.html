@@ -1943,7 +1943,7 @@ function renderAll() {
   app.querySelectorAll('[id]').forEach(el => {
     if (el.scrollTop > 0) scrollStates[el.id] = el.scrollTop;
   });
-  app.innerHTML = `\n    ${blockHealth()}\n    <div class="tabbar">\n      ${TABS.map(t => `<button class="tabbtn ${activeTab === t.id ? 'active' : ''}" data-tab-btn="${t.id}">${t.label}</button>`).join('')}\n    </div>\n    <div class="tabpanel" data-tab-panel="account" style="display:${activeTab === 'account' ? 'block' : 'none'}">${blockCurrency()}</div>\n    <div class="tabpanel" data-tab-panel="fighters" style="display:${activeTab === 'fighters' ? 'block' : 'none'}">${blockCharacters()}</div>\n    <div class="tabpanel" data-tab-panel="research" style="display:${activeTab === 'research' ? 'block' : 'none'}">${blockBlueprints()}</div>\n    <div class="tabpanel" data-tab-panel="decals" style="display:${activeTab === 'decals' ? 'block' : 'none'}">${blockSkillDecals()}</div>\n    <div class="tabpanel" data-tab-panel="stews" style="display:${activeTab === 'stews' ? 'block' : 'none'}">${blockStews()}</div>\n    <div class="tabpanel" data-tab-panel="bags" style="display:${activeTab === 'bags' ? 'block' : 'none'}">${blockBags()}</div>\n    <div class="tabpanel" data-tab-panel="boxes" style="display:${activeTab === 'boxes' ? 'block' : 'none'}">${blockBoxes()}</div>\n    <div class="tabpanel" data-tab-panel="hub" style="display:${activeTab === 'hub' ? 'block' : 'none'}">${blockHub()}</div>\n    <div class="tabpanel" data-tab-panel="defense" style="display:${activeTab === 'defense' ? 'block' : 'none'}">${blockDefense()}</div>\n    <div class="tabpanel" data-tab-panel="photos" style="display:${activeTab === 'photos' ? 'block' : 'none'}">${blockPhotos()}</div>\n    <div class="tabpanel" data-tab-panel="graves" style="display:${activeTab === 'graves' ? 'block' : 'none'}">${blockGraves()}</div>\n    <div class="tabpanel" data-tab-panel="dates" style="display:${activeTab === 'dates' ? 'block' : 'none'}">${blockDates()}</div>\n    <div class="tabpanel" data-tab-panel="storage" style="display:${activeTab === 'storage' ? 'block' : 'none'}">${blockStorageBox()}</div>\n    <div class="tabpanel" data-tab-panel="rewards" style="display:${activeTab === 'rewards' ? 'block' : 'none'}">${blockRewardBox()}</div>\n    <div class="tabpanel" data-tab-panel="quests" style="display:${activeTab === 'quests' ? 'block' : 'none'}">${blockQuests()}</div>\n    <div class="tabpanel" data-tab-panel="rally" style="display:${activeTab === 'rally' ? 'block' : 'none'}">${blockRally()}</div>\n    <div class="tabpanel" data-tab-panel="location" style="display:${activeTab === 'location' ? 'block' : 'none'}">${blockLocation()}</div>\n    <div class="tabpanel" data-tab-panel="collection" style="display:${activeTab === 'collection' ? 'block' : 'none'}">${blockCollection()}</div>\n    <div class="tabpanel" data-tab-panel="stats" style="display:${activeTab === 'stats' ? 'block' : 'none'}">${blockStats()}</div>\n    <div class="tabpanel" data-tab-panel="vip" style="display:${activeTab === 'vip' ? 'block' : 'none'}">${blockVip()}</div>\n    <div class="tabpanel" data-tab-panel="compare" style="display:${activeTab === 'compare' ? 'block' : 'none'}">${blockCompare()}</div>\n  `;
+  app.innerHTML = `\n    ${blockHealth()}\n    <div class="tabbar">\n      ${TABS.map(t => `<button class="tabbtn ${activeTab === t.id ? 'active' : ''}" data-tab-btn="${t.id}">${t.label}</button>`).join('')}\n    </div>\n    <div class="tabpanel" data-tab-panel="account" style="display:${activeTab === 'account' ? 'block' : 'none'}">${blockCurrency()}</div>\n    <div class="tabpanel" data-tab-panel="fighters" style="display:${activeTab === 'fighters' ? 'block' : 'none'}">${blockCharacters()}${blockSkins()}</div>\n    <div class="tabpanel" data-tab-panel="research" style="display:${activeTab === 'research' ? 'block' : 'none'}">${blockBlueprints()}</div>\n    <div class="tabpanel" data-tab-panel="decals" style="display:${activeTab === 'decals' ? 'block' : 'none'}">${blockSkillDecals()}</div>\n    <div class="tabpanel" data-tab-panel="stews" style="display:${activeTab === 'stews' ? 'block' : 'none'}">${blockStews()}</div>\n    <div class="tabpanel" data-tab-panel="bags" style="display:${activeTab === 'bags' ? 'block' : 'none'}">${blockBags()}</div>\n    <div class="tabpanel" data-tab-panel="boxes" style="display:${activeTab === 'boxes' ? 'block' : 'none'}">${blockBoxes()}</div>\n    <div class="tabpanel" data-tab-panel="hub" style="display:${activeTab === 'hub' ? 'block' : 'none'}">${blockHub()}</div>\n    <div class="tabpanel" data-tab-panel="defense" style="display:${activeTab === 'defense' ? 'block' : 'none'}">${blockDefense()}</div>\n    <div class="tabpanel" data-tab-panel="photos" style="display:${activeTab === 'photos' ? 'block' : 'none'}">${blockPhotos()}</div>\n    <div class="tabpanel" data-tab-panel="graves" style="display:${activeTab === 'graves' ? 'block' : 'none'}">${blockGraves()}</div>\n    <div class="tabpanel" data-tab-panel="dates" style="display:${activeTab === 'dates' ? 'block' : 'none'}">${blockDates()}</div>\n    <div class="tabpanel" data-tab-panel="storage" style="display:${activeTab === 'storage' ? 'block' : 'none'}">${blockStorageBox()}</div>\n    <div class="tabpanel" data-tab-panel="rewards" style="display:${activeTab === 'rewards' ? 'block' : 'none'}">${blockRewardBox()}</div>\n    <div class="tabpanel" data-tab-panel="quests" style="display:${activeTab === 'quests' ? 'block' : 'none'}">${blockQuests()}</div>\n    <div class="tabpanel" data-tab-panel="rally" style="display:${activeTab === 'rally' ? 'block' : 'none'}">${blockRally()}</div>\n    <div class="tabpanel" data-tab-panel="location" style="display:${activeTab === 'location' ? 'block' : 'none'}">${blockLocation()}</div>\n    <div class="tabpanel" data-tab-panel="collection" style="display:${activeTab === 'collection' ? 'block' : 'none'}">${blockCollection()}</div>\n    <div class="tabpanel" data-tab-panel="stats" style="display:${activeTab === 'stats' ? 'block' : 'none'}">${blockStats()}</div>\n    <div class="tabpanel" data-tab-panel="vip" style="display:${activeTab === 'vip' ? 'block' : 'none'}">${blockVip()}</div>\n    <div class="tabpanel" data-tab-panel="compare" style="display:${activeTab === 'compare' ? 'block' : 'none'}">${blockCompare()}</div>\n  `;
   wireHealth();
   wireCurrency();
   wireCharacters();
@@ -4284,22 +4284,44 @@ function bookComplete(kind) {
   }
   return n;
 }
-function renderCollection() {
-  const host = document.getElementById('coll-body');
+function blockSkins() {
+  return `<section class="block">
+    <div class="block-head"><div><div class="eyebrow">All fighters</div><h2>Armor Skins in use</h2></div></div>
+    <div class="block-body"><div id="skin-body"></div></div>
+  </section>`;
+}
+function renderSkins() {
+  const host = document.getElementById('skin-body');
   if (!host || !SAVE) return;
   const sel = 'background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono); width:100%;';
   // armor skins
   const unlocked = [ ...armorSkinsUnlocked(SAVE.user_research) ];
   const inUse = arr(SAVE.soul.armorskin);
-  let h = `<div class="eyebrow" style="margin:0 0 6px;">Armor Skins in use</div>
-    <div class="capNote" style="margin-top:0;">The look shown on each armor slot. Only skins you've unlocked (armor researched to +4) are offered. ${unlocked.length} unlocked.</div>
-    <div class="grid" style="grid-template-columns: repeat(3, 1fr); margin-bottom:16px;">`;
+  let h = `
+    <div class="capNote" style="margin-top:0;">The look shown on each armor slot, for all your fighters (the game keeps one set for the account). Only skins you've unlocked (armor researched to +4) are offered. ${unlocked.length} unlocked.</div>
+    <div class="grid" style="grid-template-columns: repeat(3, 1fr);">`;
   for (const [ type, label ] of SKIN_SLOTS) {
     const cur = (inUse.find(x => x && x.type === type) || {}).ptid || '';
     const opts = unlocked.filter(id => PT_INDEX[id] && PT_INDEX[id].type === type).map(id => [ id, PT_INDEX[id].name ]).sort((a, b) => a[1].localeCompare(b[1]));
     h += `<div class="field"><label>${label}</label><select data-skin="${type}" style="${sel}"><option value="">None (show the armor you wear)</option>${opts.map(([ id, nm ]) => `<option value="${id}" ${id === cur ? 'selected' : ''}>${escapeHtml(nm)}</option>`).join('')}${cur && !opts.some(o => o[0] === cur) ? `<option value="${cur}" selected>${escapeHtml((PT_INDEX[cur] || {}).name || cur)} (not unlocked)</option>` : ''}</select></div>`;
   }
   h += '</div>';
+  host.innerHTML = h;
+  host.querySelectorAll('[data-skin]').forEach(el => el.addEventListener('change', () => {
+    const type = el.dataset.skin;
+    const list = arr(SAVE.soul.armorskin).filter(x => x && x.type !== type);
+    if (el.value) list.push({ type, ptid: el.value });
+    list.sort((a, b) => SKIN_SLOTS.findIndex(x => x[0] === a.type) - SKIN_SLOTS.findIndex(x => x[0] === b.type));
+    SAVE.soul.armorskin = list;
+    toast(el.value ? `${SKIN_SLOTS.find(x => x[0] === type)[1]} skin: ${(PT_INDEX[el.value] || {}).name || el.value}` : `${SKIN_SLOTS.find(x => x[0] === type)[1]} skin removed`);
+  }));
+}
+
+function renderCollection() {
+  const host = document.getElementById('coll-body');
+  if (!host || !SAVE) return;
+  const sel = 'background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono); width:100%;';
+  let h = '';
   // books
   h += `<div class="toolbar" style="margin:6px 0 0;"><input type="text" id="coll-filter" placeholder="Filter mushrooms and beasts by name..." value="${escapeHtml(COLL_FORM.filter)}" style="flex:1; max-width:320px; ${sel}"></div>`;
   const filt = norm(COLL_FORM.filter || '');
@@ -4315,20 +4337,12 @@ function renderCollection() {
     h += '</tbody></table>';
   }
   host.innerHTML = h;
-  host.querySelectorAll('[data-skin]').forEach(el => el.addEventListener('change', () => {
-    const type = el.dataset.skin;
-    const list = arr(SAVE.soul.armorskin).filter(x => x && x.type !== type);
-    if (el.value) list.push({ type, ptid: el.value });
-    list.sort((a, b) => SKIN_SLOTS.findIndex(x => x[0] === a.type) - SKIN_SLOTS.findIndex(x => x[0] === b.type));
-    SAVE.soul.armorskin = list;
-    toast(el.value ? `${SKIN_SLOTS.find(x => x[0] === type)[1]} skin: ${(PT_INDEX[el.value] || {}).name || el.value}` : `${SKIN_SLOTS.find(x => x[0] === type)[1]} skin removed`);
-  }));
   host.querySelectorAll('[data-book]').forEach(el => el.addEventListener('change', () => { bookSet(el.dataset.book, el.dataset.bookId, Number(el.dataset.bit), el.checked); renderCollection(); }));
   host.querySelectorAll('[data-book-complete]').forEach(el => el.addEventListener('click', () => { const n = bookComplete(el.dataset.bookComplete); renderCollection(); toast(n ? `${n} entr${n === 1 ? 'y' : 'ies'} completed` : 'Already complete'); }));
   const fi = document.getElementById('coll-filter');
   if (fi) fi.addEventListener('input', () => { COLL_FORM.filter = fi.value; const pos = fi.selectionStart; renderCollection(); const f2 = document.getElementById('coll-filter'); f2.focus(); f2.setSelectionRange(pos, pos); });
 }
-function wireCollection() { if (activeTab === 'collection') renderCollection(); }
+function wireCollection() { if (activeTab === 'collection') renderCollection(); renderSkins(); }
 
 // ---------------------------------------------------------------------------
 // Stats (read only): the play log the game keeps (root.playlog: base, user, kill, died, fighter,
