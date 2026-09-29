@@ -1369,7 +1369,7 @@ async function loadMastersBuffer(buf) {
       atkattr: all('SELECT * FROM master_part_atkattr'),
       bodydetail: all('SELECT * FROM master_body_detail')
     };
-    for (const [key, sql] of [['questParamText', 'SELECT qid, no, val FROM master_quest_param_text'], ['questParamDesc', 'SELECT qid, no, val FROM master_quest_param_desc_text'], ['rewards', 'SELECT * FROM master_reward'], ['expertLvl', 'SELECT ptarmtp, lvl, abp FROM master_expert_lvl_reward'], ['stampBonus', 'SELECT * FROM master_stamp_bonus'], ['stampFloors', 'SELECT * FROM master_stamp'], ['hvnFloors', "SELECT id, areaid, no, mbsmin, mbsmax, mbslvlmin, mbslvlmax FROM master_floor WHERE stgid = 'S_HVN'"], ['hvnBossDrops', "SELECT d.flrid, d.areaid, d.refareaid, d.type, d.grp, d.freq FROM master_floor_drop_gen d JOIN master_floor f ON f.id = d.flrid AND f.areaid = d.areaid WHERE f.stgid = 'S_HVN' AND f.mbsmax > 0 AND (d.type IN ('PTGENTP_TRBOX_L', 'PTGENTP_TRBOX_SPXL_RARE') OR d.type LIKE 'PTGENTP_MBOSS%')"], ['questCats', 'SELECT * FROM master_quest_category'], ['bagGen', 'SELECT * FROM master_mysterybag_content_gen'], ['bagGenOdds', "SELECT * FROM master_mysterybag_content_gen_odds WHERE odds_id = (SELECT odds_id FROM master_mysterybag_content_odds ORDER BY expires DESC LIMIT 1)"], ['boxGen', 'SELECT * FROM master_deathbox_content_gen'], ['hubCustom', 'SELECT * FROM master_hubcustomize'], ['floorInfo', 'SELECT id, sname, stgid, stgpfx, name FROM master_floor'], ['freezer', 'SELECT * FROM master_freezer'], ['bodies', 'SELECT id, gender FROM master_body'], ['gasmasks', 'SELECT id, gender FROM master_gasmask'], ['fortWhistle', 'SELECT * FROM master_fort_whistle']]) {
+    for (const [key, sql] of [['questParamText', 'SELECT qid, no, val FROM master_quest_param_text'], ['questParamDesc', 'SELECT qid, no, val FROM master_quest_param_desc_text'], ['rewards', 'SELECT * FROM master_reward'], ['expertLvl', 'SELECT ptarmtp, lvl, abp FROM master_expert_lvl_reward'], ['stampBonus', 'SELECT * FROM master_stamp_bonus'], ['stampFloors', 'SELECT * FROM master_stamp'], ['hvnFloors', "SELECT id, areaid, no, mbsmin, mbsmax, mbslvlmin, mbslvlmax FROM master_floor WHERE stgid = 'S_HVN'"], ['jackals', 'SELECT * FROM master_jackal'], ['hvnBossDrops', "SELECT d.flrid, d.areaid, d.refareaid, d.type, d.grp, d.freq FROM master_floor_drop_gen d JOIN master_floor f ON f.id = d.flrid AND f.areaid = d.areaid WHERE f.stgid = 'S_HVN' AND f.mbsmax > 0 AND (d.type IN ('PTGENTP_TRBOX_L', 'PTGENTP_TRBOX_SPXL_RARE') OR d.type LIKE 'PTGENTP_MBOSS%')"], ['questCats', 'SELECT * FROM master_quest_category'], ['bagGen', 'SELECT * FROM master_mysterybag_content_gen'], ['bagGenOdds', "SELECT * FROM master_mysterybag_content_gen_odds WHERE odds_id = (SELECT odds_id FROM master_mysterybag_content_odds ORDER BY expires DESC LIMIT 1)"], ['boxGen', 'SELECT * FROM master_deathbox_content_gen'], ['hubCustom', 'SELECT * FROM master_hubcustomize'], ['floorInfo', 'SELECT id, sname, stgid, stgpfx, name FROM master_floor'], ['freezer', 'SELECT * FROM master_freezer'], ['bodies', 'SELECT id, gender FROM master_body'], ['gasmasks', 'SELECT id, gender FROM master_gasmask'], ['fortWhistle', 'SELECT * FROM master_fort_whistle']]) {
       try { AP[key] = all(sql); } catch (err) { AP[key] = []; console.warn(`${key} not available in this masters.db:`, err); }
     }
     AP.stewOdds = [];
@@ -1924,6 +1924,9 @@ const TABS = [ {
   id: 'collection',
   label: 'Collection'
 }, {
+  id: 'jackals',
+  label: 'Jackals'
+}, {
   id: 'stats',
   label: 'Stats'
 }, {
@@ -1943,7 +1946,7 @@ function renderAll() {
   app.querySelectorAll('[id]').forEach(el => {
     if (el.scrollTop > 0) scrollStates[el.id] = el.scrollTop;
   });
-  app.innerHTML = `\n    ${blockHealth()}\n    <div class="tabbar">\n      ${TABS.map(t => `<button class="tabbtn ${activeTab === t.id ? 'active' : ''}" data-tab-btn="${t.id}">${t.label}</button>`).join('')}\n    </div>\n    <div class="tabpanel" data-tab-panel="account" style="display:${activeTab === 'account' ? 'block' : 'none'}">${blockCurrency()}</div>\n    <div class="tabpanel" data-tab-panel="fighters" style="display:${activeTab === 'fighters' ? 'block' : 'none'}">${blockCharacters()}${blockSkins()}</div>\n    <div class="tabpanel" data-tab-panel="research" style="display:${activeTab === 'research' ? 'block' : 'none'}">${blockBlueprints()}</div>\n    <div class="tabpanel" data-tab-panel="decals" style="display:${activeTab === 'decals' ? 'block' : 'none'}">${blockSkillDecals()}</div>\n    <div class="tabpanel" data-tab-panel="stews" style="display:${activeTab === 'stews' ? 'block' : 'none'}">${blockStews()}</div>\n    <div class="tabpanel" data-tab-panel="bags" style="display:${activeTab === 'bags' ? 'block' : 'none'}">${blockBags()}</div>\n    <div class="tabpanel" data-tab-panel="boxes" style="display:${activeTab === 'boxes' ? 'block' : 'none'}">${blockBoxes()}</div>\n    <div class="tabpanel" data-tab-panel="hub" style="display:${activeTab === 'hub' ? 'block' : 'none'}">${blockHub()}</div>\n    <div class="tabpanel" data-tab-panel="defense" style="display:${activeTab === 'defense' ? 'block' : 'none'}">${blockDefense()}</div>\n    <div class="tabpanel" data-tab-panel="photos" style="display:${activeTab === 'photos' ? 'block' : 'none'}">${blockPhotos()}</div>\n    <div class="tabpanel" data-tab-panel="graves" style="display:${activeTab === 'graves' ? 'block' : 'none'}">${blockGraves()}</div>\n    <div class="tabpanel" data-tab-panel="dates" style="display:${activeTab === 'dates' ? 'block' : 'none'}">${blockDates()}</div>\n    <div class="tabpanel" data-tab-panel="storage" style="display:${activeTab === 'storage' ? 'block' : 'none'}">${blockStorageBox()}</div>\n    <div class="tabpanel" data-tab-panel="rewards" style="display:${activeTab === 'rewards' ? 'block' : 'none'}">${blockRewardBox()}</div>\n    <div class="tabpanel" data-tab-panel="quests" style="display:${activeTab === 'quests' ? 'block' : 'none'}">${blockQuests()}</div>\n    <div class="tabpanel" data-tab-panel="rally" style="display:${activeTab === 'rally' ? 'block' : 'none'}">${blockRally()}</div>\n    <div class="tabpanel" data-tab-panel="location" style="display:${activeTab === 'location' ? 'block' : 'none'}">${blockLocation()}</div>\n    <div class="tabpanel" data-tab-panel="collection" style="display:${activeTab === 'collection' ? 'block' : 'none'}">${blockCollection()}</div>\n    <div class="tabpanel" data-tab-panel="stats" style="display:${activeTab === 'stats' ? 'block' : 'none'}">${blockStats()}</div>\n    <div class="tabpanel" data-tab-panel="vip" style="display:${activeTab === 'vip' ? 'block' : 'none'}">${blockVip()}</div>\n    <div class="tabpanel" data-tab-panel="compare" style="display:${activeTab === 'compare' ? 'block' : 'none'}">${blockCompare()}</div>\n  `;
+  app.innerHTML = `\n    ${blockHealth()}\n    <div class="tabbar">\n      ${TABS.map(t => `<button class="tabbtn ${activeTab === t.id ? 'active' : ''}" data-tab-btn="${t.id}">${t.label}</button>`).join('')}\n    </div>\n    <div class="tabpanel" data-tab-panel="account" style="display:${activeTab === 'account' ? 'block' : 'none'}">${blockCurrency()}</div>\n    <div class="tabpanel" data-tab-panel="fighters" style="display:${activeTab === 'fighters' ? 'block' : 'none'}">${blockCharacters()}${blockSkins()}</div>\n    <div class="tabpanel" data-tab-panel="research" style="display:${activeTab === 'research' ? 'block' : 'none'}">${blockBlueprints()}</div>\n    <div class="tabpanel" data-tab-panel="decals" style="display:${activeTab === 'decals' ? 'block' : 'none'}">${blockSkillDecals()}</div>\n    <div class="tabpanel" data-tab-panel="stews" style="display:${activeTab === 'stews' ? 'block' : 'none'}">${blockStews()}</div>\n    <div class="tabpanel" data-tab-panel="bags" style="display:${activeTab === 'bags' ? 'block' : 'none'}">${blockBags()}</div>\n    <div class="tabpanel" data-tab-panel="boxes" style="display:${activeTab === 'boxes' ? 'block' : 'none'}">${blockBoxes()}</div>\n    <div class="tabpanel" data-tab-panel="hub" style="display:${activeTab === 'hub' ? 'block' : 'none'}">${blockHub()}</div>\n    <div class="tabpanel" data-tab-panel="defense" style="display:${activeTab === 'defense' ? 'block' : 'none'}">${blockDefense()}</div>\n    <div class="tabpanel" data-tab-panel="photos" style="display:${activeTab === 'photos' ? 'block' : 'none'}">${blockPhotos()}</div>\n    <div class="tabpanel" data-tab-panel="graves" style="display:${activeTab === 'graves' ? 'block' : 'none'}">${blockGraves()}</div>\n    <div class="tabpanel" data-tab-panel="dates" style="display:${activeTab === 'dates' ? 'block' : 'none'}">${blockDates()}</div>\n    <div class="tabpanel" data-tab-panel="storage" style="display:${activeTab === 'storage' ? 'block' : 'none'}">${blockStorageBox()}</div>\n    <div class="tabpanel" data-tab-panel="rewards" style="display:${activeTab === 'rewards' ? 'block' : 'none'}">${blockRewardBox()}</div>\n    <div class="tabpanel" data-tab-panel="quests" style="display:${activeTab === 'quests' ? 'block' : 'none'}">${blockQuests()}</div>\n    <div class="tabpanel" data-tab-panel="rally" style="display:${activeTab === 'rally' ? 'block' : 'none'}">${blockRally()}</div>\n    <div class="tabpanel" data-tab-panel="location" style="display:${activeTab === 'location' ? 'block' : 'none'}">${blockLocation()}</div>\n    <div class="tabpanel" data-tab-panel="collection" style="display:${activeTab === 'collection' ? 'block' : 'none'}">${blockCollection()}</div>\n    <div class="tabpanel" data-tab-panel="jackals" style="display:${activeTab === 'jackals' ? 'block' : 'none'}">${blockJackals()}</div>\n    <div class="tabpanel" data-tab-panel="stats" style="display:${activeTab === 'stats' ? 'block' : 'none'}">${blockStats()}</div>\n    <div class="tabpanel" data-tab-panel="vip" style="display:${activeTab === 'vip' ? 'block' : 'none'}">${blockVip()}</div>\n    <div class="tabpanel" data-tab-panel="compare" style="display:${activeTab === 'compare' ? 'block' : 'none'}">${blockCompare()}</div>\n  `;
   wireHealth();
   wireCurrency();
   wireCharacters();
@@ -1964,6 +1967,7 @@ function renderAll() {
   wireLocation();
   wireCollection();
   wireStats();
+  wireJackals();
   wireVip();
   wireCompare();
   document.querySelectorAll('[data-tab-btn]').forEach(btn => {
@@ -1980,6 +1984,7 @@ function renderAll() {
       if (activeTab === 'location') renderLocation();
       if (activeTab === 'collection') renderCollection();
       if (activeTab === 'stats') renderStats();
+      if (activeTab === 'jackals') renderJackals();
       if (activeTab === 'bags') renderBags();
       if (activeTab === 'boxes') renderBoxes();
       if (activeTab === 'hub') renderHub();
@@ -4400,6 +4405,142 @@ function renderStats() {
   host.innerHTML = h;
 }
 function wireStats() { if (activeTab === 'stats') renderStats(); }
+
+// ---------------------------------------------------------------------------
+// Jackals (EXPERIMENTAL): the loot each Jackal will drop.
+// Save: root.floor.jkls = [{type: JACKAL_X.., rwd: JSON text, killed}]. rwd =
+//   {"money":n,"spirit":0,"tbtp":"","pts":{} | [{"eptid"}],"msrs":{},"items":{} | [{"eitemid","itemId","gettime":0}]}
+// The loot instance lives in root.item.items (owner = the Jackal type) or root.part.pts[uid] (owner too).
+// The loot is rolled once and kept (also between runs) until that Jackal is defeated.
+// What a Jackal can drop and how likely (per 1000) comes from master_jackal: Kill Coins (money_min..max),
+// its weapon (armr), a piece of its armor (head/body/legs), the weapon's blueprint, an armor blueprint,
+// or its items drop_item_id_1 / _2.
+// Edits are kept here and written at download: the old loot instance is removed and the new one added.
+// ---------------------------------------------------------------------------
+let JKL = { root: null, edits: {}, msg: '' };
+function jklSync() { if (JKL.root !== RAW_SAV_ROOT) JKL = { root: RAW_SAV_ROOT, edits: {}, msg: '' }; }
+function jklRec(type) { return arr(AP && AP.jackals).find(j => j.type === type) || null; }
+function jklParse(j) { try { return j && j.rwd ? JSON.parse(j.rwd) : null; } catch (e) { return null; } }
+function jklPartsOf(root) {
+  const p = root && root.part && root.part.pts;
+  return Array.isArray(p) ? p : p && typeof p === 'object' ? [].concat(...Object.values(p).filter(Array.isArray)) : [];
+}
+// the loot a Jackal carries now (from the save)
+function jklCurrent(j) {
+  const r = jklParse(j);
+  if (!r) return { kind: 'none' };
+  const items = arr(r.items), pts = arr(r.pts);
+  if (items.length) return { kind: 'item', itemid: items[0].itemId };
+  if (pts.length) { const inst = jklPartsOf(RAW_SAV_ROOT).find(p => p.eid === pts[0].eptid); return { kind: 'part', ptid: inst ? inst.ptid : '?' }; }
+  if (Number(r.money) > 0) return { kind: 'money', money: Number(r.money) };
+  return { kind: 'none' };
+}
+function jklBpOf(ptid) { const id = 'ITMP_' + String(ptid || '').replace(/^PT_/, ''); return ITEM_INDEX[id] ? id : null; }
+// everything this Jackal type can drop, with the game's weight (per 1000)
+function jklOptions(type) {
+  const r = jklRec(type);
+  if (!r) return [];
+  const out = [];
+  const armor = [ r.head, r.body, r.legs ].filter(Boolean);
+  if (Number(r.drop_coin_rate)) out.push({ key: 'money', w: Number(r.drop_coin_rate), label: `Kill Coins (${Number(r.money_min).toLocaleString()}–${Number(r.money_max).toLocaleString()})`, loot: () => ({ kind: 'money', money: Math.round(Number(r.money_min) + Math.random() * (Number(r.money_max) - Number(r.money_min))) }) });
+  if (Number(r.drop_part_weapon_rate) && r.armr) out.push({ key: 'pt:' + r.armr, w: Number(r.drop_part_weapon_rate), label: `Weapon: ${(PT_INDEX[r.armr] || {}).name || r.armr}`, loot: () => ({ kind: 'part', ptid: r.armr }) });
+  if (Number(r.drop_part_armor_rate)) for (const a of armor) out.push({ key: 'pt:' + a, w: Number(r.drop_part_armor_rate) / armor.length, label: `Armor: ${(PT_INDEX[a] || {}).name || a}`, loot: () => ({ kind: 'part', ptid: a }) });
+  const bw = jklBpOf(r.armr);
+  if (Number(r.drop_rmap_weapon_rate) && bw) out.push({ key: 'it:' + bw, w: Number(r.drop_rmap_weapon_rate), label: itemDisplayName(bw), loot: () => ({ kind: 'item', itemid: bw }) });
+  if (Number(r.drop_rmap_armor_rate)) { const bps = armor.map(jklBpOf).filter(Boolean); for (const b of bps) out.push({ key: 'it:' + b, w: Number(r.drop_rmap_armor_rate) / bps.length, label: itemDisplayName(b), loot: () => ({ kind: 'item', itemid: b }) }); }
+  for (const [ id, rate ] of [ [ r.drop_item_id_1, r.drop_item_1_rate ], [ r.drop_item_id_2, r.drop_item_2_rate ] ]) if (id && Number(rate) && ITEM_INDEX[id]) out.push({ key: 'it:' + id, w: Number(rate), label: itemDisplayName(id), loot: () => ({ kind: 'item', itemid: id }) });
+  return out;
+}
+function jklRoll(type) {
+  const opts = jklOptions(type), tot = opts.reduce((n, o) => n + o.w, 0);
+  if (!tot) return null;
+  let x = Math.random() * tot;
+  for (const o of opts) if ((x -= o.w) < 0) return o.loot();
+  return opts[opts.length - 1].loot();
+}
+function jklLootLabel(l) {
+  if (!l || l.kind === 'none') return 'nothing';
+  if (l.kind === 'money') return `${Number(l.money).toLocaleString()} Kill Coins`;
+  if (l.kind === 'part') return (PT_INDEX[l.ptid] || {}).name || l.ptid;
+  return itemDisplayName(l.itemid);
+}
+function jklLootKey(l) { return !l ? '' : l.kind === 'money' ? 'money' : l.kind === 'part' ? 'pt:' + l.ptid : l.kind === 'item' ? 'it:' + l.itemid : ''; }
+function applyJackals(root) {
+  if (JKL.root !== RAW_SAV_ROOT || !Object.keys(JKL.edits).length || !root || !root.floor || !Array.isArray(root.floor.jkls)) return root;
+  const now = Math.floor(Date.now() / 1e3), uid = Number(root.soul && root.soul.uid) || Number(RAW_SAV_MAIN_UID) || 0;
+  const items = root.item && root.item.items;
+  const partList = () => {
+    const p = root.part && root.part.pts;
+    if (Array.isArray(p)) return p;
+    if (p && typeof p === 'object') { const k = String(uid); if (!Array.isArray(p[k])) p[k] = []; return p[k]; }
+    return null;
+  };
+  for (const j of root.floor.jkls) {
+    const loot = j && JKL.edits[j.type];
+    if (!loot) continue;
+    const old = jklParse(j) || {};
+    // remove the old loot instance(s)
+    const oldItems = new Set(arr(old.items).map(x => x.eitemid)), oldPts = new Set(arr(old.pts).map(x => x.eptid));
+    if (Array.isArray(items)) for (let i = items.length - 1; i >= 0; i--) if (oldItems.has(items[i].eid)) items.splice(i, 1);
+    const pl = partList();
+    if (pl) for (let i = pl.length - 1; i >= 0; i--) if (oldPts.has(pl[i].eid)) pl.splice(i, 1);
+    const rwd = { money: 0, spirit: 0, tbtp: '', pts: {}, msrs: {}, items: {} };
+    if (loot.kind === 'money') rwd.money = Number(loot.money) || 0;
+    else if (loot.kind === 'item' && Array.isArray(items)) {
+      const eid = presentUuid();
+      items.push({ eid, gettime: 0, itemid: loot.itemid, owner: j.type });
+      rwd.items = [ { eitemid: eid, itemId: loot.itemid, gettime: 0 } ];
+    } else if (loot.kind === 'part' && pl) {
+      const rec = PT_INDEX[loot.ptid] || {}, eid = presentUuid();
+      pl.push({ uid, eid, gettime: 0, owner: j.type, created: now, modified: now, ptid: loot.ptid, rest: Number(rec.capacity) || 0, spare: Number(rec.spare) || 0, grade: 0, dur: partMaxDur(rec, 1) || Number(rec.dur) || 0, lvl: 1 });
+      rwd.pts = [ { eptid: eid } ];
+    }
+    j.rwd = JSON.stringify(rwd);
+  }
+  return root;
+}
+function blockJackals() {
+  return `<section class="block">
+    <div class="block-head"><div><div class="eyebrow">Experimental</div><h2>Jackals</h2></div></div>
+    <div class="block-body"><div id="jkl-body"></div></div>
+  </section>`;
+}
+function renderJackals() {
+  const host = document.getElementById('jkl-body');
+  if (!host || !SAVE || !RAW_SAV_ROOT) return;
+  jklSync();
+  const list = arr(RAW_SAV_ROOT.floor && RAW_SAV_ROOT.floor.jkls);
+  let h = `<div class="warnNote" style="margin:0 0 10px;"><b>Experimental — test on a backup first.</b> Changing Jackal loot hasn't been confirmed in game yet. Keep your original save.</div>
+    <div class="capNote" style="margin-top:0;">Each Jackal carries one reward, rolled once and kept (also between runs) until you defeat it. Pick what it drops from what that Jackal can carry, or reroll it with the game's own odds. Weapons and armor drop at +0 with full durability and ammo.</div>`;
+  if (!list.length) { host.innerHTML = h + '<div class="capNote">This save has no Jackals yet.</div>'; return; }
+  if (JKL.msg) h += `<pre class="stewLog">${escapeHtml(JKL.msg)}</pre>`;
+  const sel = 'background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:6px 8px; font-family:var(--mono); width:100%;';
+  h += `<div class="toolbar"><button class="subtle" id="jkl-reroll-all">Reroll all</button>${Object.keys(JKL.edits).length ? '<button class="subtle" id="jkl-undo-all">Undo all</button>' : ''}<span class="count">${Object.keys(JKL.edits).length} changed</span></div>`;
+  h += `<table class="stewTable"><thead><tr><th>Jackal</th><th>Carries now</th><th>Drops after download</th><th></th></tr></thead><tbody>`;
+  for (const j of list) {
+    const cur = jklCurrent(j), ed = JKL.edits[j.type], opts = jklOptions(j.type);
+    const pick = ed ? jklLootKey(ed) : jklLootKey(cur);
+    const name = String(j.type).replace(/^JACKAL_/, 'Jackal ');
+    const tot = opts.reduce((n, o) => n + o.w, 0) || 1;
+    h += `<tr><td>${escapeHtml(name)}${Number(j.killed) ? ' <span class="id">(defeated)</span>' : ''}</td><td>${escapeHtml(jklLootLabel(cur))}</td>
+      <td>${opts.length ? `<select data-jkl="${j.type}" style="${sel}">${opts.map(o => `<option value="${o.key}" ${o.key === pick ? 'selected' : ''}>${escapeHtml(o.key === 'money' && ed && ed.kind === 'money' ? `${Number(ed.money).toLocaleString()} Kill Coins` : o.key === 'money' && !ed && cur.kind === 'money' ? `${Number(cur.money).toLocaleString()} Kill Coins` : o.label)} · ${(o.w / tot * 100).toFixed(o.w / tot < 0.1 ? 1 : 0)}%</option>`).join('')}${!opts.some(o => o.key === pick) ? `<option value="" selected>${escapeHtml(jklLootLabel(ed || cur))}</option>` : ''}</select>` : '<span class="id">unknown Jackal</span>'}${ed ? ' <span class="id">changed</span>' : ''}</td>
+      <td style="white-space:nowrap;"><button class="subtle" data-jkl-roll="${j.type}">Reroll</button>${ed ? ` <button class="subtle" data-jkl-undo="${j.type}">Undo</button>` : ''}</td></tr>`;
+  }
+  h += '</tbody></table>';
+  host.innerHTML = h;
+  const done = msg => { JKL.msg = msg || ''; renderJackals(); if (msg) toast(msg); };
+  host.querySelectorAll('[data-jkl]').forEach(el => el.addEventListener('change', () => {
+    const o = jklOptions(el.dataset.jkl).find(x => x.key === el.value);
+    if (o) { JKL.edits[el.dataset.jkl] = o.loot(); done(''); }
+  }));
+  host.querySelectorAll('[data-jkl-roll]').forEach(el => el.addEventListener('click', () => { const l = jklRoll(el.dataset.jklRoll); if (l) JKL.edits[el.dataset.jklRoll] = l; done(''); }));
+  host.querySelectorAll('[data-jkl-undo]').forEach(el => el.addEventListener('click', () => { delete JKL.edits[el.dataset.jklUndo]; done(''); }));
+  const ra = document.getElementById('jkl-reroll-all');
+  if (ra) ra.addEventListener('click', () => { for (const j of list) { const l = jklRoll(j.type); if (l) JKL.edits[j.type] = l; } done('Rerolled every Jackal with the game\'s odds'); });
+  const ua = document.getElementById('jkl-undo-all');
+  if (ua) ua.addEventListener('click', () => { JKL.edits = {}; done('Jackal loot back to what the save has'); });
+}
+function wireJackals() { if (activeTab === 'jackals') renderJackals(); }
 
 function wireQuests() {
   if (activeTab === 'quests') renderQuests();
@@ -7963,7 +8104,7 @@ function reviewFileName(ext, stamp) { return `brggame_${stamp || reviewStamp()}.
 function buildDownloadRoot() {
   normalizePresents(SAVE.presents);
   questOrdForSave();
-  return applyFloorMove(applyStampRally(applyStampMark(applyAccountChoice(restoreEmptyShapes(applyDateRules(buildRawSavRootFromSave(SAVE, RAW_SAV_ROOT, RAW_SAV_MAIN_UID)), RAW_SAV_ROOT)))));
+  return applyJackals(applyFloorMove(applyStampRally(applyStampMark(applyAccountChoice(restoreEmptyShapes(applyDateRules(buildRawSavRootFromSave(SAVE, RAW_SAV_ROOT, RAW_SAV_MAIN_UID)), RAW_SAV_ROOT))))));
 }
 
 const REVIEW_SOUL_LABELS = {
@@ -8139,6 +8280,9 @@ function reviewDiff(A, B, rawA, rawB) {
     const ch = [ ...new Set([ ...fa.keys(), ...fb.keys() ]) ].filter(id => fa.get(id) !== fb.get(id));
     if (ch.length) cl.lines.push(`${lbl}: ${ch.length} entr${ch.length === 1 ? 'y' : 'ies'} changed (${ch.slice(0, 6).map(nm).join(', ')}${ch.length > 6 ? ', …' : ''})`);
   }
+  const jk = sec('Jackals (experimental)');
+  const jA = new Map(arr(rawA.floor && rawA.floor.jkls).map(j => [ j.type, j.rwd ])), jB = arr(rawB.floor && rawB.floor.jkls);
+  for (const j of jB) if (jA.get(j.type) !== j.rwd) { const l = (() => { const r = jklParse(j) || {}; if (arr(r.items).length) return itemDisplayName(r.items[0].itemId); if (arr(r.pts).length) { const i = jklPartsOf(rawB).find(p => p.eid === r.pts[0].eptid); return i ? (PT_INDEX[i.ptid] || {}).name || i.ptid : 'a part'; } return Number(r.money) ? `${Number(r.money).toLocaleString()} Kill Coins` : 'nothing'; })(); jk.lines.push(`${String(j.type).replace(/^JACKAL_/, 'Jackal ')}: now drops ${l}`); }
   const lc = sec('Location');
   const fa = rawA.soul && rawA.soul.flrid, fb = rawB.soul && rawB.soul.flrid;
   const locLbl = id => !id ? 'none' : hvnFloor(id) ? hvnFloorLabel(hvnFloor(id)) : id;
