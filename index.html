@@ -4111,7 +4111,11 @@ function flmRoll(target) {
   if (hCur && hCur.rwdid) { const to = flmDraw(t.id, t.areaid, hCur.refareaid || ref, Number(hCur.is_rare) ? 'PTGENTP_TRBOX_SPXL_RARE' : 'PTGENTP_SPXL'); if (to) out.featured = { from: hCur.rwdid, to }; }
   for (const u of flmUpcoming(target)) {
     const e = u.entry, refA = e.refareaid || '-';
-    const rw = arr(e.rwds).map(w => ({ gentype: w.gentype, from: w.rwdid, to: flmDraw(u.id, u.floor.areaid, refA, w.gentype) || w.rwdid }));
+    // Treasure-enemy floors (the "rush" boss floors: TRZAKO entries) have no large boxes. The game still
+    // lists three TRBOX_L placeholder entries (Death 'Roids Blue) for them, which never appear as chests,
+    // so they're kept as they are and not shown.
+    const rush = arr(e.rwds).some(w => w && w.gentype === 'PTGENTP_TRZAKO');
+    const rw = arr(e.rwds).map(w => { const ph = rush && w.gentype === 'PTGENTP_TRBOX_L'; return { gentype: w.gentype, placeholder: ph, from: w.rwdid, to: ph ? w.rwdid : flmDraw(u.id, u.floor.areaid, refA, w.gentype) || w.rwdid }; });
     const fe = e.rwdid ? { from: e.rwdid, to: flmDraw(u.id, u.floor.areaid, refA, Number(e.is_rare) ? 'PTGENTP_TRBOX_SPXL_RARE' : 'PTGENTP_SPXL') || e.rwdid } : null;
     out.upcoming.push({ id: u.id, no: u.floor.no, featured: fe, rare: Number(e.is_rare) === 1, rwds: rw });
   }
@@ -4152,6 +4156,17 @@ function flmRoll(target) {
     if (to) out.boss = { eid: m.eitemid, from: inst.itemid, to, gentype: 'PTGENTP_' + m.type };
   }
   return out;
+}
+// one upcoming floor's rewards as the map / floor has them: treasure enemies, large boxes, boss drop
+function flmUpText(rwds, nm) {
+  const g = t => rwds.filter(w => !w.placeholder && w.gentype === t).map(w => nm(w.to));
+  const parts = [];
+  const z = g('PTGENTP_TRZAKO'), l = g('PTGENTP_TRBOX_L');
+  if (z.length) parts.push(`${z.length} treasure enem${z.length === 1 ? 'y' : 'ies'}: ${z.join(', ')}`);
+  if (l.length) parts.push(`${l.length} large box${l.length === 1 ? '' : 'es'}: ${l.join(', ')}`);
+  const b = rwds.filter(w => !w.placeholder && /^PTGENTP_MBOSS/.test(w.gentype)).map(w => nm(w.to));
+  if (b.length) parts.push(`boss drop: ${b.join(', ')}`);
+  return parts.length ? `<span class="id">· ${parts.join(' · ')}</span>` : '';
 }
 function flmApplyRolls(root, from, to) {
   const r = FLOOR_MOVE.reroll && FLOOR_MOVE.rolls;
@@ -4298,7 +4313,7 @@ function renderLocation() {
         h += r.boxes.map((b, i) => `<tr><td>${b.gentype === 'PTGENTP_TRZAKO' ? 'Treasure enemy' : b.gentype === 'featured' ? 'Featured box (extra large)' : 'Treasure box ' + (i + 1)}</td><td>${nm(b.from)}</td><td>${nm(b.to)}</td></tr>`).join('');
         if (r.boss) h += `<tr><td>Boss drop</td><td>${nm(r.boss.from)}</td><td>${nm(r.boss.to)}</td></tr>`;
         if (r.featured) h += `<tr><td>Featured reward (map)</td><td>${nm(r.featured.from)}</td><td>${nm(r.featured.to)}</td></tr>`;
-        for (const u of arr(r.upcoming)) h += `<tr><td>Upcoming ${u.no}F${u.rare ? ' (rare)' : ''}</td><td class="id">shown on the map</td><td>${u.featured ? nm(u.featured.to) : '—'} <span class="id">· boxes: ${u.rwds.map(w => nm(w.to)).join(', ')}</span></td></tr>`;
+        for (const u of arr(r.upcoming)) h += `<tr><td>Upcoming ${u.no}F${u.rare ? ' (rare)' : ''}</td><td class="id">shown on the map</td><td>${u.featured ? nm(u.featured.to) : '—'} ${flmUpText(u.rwds, nm)}</td></tr>`;
         h += `</tbody></table><div class="toolbar" style="margin-top:6px;"><button class="subtle" id="loc-reroll-again">Reroll again</button><span class="capNote" style="margin:0;">Drawn from ${escapeHtml(t.no + 'F')}'s own drop table, the way the game rolls them.</span></div>`;
       } else h += `<div class="capNote">The rewards rolled for ${escapeHtml(f.no + 'F')} are kept.</div>`;
       h += '</div>';
