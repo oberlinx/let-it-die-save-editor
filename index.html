@@ -1958,7 +1958,7 @@ function renderAll() {
   app.querySelectorAll('[id]').forEach(el => {
     if (el.scrollTop > 0) scrollStates[el.id] = el.scrollTop;
   });
-  app.innerHTML = `\n    ${blockHealth()}\n    <div class="tabbar">\n      ${TABS.map(t => `<button class="tabbtn ${activeTab === t.id ? 'active' : ''}" data-tab-btn="${t.id}">${t.label}</button>`).join('')}\n    </div>\n    <div class="tabpanel" data-tab-panel="account" style="display:${activeTab === 'account' ? 'block' : 'none'}">${blockCurrency()}</div>\n    <div class="tabpanel" data-tab-panel="fighters" style="display:${activeTab === 'fighters' ? 'block' : 'none'}">${blockCharacters()}${blockSkins()}</div>\n    <div class="tabpanel" data-tab-panel="research" style="display:${activeTab === 'research' ? 'block' : 'none'}">${blockBlueprints()}</div>\n    <div class="tabpanel" data-tab-panel="decals" style="display:${activeTab === 'decals' ? 'block' : 'none'}">${blockSkillDecals()}</div>\n    <div class="tabpanel" data-tab-panel="stews" style="display:${activeTab === 'stews' ? 'block' : 'none'}">${blockStews()}</div>\n    <div class="tabpanel" data-tab-panel="bags" style="display:${activeTab === 'bags' ? 'block' : 'none'}">${blockBags()}</div>\n    <div class="tabpanel" data-tab-panel="boxes" style="display:${activeTab === 'boxes' ? 'block' : 'none'}">${blockBoxes()}</div>\n    <div class="tabpanel" data-tab-panel="hub" style="display:${activeTab === 'hub' ? 'block' : 'none'}">${blockHub()}</div>\n    <div class="tabpanel" data-tab-panel="defense" style="display:${activeTab === 'defense' ? 'block' : 'none'}">${blockDefense()}</div>\n    <div class="tabpanel" data-tab-panel="photos" style="display:${activeTab === 'photos' ? 'block' : 'none'}">${blockPhotos()}</div>\n    <div class="tabpanel" data-tab-panel="graves" style="display:${activeTab === 'graves' ? 'block' : 'none'}">${blockGraves()}</div>\n    <div class="tabpanel" data-tab-panel="dates" style="display:${activeTab === 'dates' ? 'block' : 'none'}">${blockDates()}</div>\n    <div class="tabpanel" data-tab-panel="storage" style="display:${activeTab === 'storage' ? 'block' : 'none'}">${blockStorageBox()}</div>\n    <div class="tabpanel" data-tab-panel="rewards" style="display:${activeTab === 'rewards' ? 'block' : 'none'}">${blockRewardBox()}</div>\n    <div class="tabpanel" data-tab-panel="quests" style="display:${activeTab === 'quests' ? 'block' : 'none'}">${blockQuests()}</div>\n    <div class="tabpanel" data-tab-panel="rally" style="display:${activeTab === 'rally' ? 'block' : 'none'}">${blockRally()}</div>\n    <div class="tabpanel" data-tab-panel="location" style="display:${activeTab === 'location' ? 'block' : 'none'}">${blockLocation()}</div>\n    <div class="tabpanel" data-tab-panel="collection" style="display:${activeTab === 'collection' ? 'block' : 'none'}">${blockCollection()}</div>\n    <div class="tabpanel" data-tab-panel="jackals" style="display:${activeTab === 'jackals' ? 'block' : 'none'}">${blockJackals()}</div>\n    <div class="tabpanel" data-tab-panel="stats" style="display:${activeTab === 'stats' ? 'block' : 'none'}">${blockStats()}</div>\n    <div class="tabpanel" data-tab-panel="vip" style="display:${activeTab === 'vip' ? 'block' : 'none'}">${blockVip()}</div>\n    <div class="tabpanel" data-tab-panel="compare" style="display:${activeTab === 'compare' ? 'block' : 'none'}">${blockCompare()}</div>\n  `;
+  app.innerHTML = `\n    ${blockHealth()}\n    <div class="tabbar">\n      ${TABS.map(t => `<button class="tabbtn ${activeTab === t.id ? 'active' : ''}" data-tab-btn="${t.id}">${t.label}</button>`).join('')}\n    </div>\n    <div class="tabpanel" data-tab-panel="account" style="display:${activeTab === 'account' ? 'block' : 'none'}">${blockCurrency()}</div>\n    <div class="tabpanel" data-tab-panel="fighters" style="display:${activeTab === 'fighters' ? 'block' : 'none'}">${blockCharacters()}${blockSkins()}</div>\n    <div class="tabpanel" data-tab-panel="research" style="display:${activeTab === 'research' ? 'block' : 'none'}">${blockBlueprints()}</div>\n    <div class="tabpanel" data-tab-panel="decals" style="display:${activeTab === 'decals' ? 'block' : 'none'}">${blockSkillDecals()}</div>\n    <div class="tabpanel" data-tab-panel="stews" style="display:${activeTab === 'stews' ? 'block' : 'none'}">${blockStews()}</div>\n    <div class="tabpanel" data-tab-panel="bags" style="display:${activeTab === 'bags' ? 'block' : 'none'}">${blockBags()}</div>\n    <div class="tabpanel" data-tab-panel="boxes" style="display:${activeTab === 'boxes' ? 'block' : 'none'}">${blockBoxes()}</div>\n    <div class="tabpanel" data-tab-panel="hub" style="display:${activeTab === 'hub' ? 'block' : 'none'}">${blockHub()}</div>\n    <div class="tabpanel" data-tab-panel="defense" style="display:${activeTab === 'defense' ? 'block' : 'none'}">${blockDefense()}</div>\n    <div class="tabpanel" data-tab-panel="photos" style="display:${activeTab === 'photos' ? 'block' : 'none'}">${blockPhotos()}</div>\n    <div class="tabpanel" data-tab-panel="graves" style="display:${activeTab === 'graves' ? 'block' : 'none'}">${blockGraves()}</div>\n    <div class="tabpanel" data-tab-panel="dates" style="display:${activeTab === 'dates' ? 'block' : 'none'}">${blockDates()}</div>\n    <div class="tabpanel" data-tab-panel="storage" style="display:${activeTab === 'storage' ? 'block' : 'none'}">${blockStorageBox()}</div>\n    <div class="tabpanel" data-tab-panel="rewards" style="display:${activeTab === 'rewards' ? 'block' : 'none'}">${blockRewardBox()}</div>\n    <div class="tabpanel" data-tab-panel="quests" style="display:${activeTab === 'quests' ? 'block' : 'none'}">${blockQuests()}</div>\n    <div class="tabpanel" data-tab-panel="rally" style="display:${activeTab === 'rally' ? 'block' : 'none'}">${blockRally()}</div>\n    <div class="tabpanel" data-tab-panel="location" style="display:${activeTab === 'location' ? 'block' : 'none'}">${blockLocation()}</div>\n    <div class="tabpanel" data-tab-panel="collection" style="display:${activeTab === 'collection' ? 'block' : 'none'}">${blockCollection()}</div>\n    <div class="tabpanel" data-tab-panel="jackals" style="display:${activeTab === 'jackals' ? 'block' : 'none'}">${blockJackals()}</div>\n    <div class="tabpanel" data-tab-panel="stats" style="display:${activeTab === 'stats' ? 'block' : 'none'}">${blockStats()}</div>\n    <div class="tabpanel" data-tab-panel="vip" style="display:${activeTab === 'vip' ? 'block' : 'none'}">${blockVip()}${blockFreeCont()}</div>\n    <div class="tabpanel" data-tab-panel="compare" style="display:${activeTab === 'compare' ? 'block' : 'none'}">${blockCompare()}</div>\n  `;
   wireHealth();
   wireCurrency();
   wireCharacters();
@@ -1981,6 +1981,7 @@ function renderAll() {
   wireStats();
   wireJackals();
   wireVip();
+  wireFreeCont();
   wireCompare();
   document.querySelectorAll('[data-tab-btn]').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -6037,6 +6038,62 @@ function setVipPlan(plan, restart) {
   if (SAVE.user) SAVE.user.vip_level = v.vip_type;
 }
 
+// ---------------------------------------------------------------------------
+// Free continues (EXPERIMENTAL, not confirmed in game). soul.free_continue_max_count and
+// soul.free_continue_count feed the game's own message "You can continue for FREE #0 times a day! (#1 left.)"
+// (TXT_CONTINUE_CONTENTS_MT); the live game's events used 3-4 a day. No master_const limits them. The game
+// (Unreal Engine 3) keeps them as 32-bit signed ints, so 2,147,483,647 is the highest value they can hold.
+// Not known yet: whether free_continue_count is the number used today or the number left, and whether the
+// offline game keeps edited values past its daily reset. The values are written at download.
+// ---------------------------------------------------------------------------
+const FREE_CONT_MAX = 2147483647;
+let FREE_CONT = { root: null, on: false, perDay: 3, counter: 'used' };
+function fcSync() { if (FREE_CONT.root !== RAW_SAV_ROOT) FREE_CONT = { root: RAW_SAV_ROOT, on: false, perDay: 3, counter: 'used' }; }
+function fcClamp(v) { v = Math.floor(Number(v)); return Number.isFinite(v) ? Math.max(0, Math.min(FREE_CONT_MAX, v)) : 0; }
+function fcValues() { const n = fcClamp(FREE_CONT.perDay); return { max: n, count: FREE_CONT.counter === 'left' ? n : 0 }; }
+function applyFreeCont(root) {
+  if (FREE_CONT.root !== RAW_SAV_ROOT || !FREE_CONT.on || !root || !root.soul) return root;
+  const v = fcValues();
+  root.soul.free_continue_max_count = v.max;
+  root.soul.free_continue_count = v.count;
+  return root;
+}
+function blockFreeCont() { return `<div id="fc-host">${fcInner()}</div>`; }
+function fcInner() {
+  fcSync();
+  const s = (RAW_SAV_ROOT && RAW_SAV_ROOT.soul) || {};
+  const has = 'free_continue_max_count' in s || 'free_continue_count' in s;
+  const inp = 'background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);';
+  const v = fcValues();
+  return `<section class="block">
+    <div class="block-head"><div><div class="eyebrow">Experimental</div><h2>Free Continues</h2></div></div>
+    <div class="block-body">
+      <div class="warnNote" style="margin:0 0 10px;"><b>Experimental — not confirmed in game.</b> Test on a backup first and keep your original save. The game's continue screen offers free continues ("You can continue for FREE # times a day!"); this sets how many.</div>
+      <div class="capNote" style="margin-top:0;">In this save: ${Number(s.free_continue_max_count) || 0} per day, counter ${Number(s.free_continue_count) || 0}.${has ? '' : ' (The save has no free-continue fields; they will be added.)'}</div>
+      <label style="cursor:pointer; display:block; margin:6px 0;"><input type="checkbox" id="fc-on" ${FREE_CONT.on ? 'checked' : ''} style="width:auto; margin-right:6px;">Change free continues on download</label>
+      <div class="grid" style="${FREE_CONT.on ? '' : 'opacity:.5; pointer-events:none;'}">
+        <div class="field"><label>Free continues per day</label><div style="display:flex; gap:6px;"><input type="number" id="fc-per-day" min="0" max="${FREE_CONT_MAX}" value="${fcClamp(FREE_CONT.perDay)}" style="${inp} width:100%;"><button class="subtle" id="fc-max" title="The highest value the game can store (32-bit)">Max</button></div></div>
+        <div class="field"><label>Counter (free_continue_count)</label><select id="fc-counter" style="${inp} width:100%;">
+          <option value="used" ${FREE_CONT.counter === 'used' ? 'selected' : ''}>Test A: counts continues used → write 0</option>
+          <option value="left" ${FREE_CONT.counter === 'left' ? 'selected' : ''}>Test B: counts continues left → write ${v.max}</option></select></div>
+      </div>
+      ${FREE_CONT.on ? `<div class="capNote">On download: free_continue_max_count = <b>${v.max.toLocaleString()}</b>, free_continue_count = <b>${v.count.toLocaleString()}</b>.</div>` : ''}
+      <div class="capNote"><b>To test:</b> keep a backup, download with Test A, then die in the Tower. The continue screen shows "(# left)". If it shows your number, keep Test A. If it shows 0, use Test B. Then play past the game's daily reset and check the number is still there. Very large numbers are allowed up to ${FREE_CONT_MAX.toLocaleString()} (the most the game can store); start with a small number such as 3 to confirm it works first.</div>
+    </div>
+  </section>`;
+}
+function wireFreeCont() {
+  const on = document.getElementById('fc-on');
+  if (!on) return;
+  // rebuilt after the event, so a number box losing focus while it's replaced can't rebuild it twice
+  const rerender = () => setTimeout(() => { const host = document.getElementById('fc-host'); if (host) { host.innerHTML = fcInner(); wireFreeCont(); } }, 0);
+  on.addEventListener('change', () => { FREE_CONT.on = on.checked; rerender(); toast(on.checked ? 'Free continues will be set on download' : 'Free continues left as they are'); });
+  const pd = document.getElementById('fc-per-day');
+  pd.addEventListener('change', () => { const v = fcClamp(pd.value); if (String(v) !== String(pd.value)) toast(`Clamped to ${v.toLocaleString()} (0 to ${FREE_CONT_MAX.toLocaleString()})`); if (v === fcClamp(FREE_CONT.perDay) && String(v) === String(pd.value)) return; FREE_CONT.perDay = v; rerender(); });
+  document.getElementById('fc-max').addEventListener('click', () => { FREE_CONT.perDay = FREE_CONT_MAX; rerender(); });
+  document.getElementById('fc-counter').addEventListener('change', e => { FREE_CONT.counter = e.target.value; rerender(); });
+}
+
 function blockVip() {
   const vip = SAVE.soul.vip;
   const expiresDate = vip.expired_time ? new Date(vip.expired_time * 1e3) : null;
@@ -8556,7 +8613,7 @@ function reviewFileName(ext, stamp) { return `brggame_${stamp || reviewStamp()}.
 function buildDownloadRoot() {
   normalizePresents(SAVE.presents);
   questOrdForSave();
-  return applyJackals(applyBossLock(applyFloorMove(applyStampRally(applyStampMark(applyAccountChoice(restoreEmptyShapes(applyDateRules(buildRawSavRootFromSave(SAVE, RAW_SAV_ROOT, RAW_SAV_MAIN_UID)), RAW_SAV_ROOT)))))));
+  return applyFreeCont(applyJackals(applyBossLock(applyFloorMove(applyStampRally(applyStampMark(applyAccountChoice(restoreEmptyShapes(applyDateRules(buildRawSavRootFromSave(SAVE, RAW_SAV_ROOT, RAW_SAV_MAIN_UID)), RAW_SAV_ROOT))))))));
 }
 
 const REVIEW_SOUL_LABELS = {
