@@ -6039,18 +6039,19 @@ function setVipPlan(plan, restart) {
 }
 
 // ---------------------------------------------------------------------------
-// Free continues (EXPERIMENTAL, not confirmed in game). soul.free_continue_max_count and
-// soul.free_continue_count feed the game's own message "You can continue for FREE #0 times a day! (#1 left.)"
-// (TXT_CONTINUE_CONTENTS_MT); the live game's events used 3-4 a day. No master_const limits them. The game
-// (Unreal Engine 3) keeps them as 32-bit signed ints; the editor caps them at 9,999, which the continue screen can show.
-// Not known yet: whether free_continue_count is the number used today or the number left, and whether the
-// offline game keeps edited values past its daily reset. The values are written at download.
+// Free continues. soul.free_continue_max_count (per day) and soul.free_continue_count (left today) feed the
+// game's own message "You can continue for FREE #0 times a day! (#1 left.)" (TXT_CONTINUE_CONTENTS_MT); the
+// live game's events used 3-4 a day. No master_const limits them; the editor caps them at 9,999.
+// Confirmed in game: with 9,999 / 9,999 written, one free continue left the save at 9,999 per day, 9,998 left,
+// so the counter is continues LEFT and the game keeps edited values. Not checked yet: what the game's daily
+// reset does to them. The values are written at download.
 // ---------------------------------------------------------------------------
 const FREE_CONT_MAX = 9999;
-let FREE_CONT = { root: null, on: false, perDay: 3, counter: 'used' };
-function fcSync() { if (FREE_CONT.root !== RAW_SAV_ROOT) FREE_CONT = { root: RAW_SAV_ROOT, on: false, perDay: 3, counter: 'used' }; }
+let FREE_CONT = { root: null, on: false, perDay: 3 };
+function fcSync() { if (FREE_CONT.root !== RAW_SAV_ROOT) FREE_CONT = { root: RAW_SAV_ROOT, on: false, perDay: 3 }; }
 function fcClamp(v) { v = Math.floor(Number(v)); return Number.isFinite(v) ? Math.max(0, Math.min(FREE_CONT_MAX, v)) : 0; }
-function fcValues() { const n = fcClamp(FREE_CONT.perDay); return { max: n, count: FREE_CONT.counter === 'left' ? n : 0 }; }
+// all of today's free continues are left
+function fcValues() { const n = fcClamp(FREE_CONT.perDay); return { max: n, count: n }; }
 function applyFreeCont(root) {
   if (FREE_CONT.root !== RAW_SAV_ROOT || !FREE_CONT.on || !root || !root.soul) return root;
   const v = fcValues();
@@ -6066,19 +6067,15 @@ function fcInner() {
   const inp = 'background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);';
   const v = fcValues();
   return `<section class="block">
-    <div class="block-head"><div><div class="eyebrow">Experimental</div><h2>Free Continues</h2></div></div>
+    <div class="block-head"><div><div class="eyebrow">Continue Insurance</div><h2>Free Continues</h2></div></div>
     <div class="block-body">
-      <div class="warnNote" style="margin:0 0 10px;"><b>Experimental — not confirmed in game.</b> Test on a backup first and keep your original save. The game's continue screen offers free continues ("You can continue for FREE # times a day!"); this sets how many.</div>
-      <div class="capNote" style="margin-top:0;">In this save: ${Number(s.free_continue_max_count) || 0} per day, counter ${Number(s.free_continue_count) || 0}.${has ? '' : ' (The save has no free-continue fields; they will be added.)'}</div>
+      <div class="capNote" style="margin-top:0;">The game's continue screen offers free continues ("You can continue for FREE # times a day! (# left.)"); this sets how many, all available today. Confirmed in game; what the game's daily reset does to the number hasn't been checked yet, so keep a backup.</div>
+      <div class="capNote" style="margin-top:0;">In this save: ${(Number(s.free_continue_max_count) || 0).toLocaleString()} per day, ${(Number(s.free_continue_count) || 0).toLocaleString()} left today.${has ? '' : ' (The save has no free-continue fields; they will be added.)'}</div>
       <label style="cursor:pointer; display:block; margin:6px 0;"><input type="checkbox" id="fc-on" ${FREE_CONT.on ? 'checked' : ''} style="width:auto; margin-right:6px;">Change free continues on download</label>
       <div class="grid" style="${FREE_CONT.on ? '' : 'opacity:.5; pointer-events:none;'}">
         <div class="field"><label>Free continues per day</label><div style="display:flex; gap:6px;"><input type="number" id="fc-per-day" min="0" max="${FREE_CONT_MAX}" value="${fcClamp(FREE_CONT.perDay)}" style="${inp} width:100%;"><button class="subtle" id="fc-max" title="The highest value the editor allows">Max</button></div></div>
-        <div class="field"><label>Counter (free_continue_count)</label><select id="fc-counter" style="${inp} width:100%;">
-          <option value="used" ${FREE_CONT.counter === 'used' ? 'selected' : ''}>Test A: counts continues used → write 0</option>
-          <option value="left" ${FREE_CONT.counter === 'left' ? 'selected' : ''}>Test B: counts continues left → write ${v.max}</option></select></div>
       </div>
-      ${FREE_CONT.on ? `<div class="capNote">On download: free_continue_max_count = <b>${v.max.toLocaleString()}</b>, free_continue_count = <b>${v.count.toLocaleString()}</b>.</div>` : ''}
-      <div class="capNote"><b>To test:</b> keep a backup, download with Test A, then die in the Tower. The continue screen shows "(# left)". If it shows your number, keep Test A. If it shows 0, use Test B. Then play past the game's daily reset and check the number is still there. Up to ${FREE_CONT_MAX.toLocaleString()} are allowed; start with a small number such as 3 to confirm it works first.</div>
+      ${FREE_CONT.on ? `<div class="capNote">On download: <b>${v.max.toLocaleString()}</b> free continues per day, <b>${v.count.toLocaleString()}</b> left today (up to ${FREE_CONT_MAX.toLocaleString()}).</div>` : ''}
     </div>
   </section>`;
 }
@@ -6091,7 +6088,6 @@ function wireFreeCont() {
   const pd = document.getElementById('fc-per-day');
   pd.addEventListener('change', () => { const v = fcClamp(pd.value); if (String(v) !== String(pd.value)) toast(`Clamped to ${v.toLocaleString()} (0 to ${FREE_CONT_MAX.toLocaleString()})`); if (v === fcClamp(FREE_CONT.perDay) && String(v) === String(pd.value)) return; FREE_CONT.perDay = v; rerender(); });
   document.getElementById('fc-max').addEventListener('click', () => { FREE_CONT.perDay = FREE_CONT_MAX; rerender(); });
-  document.getElementById('fc-counter').addEventListener('change', e => { FREE_CONT.counter = e.target.value; rerender(); });
 }
 
 function blockVip() {
