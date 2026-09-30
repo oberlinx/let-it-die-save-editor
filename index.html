@@ -6043,8 +6043,10 @@ function setVipPlan(plan, restart) {
 // game's own message "You can continue for FREE #0 times a day! (#1 left.)" (TXT_CONTINUE_CONTENTS_MT); the
 // live game's events used 3-4 a day. No master_const limits them; the editor caps them at 9,999.
 // Confirmed in game: with 9,999 / 9,999 written, one free continue left the save at 9,999 per day, 9,998 left,
-// so the counter is continues LEFT and the game keeps edited values. Not checked yet: what the game's daily
-// reset does to them. The values are written at download.
+// so the counter is continues LEFT and the game keeps edited values. They only last until the game's daily
+// reset (first login of a new day, keyed on user.last_login_date): the offline game sets them back to 0 then,
+// as no event is running. Holding the reset off would mean a future last_login_date, which the Dates tab
+// treats as damage, so the editor doesn't. The values are written at download.
 // ---------------------------------------------------------------------------
 const FREE_CONT_MAX = 9999;
 let FREE_CONT = { root: null, on: false, perDay: 3 };
@@ -6069,7 +6071,7 @@ function fcInner() {
   return `<section class="block">
     <div class="block-head"><div><div class="eyebrow">Continue Insurance</div><h2>Free Continues</h2></div></div>
     <div class="block-body">
-      <div class="capNote" style="margin-top:0;">The game's continue screen offers free continues ("You can continue for FREE # times a day! (# left.)"); this sets how many, all available today. Confirmed in game; what the game's daily reset does to the number hasn't been checked yet, so keep a backup.</div>
+      <div class="capNote" style="margin-top:0;">The game's continue screen offers free continues ("You can continue for FREE # times a day! (# left.)"); this sets how many, all available today. Confirmed in game. They last until the game's daily reset: on the first login of a new day the game sets them back to 0, so set them again each day.</div>
       <div class="capNote" style="margin-top:0;">In this save: ${(Number(s.free_continue_max_count) || 0).toLocaleString()} per day, ${(Number(s.free_continue_count) || 0).toLocaleString()} left today.${has ? '' : ' (The save has no free-continue fields; they will be added.)'}</div>
       <label style="cursor:pointer; display:block; margin:6px 0;"><input type="checkbox" id="fc-on" ${FREE_CONT.on ? 'checked' : ''} style="width:auto; margin-right:6px;">Change free continues on download</label>
       <div class="grid" style="${FREE_CONT.on ? '' : 'opacity:.5; pointer-events:none;'}">
