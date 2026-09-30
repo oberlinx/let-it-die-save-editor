@@ -4049,11 +4049,21 @@ function flmRefArea(root, flrid) {
   const a = arr(root && root.floor && root.floor.rlg && root.floor.rlg.archive).find(x => x && x.flrid === flrid);
   return (a && a.ref_areaid) || '-';
 }
+// master_item grp -> items, built once per ITEM_INDEX
+let FLM_GRP = { index: null, map: null };
+function flmGroup(grp) {
+  if (FLM_GRP.index !== ITEM_INDEX) {
+    const map = new Map();
+    for (const i of Object.values(ITEM_INDEX)) { const g = Number(i.grp); if (!map.has(g)) map.set(g, []); map.get(g).push(i); }
+    FLM_GRP = { index: ITEM_INDEX, map };
+  }
+  return FLM_GRP.map.get(Number(grp)) || [];
+}
 function flmDraw(flrid, areaid, refareaid, type) {
   const rows = arr(AP && AP.hvnBossDrops).filter(r => r.flrid === flrid && r.areaid === areaid && r.type === type && (r.refareaid === refareaid || r.refareaid === '-'));
   const pool = [];
   for (const r of rows) {
-    const items = Object.values(ITEM_INDEX).filter(i => Number(i.grp) === Number(r.grp));
+    const items = flmGroup(r.grp);
     if (items.length) pool.push({ w: Number(r.freq) || 0, items });
   }
   const total = pool.reduce((n, p) => n + p.w, 0);
@@ -4071,6 +4081,13 @@ function flmDraw(flrid, areaid, refareaid, type) {
 function flmRouteBoss(id) {
   const key = hvnRoute(id).key;
   return arr(AP && AP.hvnFloors).filter(f => Number(f.mbsmax) > 0 && hvnRoute(f.id).key === key).sort((a, b) => a.no - b.no);
+}
+// The download root's soul is merged from SAVE.soul, so soul.hvntrinfo is still the loaded save's own array.
+// Give the root its own copy before changing it, or every build (even a cancelled review) would change the
+// loaded save and repeat the change on the next download.
+function flmOwnHvn(root) {
+  const s = root && root.soul;
+  if (s && s.hvntrinfo && typeof s.hvntrinfo === 'object') s.hvntrinfo = JSON.parse(JSON.stringify(s.hvntrinfo));
 }
 function flmShiftHvn(root, from, to) {
   const list = root && root.soul && root.soul.hvntrinfo;
@@ -4252,6 +4269,7 @@ function applyFloorMove(root) {
   const f = hvnFloor(to);
   if (!from || !f || from === to) return root;
   root.soul.flrid = to;
+  flmOwnHvn(root);
   flmShiftHvn(root, from, to);
   if (root.floor) {
     const stamp = root.floor.stamp;
@@ -4356,6 +4374,7 @@ function applyBossLock(root) {
   if (BOSS_LOCK.root !== RAW_SAV_ROOT || !BOSS_LOCK.mode || !root || !root.soul) return root;
   const p = blkPlanFresh();
   if (!p || p.from !== root.soul.flrid) return root;
+  flmOwnHvn(root);
   if (!Array.isArray(root.soul.hvntrinfo)) root.soul.hvntrinfo = [];
   const list = root.soul.hvntrinfo;
   for (const it of p.items) {
@@ -4398,6 +4417,7 @@ function renderBossLock() {
     }).join('');
     h += `</tbody></table><div class="toolbar" style="margin-top:6px;"><button class="subtle" id="blk-reroll">Reroll again</button><span class="capNote" style="margin:0;">${changed.length} floor${changed.length === 1 ? '' : 's'} will be written. Rewards are drawn from each floor's own tables for the new arena.</span></div>`;
     h += `<div class="capNote">Not changed: the floor you're on (already built), NEO map B floors (one fixed arena), and planned floors that are already ${escapeHtml(BLK_MODES[p.mode].label.replace(/ only.*$/, '').toLowerCase())} floors.${p.mode === 'boss' ? ' Main bosses have no boss drop, so their floors get only the three large boxes; that layout hasn\'t been seen in a save yet (pick Mid-boss only to avoid it).' : ''}${from !== s.flrid ? ' Applied after the floor move above, so it replaces the moved floors\' rerolled rewards.' : ''} New floors get a normal (not rare) featured reward.</div>`;
+    if (p.items.some(it => /_KIS_RUSH/.test((arr(AP.hvnBossKis).find(r => r.areaid === (it.entry || it.old || {}).refareaid) || {}).kis || ''))) h += `<div class="capNote">Screamer Pit chests (treasure enemies) can hold any faction's metal, on every route: the game's own pit table mixes all four (a W.E pit can drop D.O.D. ARMS, Candle Wolf or M.I.L.K. metal). The large boxes, featured reward and boss drop stay the route's own faction.</div>`;
     h += `<div class="capNote"><b>To test:</b> download, play past two or three boss floors, quit on any Heaven floor and load the save here. If the floors below still show as locked, the game kept the entries.</div>`;
   }
   host.innerHTML = h;
@@ -8687,14 +8707,17 @@ function reviewDiff(A, B, rawA, rawB) {
   const locLbl = id => !id ? 'none' : hvnFloor(id) ? hvnFloorLabel(hvnFloor(id)) : id;
   if (fa !== fb) lc.lines.push(`Paused floor: ${locLbl(fa)} → ${locLbl(fb)}`);
   if (BOSS_LOCK.root === RAW_SAV_ROOT && BOSS_LOCK.mode) {
-    const bl = sec('Boss floor lock (experimental)'), hA = new Map(arr(rawA.soul && rawA.soul.hvntrinfo).map(e => [ e.flrid, e ]));
+    // compare with the planned floors as they'd be after any floor move (the paused floor is never locked)
+    const bl = sec('Boss floor lock (experimental)'), hA = blkExisting(rawB.soul && rawB.soul.flrid);
     bl.lines.push(`Locked to: ${BLK_MODES[BOSS_LOCK.mode].label}`);
     for (const e of arr(rawB.soul && rawB.soul.hvntrinfo)) {
+      if (e.flrid === rawB.soul.flrid) continue;
       const o = hA.get(e.flrid), f = hvnFloor(e.flrid), lbl = f ? f.no + 'F' : e.flrid;
       if (!o) bl.lines.push(`${lbl}: added as ${blkKind(e.refareaid).label}`);
       else if (o.refareaid !== e.refareaid) bl.lines.push(`${lbl}: ${blkKind(o.refareaid).label} → ${blkKind(e.refareaid).label}`);
     }
-    if (bl.lines.length > 14) { const n = bl.lines.length - 1; bl.lines.length = 1; bl.lines.push(`${n} boss floors written`); }
+    if (bl.lines.length === 1) bl.lines.push('No planned boss floors needed changing');
+    else if (bl.lines.length > 14) { const n = bl.lines.length - 1; bl.lines.length = 1; bl.lines.push(`${n} boss floors written`); }
   }
   const sk = sec('Armor Skins (unlocked by R&D at +4)');
   const skA = armorSkinsUnlocked(ra), skB = armorSkinsUnlocked(rb);
