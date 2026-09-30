@@ -25,7 +25,7 @@ You can also download `index.html` and open it straight from your PC.
 |---|---|
 | Account | Kill Coins and SPLithium with their bank and tank levels, TDM points and rank, and weapon mastery. The account name and ID are shown but locked |
 | Fighters | Fighter Freezer: fighter model and gas mask; grade and limit break; stats as dropdowns limited to what the grade and limit break allow, with level worked out from the stats; decals, bags and inventories, with **Repair & refill all** (full durability and ammo); equipped weapons (all 6 weapon slots and which one is in each hand) and armor; raise the freezer level (adds hangers), add a new fighter into an empty hanger (the way the Fighter Depot does), delete a fighter the way the game does, and recover a dead fighter (Hater) for free |
-| Research | Blueprint research (Chokufunsha) unlocks and levels. Armor researched to +4 unlocks its Armor Skin, as in the game |
+| Research | Blueprint research (Chokufunsha) unlocks and levels. Armor researched to +4 unlocks its Armor Skin, as in the game. Blueprints the game knows about but you haven't developed are marked (**blueprint known, not developed** or **unrevealed blueprint**); ticking one develops it at +0, and unticking it puts it back the way the game had it |
 | Decals | Skill decal stock. Premium decals are marked. PlayStation-only decals are hidden unless **Include PS-only** is ticked (for modded PC games); ones already in the save are tagged and can be set to 0 |
 | **Stews** | Mushroom Stew decal queue: see upcoming pulls, dedupe, move a rarity to the front, stack, reroll, clear, undo |
 | **Mystery Bags** | Lost Bags from Tokyo Death Metro: see what each rarity will give, set any slot, fill all, or reroll from the game's odds |

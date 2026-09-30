@@ -900,7 +900,11 @@ function buildRawSavRootFromSave(SAVE, rawRoot, mainUid) {
       });
     }
   }
-  root.soul.skl.eqskl[mainUid] = newEqskl;
+  // keep the game's order (the rebuild above groups decals by fighter); new or changed ones go last
+  const eqsklKey = e => `${e.cid}|${e.slot}|${e.sklid}`;
+  const eqsklAt = new Map(arr(root.soul.skl.eqskl[mainUid]).map((e, i) => [ eqsklKey(e), i ]));
+  const eqsklPos = e => eqsklAt.has(eqsklKey(e)) ? eqsklAt.get(eqsklKey(e)) : Number.MAX_SAFE_INTEGER;
+  root.soul.skl.eqskl[mainUid] = newEqskl.map((e, i) => [ e, i ]).sort((a, b) => eqsklPos(a[0]) - eqsklPos(b[0]) || a[1] - b[1]).map(x => x[0]);
   const oldPssklBySklid = {};
   for (const s of arr(root.soul.skl.psskl)) oldPssklBySklid[s.sklid] = s;
   root.soul.skl.psskl = (SAVE.soul.psskls || []).map(e => {
@@ -1571,6 +1575,7 @@ document.getElementById('file-save').addEventListener('change', async e => {
       }
     }
     try { RESEARCH_GAME_SKIP = researchGameSkips(SAVE.user_research); } catch (err) { RESEARCH_GAME_SKIP = new Map(); }
+    RESEARCH_KNOWN = researchKnownSnapshot(SAVE.user_research);
     HEALTH_LOAD = { repairedChars: repairedChars, repairedFighters: repaired };
     HEALTH.open = null;
     try { runSaveCheck(); } catch (err) { console.warn('Save check failed:', err); }
@@ -3335,6 +3340,32 @@ function armorSkinsUnlocked(research) {
   return out;
 }
 
+// Blueprints the game knows about but that aren't developed (no FINISHED entry), as the game writes them:
+//   research_type 'MAP' -- a blueprint analysed at Choku-Funsha, ready for R&D ("known")
+//   research_type ''    -- an unrevealed ("???") blueprint picked up but not analysed yet
+// Both are one entry at lvl 1 on the first part of a chain (seen in a save with 100 MAP and 11 unrevealed).
+// The list shows them with a badge; unticking a part that was one of these when the save was loaded puts
+// the game's entry back instead of forgetting the blueprint.
+let RESEARCH_KNOWN = new Map();
+const RESEARCH_KNOWN_TYPES = new Set([ 'MAP', '' ]);
+function researchKnownSnapshot(research) {
+  const out = new Map();
+  for (const r of arr(research)) if (r && RESEARCH_KNOWN_TYPES.has(r.research_type)) (out.get(r.ptid) || out.set(r.ptid, []).get(r.ptid)).push(JSON.parse(JSON.stringify(r)));
+  return out;
+}
+// 'known' / 'unrevealed' for a blueprint that isn't developed, else ''
+function researchKnownState(research, ptid) {
+  let st = '';
+  for (const r of arr(research)) {
+    if (!r || r.ptid !== ptid) continue;
+    if (r.research_type === 'FINISHED') return '';
+    if (r.research_type === 'MAP') st = 'known';
+    else if (r.research_type === '' && !st) st = 'unrevealed';
+  }
+  return st;
+}
+const RESEARCH_KNOWN_LABEL = { known: 'blueprint known, not developed', unrevealed: 'unrevealed blueprint (not analysed)' };
+
 function normalizeResearchMarkers(research, found, skip) {
   skip = skip || RESEARCH_GAME_SKIP;
   const MARKERS = new Set([ 'LEVELUP', 'REMODEL' ]);
@@ -3454,7 +3485,12 @@ function wireBlueprints() {
     } else {
       for (let i = idx; i < chain.length; i++) {
         // starting blueprints are never removed; they go back to their first level
-        if (INITIAL_PTIDS.has(chain[i])) writeLadder(chain[i], 1); else removeEntry(chain[i]);
+        if (INITIAL_PTIDS.has(chain[i])) writeLadder(chain[i], 1);
+        else {
+          removeEntry(chain[i]);
+          // a blueprint the save had as known / unrevealed goes back to that, not to unknown
+          for (const k of RESEARCH_KNOWN.get(chain[i]) || []) research.push(JSON.parse(JSON.stringify(k)));
+        }
       }
       if (INITIAL_PTIDS.has(ptid)) toast(`${(PT_INDEX[ptid] || {}).name || ptid} is a starting blueprint, so it was reset to +0 instead of removed.`);
     }
@@ -3499,7 +3535,7 @@ function wireBlueprints() {
         const e = entryFor(p.id);
         const maxLvl = maxPartLevel(p);
         const dispMax = maxDisplayLevel(p);
-        return `<div class="listRow">\n                  <input type="checkbox" data-bp="${p.id}" ${unlocked ? 'checked' : ''}>\n                  <div class="name">${escapeHtml(p.name)} ${p.is_limitbreak ? '<span class="badge lb">Uncap · in-game +' + dispMax + '</span>' : `<span class="badge">in-game +${dispMax}</span>`} ${isPsOnlyPart(p.id) ? '<span class="badge" title="PlayStation-only; a PC game needs to be modded to have it">PS only</span>' : ''} ${armorSkinCapable(p) ? (armorSkinUnlocked(research, p.id) ? '<span class="badge" title="Researched to +4 or more, so the game offers it as an Armor Skin">skin unlocked</span>' : '<span class="badge" style="opacity:.55;" title="Researching this to +4 unlocks it as an Armor Skin">skin at +4</span>') : ''} ${hasNoBlueprint(p.id) ? '<span class="badge" style="background:var(--accent); color:#fff;">(THIS HAS NO BLUEPRINT)</span>' : ''}</div>\n                  ${unlocked ? `<span style="font-size:11px; color:var(--text-dim);">+</span><input type="number" class="bp-level" data-bp-level="${p.id}" min="${minDisplayLevel(p)}" max="${dispMax}" value="${displayFromRaw(p, e ? e.lvl : 1)}" style="width:60px;" title="In-game level, +${minDisplayLevel(p)} to +${dispMax}">` : ''}\n                  <div class="id">${p.id}</div>\n                </div>`;
+        return `<div class="listRow">\n                  <input type="checkbox" data-bp="${p.id}" ${unlocked ? 'checked' : ''}>\n                  <div class="name">${escapeHtml(p.name)} ${p.is_limitbreak ? '<span class="badge lb">Uncap · in-game +' + dispMax + '</span>' : `<span class="badge">in-game +${dispMax}</span>`} ${!unlocked && researchKnownState(research, p.id) ? `<span class="badge" style="border-color:var(--accent);" title="The game has this blueprint: ${researchKnownState(research, p.id) === 'known' ? 'analysed, waiting for R&amp;D' : 'picked up but not analysed yet'}. Ticking it develops it (+0); unticking it again puts it back to this.">${RESEARCH_KNOWN_LABEL[researchKnownState(research, p.id)]}</span>` : ''} ${isPsOnlyPart(p.id) ? '<span class="badge" title="PlayStation-only; a PC game needs to be modded to have it">PS only</span>' : ''} ${armorSkinCapable(p) ? (armorSkinUnlocked(research, p.id) ? '<span class="badge" title="Researched to +4 or more, so the game offers it as an Armor Skin">skin unlocked</span>' : '<span class="badge" style="opacity:.55;" title="Researching this to +4 unlocks it as an Armor Skin">skin at +4</span>') : ''} ${hasNoBlueprint(p.id) ? '<span class="badge" style="background:var(--accent); color:#fff;">(THIS HAS NO BLUEPRINT)</span>' : ''}</div>\n                  ${unlocked ? `<span style="font-size:11px; color:var(--text-dim);">+</span><input type="number" class="bp-level" data-bp-level="${p.id}" min="${minDisplayLevel(p)}" max="${dispMax}" value="${displayFromRaw(p, e ? e.lvl : 1)}" style="width:60px;" title="In-game level, +${minDisplayLevel(p)} to +${dispMax}">` : ''}\n                  <div class="id">${p.id}</div>\n                </div>`;
       }).join('')}\n            </div>\n          </div>`).join('');
     }
     document.getElementById('bp-slot-content').innerHTML = renderSlotGroup(researchSubTab);
@@ -4303,8 +4339,8 @@ function applyFloorMove(root) {
 // The NEO routes' map B floors have one fixed arena (ARC/MET/AMS/RFT_AREA_HVN) and are never either.
 // The roll is kept in soul.hvntrinfo (the floor you're on plus the next three boss floors) with the
 // rewards drawn for that arena. As seen in saves: mid-boss = [MBOSSn drop, 3x TRBOX_L]; pit = [3x TRZAKO,
-// 3x TRBOX_L placeholders from the pit's one-item table]; map B = [3x TRBOX_L]. Main bosses have no drop
-// table, so their entry is taken to be [3x TRBOX_L] (not seen in a save yet).
+// 3x TRBOX_L placeholders from the pit's one-item table]; map B = [3x TRBOX_L]; main boss = [3x TRBOX_L]
+// (no boss drop; seen in a save paused on regular Heaven 105F with BOSS1 / BOSS4 floors planned).
 // A lock redraws each upcoming entry that isn't already of the chosen kind (not the floor you're on: it's
 // already built) from the arenas of that kind, with the game's weights. It can also write entries for
 // every remaining boss floor of the route, to test whether the game keeps them for the whole run.
@@ -4423,7 +4459,7 @@ function renderBossLock() {
       return `<tr><td>${escapeHtml(hvnFloorLabel(it.floor))}</td><td>${it.old ? escapeHtml(was) : was}</td><td>${now}</td><td>${blkRewardText(it.entry || it.old, nm)}</td></tr>`;
     }).join('');
     h += `</tbody></table><div class="toolbar" style="margin-top:6px;"><button class="subtle" id="blk-reroll">Reroll again</button><span class="capNote" style="margin:0;">${changed.length} floor${changed.length === 1 ? '' : 's'} will be written. Rewards are drawn from each floor's own tables for the new arena.</span></div>`;
-    h += `<div class="capNote">Not changed: the floor you're on (already built), NEO map B floors (one fixed arena), and planned floors that are already ${escapeHtml(BLK_MODES[p.mode].label.replace(/ only.*$/, '').toLowerCase())} floors.${p.mode === 'boss' ? ' Main bosses have no boss drop, so their floors get only the three large boxes; that layout hasn\'t been seen in a save yet (pick Mid-boss only to avoid it).' : ''}${from !== s.flrid ? ' Applied after the floor move above, so it replaces the moved floors\' rerolled rewards.' : ''} New floors get a normal (not rare) featured reward.</div>`;
+    h += `<div class="capNote">Not changed: the floor you're on (already built), NEO map B floors (one fixed arena), and planned floors that are already ${escapeHtml(BLK_MODES[p.mode].label.replace(/ only.*$/, '').toLowerCase())} floors.${p.mode === 'boss' ? ' Main bosses have no boss drop, so their floors get the featured reward and three large boxes, as the game writes them.' : ''}${from !== s.flrid ? ' Applied after the floor move above, so it replaces the moved floors\' rerolled rewards.' : ''} New floors get a normal (not rare) featured reward.</div>`;
     if (p.items.some(it => /_KIS_RUSH/.test((arr(AP.hvnBossKis).find(r => r.areaid === (it.entry || it.old || {}).refareaid) || {}).kis || ''))) h += `<div class="capNote">Screamer Pit chests (treasure enemies) can hold any faction's metal, on every route: the game's own pit table mixes all four (a W.E pit can drop D.O.D. ARMS, Candle Wolf or M.I.L.K. metal). The large boxes, featured reward and boss drop stay the route's own faction.</div>`;
     h += `<div class="capNote"><b>To test:</b> download, play past two or three boss floors, quit on any Heaven floor and load the save here. If the floors below still show as locked, the game kept the entries.</div>`;
   }
@@ -8669,9 +8705,15 @@ function reviewDiff(A, B, rawA, rawB) {
   for (const ptid of new Set(ra.concat(rb).map(r => r.ptid))) {
     const ta = cmpTopFinished(ra, ptid), tb = cmpTopFinished(rb, ptid);
     if (ta === tb) continue;
-    const r = PT_INDEX[ptid], lv = t => t ? '+' + displayFromRaw(r, t) : 'not researched';
+    const r = PT_INDEX[ptid], lv = (t, list) => t ? '+' + displayFromRaw(r, t) : RESEARCH_KNOWN_LABEL[researchKnownState(list, ptid)] || 'not researched';
     const cap = maxPartLevel(r);
-    rs.lines.push(r && cap && (ta > cap || tb > cap) ? `${r.name || ptid}: researched to level ${ta || 0} → ${tb || 0} (goes up to +${maxDisplayLevel(r)})` : `${(r && r.name) || ptid}: ${lv(ta)} → ${lv(tb)}`);
+    rs.lines.push(r && cap && (ta > cap || tb > cap) ? `${r.name || ptid}: researched to level ${ta || 0} → ${tb || 0} (goes up to +${maxDisplayLevel(r)})` : `${(r && r.name) || ptid}: ${lv(ta, ra)} → ${lv(tb, rb)}`);
+  }
+  // blueprints the game knew about that are now forgotten (or newly known) without being developed
+  for (const ptid of new Set(ra.concat(rb).map(r => r.ptid))) {
+    if (cmpTopFinished(ra, ptid) || cmpTopFinished(rb, ptid)) continue;
+    const ka = researchKnownState(ra, ptid), kb = researchKnownState(rb, ptid);
+    if (ka !== kb) rs.lines.push(`${(PT_INDEX[ptid] && PT_INDEX[ptid].name) || ptid}: ${RESEARCH_KNOWN_LABEL[ka] || 'not known'} → ${RESEARCH_KNOWN_LABEL[kb] || 'not known'}`);
   }
   // "next level" / "next tier" markers (what Chokufunsha lets you research next)
   const mk = list => new Set(list.filter(r => r.research_type === 'LEVELUP' || r.research_type === 'REMODEL').map(r => `${r.ptid}|${r.research_type}|${r.lvl}`));
