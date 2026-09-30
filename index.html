@@ -1160,10 +1160,17 @@ function buildRawSavRootFromSave(SAVE, rawRoot, mainUid) {
     owner: 'COIN_LOCKER',
     itemid: it.itemId
   });
-  root.part.pts[mainUid] = preservedPts.concat(newPts);
-  root.mushroom.msrs = preservedMsrs.concat(newMsrs);
-  root.beast.bsts = preservedBsts.concat(newBsts);
-  root.item.items = preservedItems.concat(newItems);
+  // keep each list in the order the game wrote it (rebuilt entries would otherwise move to the end); entries
+  // the editor added go last, in the order they were built
+  const inOrigOrder = (list, orig) => {
+    const at = new Map(arr(orig).map((x, i) => [ x && x.eid, i ]));
+    const pos = x => at.has(x && x.eid) ? at.get(x.eid) : Number.MAX_SAFE_INTEGER;
+    return list.map((x, i) => [ x, i ]).sort((a, b) => pos(a[0]) - pos(b[0]) || a[1] - b[1]).map(e => e[0]);
+  };
+  root.part.pts[mainUid] = inOrigOrder(preservedPts.concat(newPts), rawRoot.part && rawRoot.part.pts && rawRoot.part.pts[mainUid]);
+  root.mushroom.msrs = inOrigOrder(preservedMsrs.concat(newMsrs), rawRoot.mushroom && rawRoot.mushroom.msrs);
+  root.beast.bsts = inOrigOrder(preservedBsts.concat(newBsts), rawRoot.beast && rawRoot.beast.bsts);
+  root.item.items = inOrigOrder(preservedItems.concat(newItems), rawRoot.item && rawRoot.item.items);
   root.soul.present = SAVE.presents;
   root.soul.prison = Object.assign({}, root.soul.prison, {
     [mainUid]: SAVE.prison.map(p => {
