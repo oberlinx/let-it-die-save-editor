@@ -4361,12 +4361,19 @@ function applyFloorMove(root) {
 // ---------------------------------------------------------------------------
 let BOSS_LOCK = { root: null, mode: '', extend: true, plan: null };
 function blkSync() { if (BOSS_LOCK.root !== RAW_SAV_ROOT) BOSS_LOCK = { root: RAW_SAV_ROOT, mode: '', extend: true, plan: null }; }
-const BLK_MODES = { boss: { kinds: [ 'boss', 'mboss' ], label: 'Boss only (mid-bosses and main bosses)' }, mboss: { kinds: [ 'mboss' ], label: 'Mid-boss only' }, pit: { kinds: [ 'pit' ], label: 'Screamer Pit only' } };
+// don: the four main bosses (KIS_BOSS1-4). Regular Heaven offers no Don below 100F, so those floors fall back
+// to a mid-boss (the nearest kind) rather than whatever the game would roll.
+const BLK_MODES = {
+  don: { kinds: [ 'boss' ], fallback: [ 'mboss' ], label: 'Don only (main bosses)', noun: 'Don' },
+  mboss: { kinds: [ 'mboss' ], label: 'Mid-boss only', noun: 'mid-boss' },
+  pit: { kinds: [ 'pit' ], label: 'Screamer Pit only', noun: 'Screamer Pit' },
+  boss: { kinds: [ 'boss', 'mboss' ], label: 'Don or mid-boss (no Screamer Pits)', noun: 'Don or mid-boss' }
+};
 function blkKind(refareaid) {
   const k = (arr(AP && AP.hvnBossKis).find(r => r.areaid === refareaid) || {}).kis || '';
   let m;
   if ((m = /_KIS_MBOSS(\d+)$/.exec(k))) return { kind: 'mboss', n: m[1], label: `Mid-boss (MBOSS${m[1]})` };
-  if ((m = /_KIS_BOSS(\d+)$/.exec(k))) return { kind: 'boss', n: m[1], label: `Main boss (BOSS${m[1]})` };
+  if ((m = /_KIS_BOSS(\d+)$/.exec(k))) return { kind: 'boss', n: m[1], label: `Don (BOSS${m[1]})` };
   if ((m = /_KIS_RUSH(\d+)$/.exec(k))) return { kind: 'pit', n: m[1], label: 'Screamer Pit' };
   return { kind: 'fixed', n: '', label: 'Fixed arena' };
 }
@@ -4412,11 +4419,15 @@ function blkPlan() {
     const old = have.get(f.id) || null;
     const rows = arr(AP && AP.hvnBossAreas).filter(r => r.flrid === f.id);
     if (!rows.length) continue;
-    const want = rows.filter(r => mode.kinds.includes(blkKind(r.refareaid).kind));
-    if (old && (!want.length || mode.kinds.includes(blkKind(old.refareaid).kind))) { items.push({ floor: f, old, entry: null }); continue; }
+    let want = rows.filter(r => mode.kinds.includes(blkKind(r.refareaid).kind)), kinds = mode.kinds, fallback = false;
+    if (!want.length && mode.fallback) {
+      const fb = rows.filter(r => mode.fallback.includes(blkKind(r.refareaid).kind));
+      if (fb.length) { want = fb; kinds = mode.fallback; fallback = true; }
+    }
+    if (old && (!want.length || kinds.includes(blkKind(old.refareaid).kind))) { items.push({ floor: f, old, entry: null, fallback }); continue; }
     if (!old && !BOSS_LOCK.extend) continue;
     const r = blkPick(want.length ? want : rows);
-    items.push({ floor: f, old, entry: r && blkEntry(f, r.refareaid, old ? Number(old.is_rare) === 1 : false) });
+    items.push({ floor: f, old, entry: r && blkEntry(f, r.refareaid, old ? Number(old.is_rare) === 1 : false), fallback });
   }
   return { from, mode: BOSS_LOCK.mode, extend: BOSS_LOCK.extend, items };
 }
@@ -4468,11 +4479,11 @@ function renderBossLock() {
     h += `<table class="stewTable" style="margin-top:6px;"><thead><tr><th>Floor</th><th>Now</th><th>On download</th><th>Featured reward and rewards</th></tr></thead><tbody>`;
     h += p.items.map(it => {
       const was = it.old ? blkKind(it.old.refareaid).label : '<span class="id">not planned yet</span>';
-      const now = it.entry ? `<b>${escapeHtml(blkKind(it.entry.refareaid).label)}</b>${it.old ? '' : ' <span class="id">(added)</span>'}` : '<span class="id">unchanged</span>';
+      const now = (it.entry ? `<b>${escapeHtml(blkKind(it.entry.refareaid).label)}</b>${it.old ? '' : ' <span class="id">(added)</span>'}` : '<span class="id">unchanged</span>') + (it.fallback ? ` <span class="id">(no ${escapeHtml(BLK_MODES[p.mode].noun)} on this floor)</span>` : '');
       return `<tr><td>${escapeHtml(hvnFloorLabel(it.floor))}</td><td>${it.old ? escapeHtml(was) : was}</td><td>${now}</td><td>${blkRewardText(it.entry || it.old, nm)}</td></tr>`;
     }).join('');
     h += `</tbody></table><div class="toolbar" style="margin-top:6px;"><button class="subtle" id="blk-reroll">Reroll again</button><span class="capNote" style="margin:0;">${changed.length} floor${changed.length === 1 ? '' : 's'} will be written. Rewards are drawn from each floor's own tables for the new arena.</span></div>`;
-    h += `<div class="capNote">Not changed: the floor you're on (already built), NEO map B floors (one fixed arena), and planned floors that are already ${escapeHtml(BLK_MODES[p.mode].label.replace(/ only.*$/, '').toLowerCase())} floors.${p.mode === 'boss' ? ' Main bosses have no boss drop, so their floors get the featured reward and three large boxes, as the game writes them.' : ''}${from !== s.flrid ? ' Applied after the floor move above, so it replaces the moved floors\' rerolled rewards.' : ''} New floors get a normal (not rare) featured reward.</div>`;
+    h += `<div class="capNote">Not changed: the floor you're on (already built), NEO map B floors (one fixed arena), and planned floors that are already ${escapeHtml(BLK_MODES[p.mode].noun)} floors.${p.mode === 'don' ? ' Regular Heaven has no Dons below 100F (the game only offers a mid-boss or a Screamer Pit there), so those floors become mid-boss floors.' : ''}${p.mode === 'don' || p.mode === 'boss' ? ' Dons have no boss drop: their floors get the featured reward and two large chests, as the game writes them.' : ''}${from !== s.flrid ? ' Applied after the floor move above, so it replaces the moved floors\' rerolled rewards.' : ''} New floors get a normal (not rare) featured reward.</div>`;
     if (p.items.some(it => /_KIS_RUSH/.test((arr(AP.hvnBossKis).find(r => r.areaid === (it.entry || it.old || {}).refareaid) || {}).kis || ''))) h += `<div class="capNote">Screamer Pit chests (treasure enemies) can hold any faction's metal, on every route: the game's own pit table mixes all four (a W.E pit can drop D.O.D. ARMS, Candle Wolf or M.I.L.K. metal). The large boxes, featured reward and boss drop stay the route's own faction.</div>`;
     h += `<div class="capNote"><b>To test:</b> download, play past two or three boss floors, quit on any Heaven floor and load the save here. If the floors below still show as locked, the game kept the entries.</div>`;
   }
