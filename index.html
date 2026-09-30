@@ -4145,7 +4145,36 @@ function flmOwnHvn(root) {
   const s = root && root.soul;
   if (s && s.hvntrinfo && typeof s.hvntrinfo === 'object') s.hvntrinfo = JSON.parse(JSON.stringify(s.hvntrinfo));
 }
-function flmShiftHvn(root, from, to) {
+// Arenas the game can use on a boss floor (master_ref_boss_area_setting). Regular Heaven offers Dons and the
+// RUSH6-10 pits only from 100F, the RUSH1-5 pits only below 100F; mid-bosses everywhere. A floor move shifts
+// the planned boss floors by the same number of floors, so one can land where its arena never appears (a Don
+// planned at 110F moved to 60F). Those are re-picked for their new floor: the same kind when that floor has
+// it, otherwise a mid-boss (so a Don below 100F becomes a mid-boss), with rewards from the new floor's tables.
+function flmAllowed(flrid) { return new Set(arr(AP && AP.hvnBossAreas).filter(r => r.flrid === flrid).map(r => r.refareaid)); }
+function flmCurRef() {
+  const s = RAW_SAV_ROOT && RAW_SAV_ROOT.soul;
+  if (!s) return '';
+  const h = arr(s.hvntrinfo).find(e => e && e.flrid === s.flrid);
+  if (h && h.refareaid) return h.refareaid;
+  const a = arr(RAW_SAV_ROOT.floor && RAW_SAV_ROOT.floor.rlg && RAW_SAV_ROOT.floor.rlg.archive).find(x => x && x.flrid === s.flrid);
+  return (a && a.ref_areaid) || '';
+}
+// {newFlrid: {entry, from, to}} for planned floors whose arena can't appear on the floor they move to
+function flmRefix(target) {
+  const out = {};
+  for (const u of flmUpcoming(target)) {
+    const ok = flmAllowed(u.id), ref = u.entry && u.entry.refareaid;
+    if (!ref || !ok.size || ok.has(ref)) continue;
+    const rows = arr(AP && AP.hvnBossAreas).filter(r => r.flrid === u.id), k = blkKind(ref).kind;
+    let pool = rows.filter(r => blkKind(r.refareaid).kind === k);
+    if (!pool.length) pool = rows.filter(r => blkKind(r.refareaid).kind === 'mboss');
+    if (!pool.length) pool = rows;
+    const r = blkPick(pool), entry = r && blkEntry(u.floor, r.refareaid, Number(u.entry.is_rare) === 1);
+    if (entry) out[u.id] = { entry, from: ref, to: r.refareaid };
+  }
+  return out;
+}
+function flmShiftHvn(root, from, to, refix) {
   const list = root && root.soul && root.soul.hvntrinfo;
   if (!Array.isArray(list)) return;
   const L = flmRouteBoss(from), iFrom = L.findIndex(f => f.id === from), iTo = L.findIndex(f => f.id === to);
@@ -4158,6 +4187,8 @@ function flmShiftHvn(root, from, to) {
     if (!n) { list.splice(i, 1); continue; }
     e.flrid = n.id;
     e.areaid = n.areaid;
+    const fx = refix && refix[n.id];
+    if (fx) Object.assign(e, JSON.parse(JSON.stringify(fx.entry)));
   }
 }
 // upcoming boss floors after a move: [{oldId, id, entry}] from the save as loaded
@@ -4179,10 +4210,17 @@ function flmRoll(target) {
   const root = RAW_SAV_ROOT, cur = root && root.soul, t = hvnFloor(target);
   if (!cur || !t) return null;
   const items = flmItemsOf(root), ref = flmRefArea(root, cur.flrid);
-  const out = { boxes: [], boss: null, featured: null, upcoming: [] };
+  const out = { boxes: [], boss: null, featured: null, upcoming: [], refix: flmRefix(target) };
   const hCur = arr(cur.hvntrinfo).find(e => e && e.flrid === cur.flrid);
   if (hCur && hCur.rwdid) { const to = flmDraw(t.id, t.areaid, hCur.refareaid || ref, Number(hCur.is_rare) ? 'PTGENTP_TRBOX_SPXL_RARE' : 'PTGENTP_SPXL'); if (to) out.featured = { from: hCur.rwdid, to }; }
   for (const u of flmUpcoming(target)) {
+    const fx = out.refix[u.id];
+    if (fx) {
+      // re-picked for its new floor (flmRefix): shown as it will be written, not rerolled again
+      const ne = fx.entry, unp = flmUnplaced(ne);
+      out.upcoming.push({ id: u.id, no: u.floor.no, refix: fx, featured: ne.rwdid ? { from: u.entry.rwdid, to: ne.rwdid } : null, rare: Number(ne.is_rare) === 1, rwds: arr(ne.rwds).map((w, i) => ({ gentype: w.gentype, placeholder: unp.has(i), from: w.rwdid, to: w.rwdid })) });
+      continue;
+    }
     const e = u.entry, refA = e.refareaid || '-';
     // Treasure-enemy floors (the "rush" boss floors: TRZAKO entries) have no large boxes. The game still
     // lists three TRBOX_L placeholder entries (Death 'Roids Blue) for them, which never appear as chests,
@@ -4298,8 +4336,10 @@ function flmTargets() {
   if (!cur || !cur.pause || cur.stgid !== 'S_HVN') return [];
   const f = hvnFloor(cur.flrid);
   if (!f || !(Number(f.mbsmax) > 0)) return [];
-  const route = hvnRoute(f.id).key;
-  return arr(AP && AP.hvnFloors).filter(x => x.areaid === f.areaid && x.id !== f.id && hvnRoute(x.id).key === route).sort((a, b) => a.no - b.no);
+  const route = hvnRoute(f.id).key, ref = flmCurRef();
+  // the floor you're on is already built with its arena (e.g. a Don), so only floors that arena can appear on
+  const fits = x => { const ok = flmAllowed(x.id); return !ref || !ok.size || ok.has(ref); };
+  return arr(AP && AP.hvnFloors).filter(x => x.areaid === f.areaid && x.id !== f.id && hvnRoute(x.id).key === route && fits(x)).sort((a, b) => a.no - b.no);
 }
 // rename every reference to floor `from` under node to `to` (object flrid values, keys like
 // "<flrid>-<areaid>" or "<flrid>_<areaid>..."); drop array items / keys that already refer to `to`
@@ -4326,7 +4366,7 @@ function applyFloorMove(root) {
   if (!from || !f || from === to) return root;
   root.soul.flrid = to;
   flmOwnHvn(root);
-  flmShiftHvn(root, from, to);
+  flmShiftHvn(root, from, to, FLOOR_MOVE.rolls && FLOOR_MOVE.rolls.refix);
   if (root.floor) {
     const stamp = root.floor.stamp;
     delete root.floor.stamp;           // the Stamp Rally has no floor ids; keep it out of the rewrite
@@ -4361,12 +4401,19 @@ function applyFloorMove(root) {
 // ---------------------------------------------------------------------------
 let BOSS_LOCK = { root: null, mode: '', extend: true, plan: null };
 function blkSync() { if (BOSS_LOCK.root !== RAW_SAV_ROOT) BOSS_LOCK = { root: RAW_SAV_ROOT, mode: '', extend: true, plan: null }; }
-const BLK_MODES = { boss: { kinds: [ 'boss', 'mboss' ], label: 'Boss only (mid-bosses and main bosses)' }, mboss: { kinds: [ 'mboss' ], label: 'Mid-boss only' }, pit: { kinds: [ 'pit' ], label: 'Screamer Pit only' } };
+// don: the four main bosses (KIS_BOSS1-4). Regular Heaven offers no Don below 100F, so those floors fall back
+// to a mid-boss (the nearest kind) rather than whatever the game would roll.
+const BLK_MODES = {
+  don: { kinds: [ 'boss' ], fallback: [ 'mboss' ], label: 'Don only (main bosses)', noun: 'Don' },
+  mboss: { kinds: [ 'mboss' ], label: 'Mid-boss only', noun: 'mid-boss' },
+  pit: { kinds: [ 'pit' ], label: 'Screamer Pit only', noun: 'Screamer Pit' },
+  boss: { kinds: [ 'boss', 'mboss' ], label: 'Don or mid-boss (no Screamer Pits)', noun: 'Don or mid-boss' }
+};
 function blkKind(refareaid) {
   const k = (arr(AP && AP.hvnBossKis).find(r => r.areaid === refareaid) || {}).kis || '';
   let m;
   if ((m = /_KIS_MBOSS(\d+)$/.exec(k))) return { kind: 'mboss', n: m[1], label: `Mid-boss (MBOSS${m[1]})` };
-  if ((m = /_KIS_BOSS(\d+)$/.exec(k))) return { kind: 'boss', n: m[1], label: `Main boss (BOSS${m[1]})` };
+  if ((m = /_KIS_BOSS(\d+)$/.exec(k))) return { kind: 'boss', n: m[1], label: `Don (BOSS${m[1]})` };
   if ((m = /_KIS_RUSH(\d+)$/.exec(k))) return { kind: 'pit', n: m[1], label: 'Screamer Pit' };
   return { kind: 'fixed', n: '', label: 'Fixed arena' };
 }
@@ -4401,7 +4448,7 @@ function blkFrom() {
 function blkExisting(from) {
   const s = RAW_SAV_ROOT && RAW_SAV_ROOT.soul;
   if (!s) return new Map();
-  if (from !== s.flrid) return new Map(flmUpcoming(from).map(u => [ u.id, u.entry ]));
+  if (from !== s.flrid) { const fx = (FLOOR_MOVE.rolls && FLOOR_MOVE.rolls.refix) || {}; return new Map(flmUpcoming(from).map(u => [ u.id, fx[u.id] ? fx[u.id].entry : u.entry ])); }
   return new Map(arr(s.hvntrinfo).filter(e => e && e.flrid).map(e => [ e.flrid, e ]));
 }
 function blkPlan() {
@@ -4412,11 +4459,15 @@ function blkPlan() {
     const old = have.get(f.id) || null;
     const rows = arr(AP && AP.hvnBossAreas).filter(r => r.flrid === f.id);
     if (!rows.length) continue;
-    const want = rows.filter(r => mode.kinds.includes(blkKind(r.refareaid).kind));
-    if (old && (!want.length || mode.kinds.includes(blkKind(old.refareaid).kind))) { items.push({ floor: f, old, entry: null }); continue; }
+    let want = rows.filter(r => mode.kinds.includes(blkKind(r.refareaid).kind)), kinds = mode.kinds, fallback = false;
+    if (!want.length && mode.fallback) {
+      const fb = rows.filter(r => mode.fallback.includes(blkKind(r.refareaid).kind));
+      if (fb.length) { want = fb; kinds = mode.fallback; fallback = true; }
+    }
+    if (old && (!want.length || kinds.includes(blkKind(old.refareaid).kind))) { items.push({ floor: f, old, entry: null, fallback }); continue; }
     if (!old && !BOSS_LOCK.extend) continue;
     const r = blkPick(want.length ? want : rows);
-    items.push({ floor: f, old, entry: r && blkEntry(f, r.refareaid, old ? Number(old.is_rare) === 1 : false) });
+    items.push({ floor: f, old, entry: r && blkEntry(f, r.refareaid, old ? Number(old.is_rare) === 1 : false), fallback });
   }
   return { from, mode: BOSS_LOCK.mode, extend: BOSS_LOCK.extend, items };
 }
@@ -4468,11 +4519,11 @@ function renderBossLock() {
     h += `<table class="stewTable" style="margin-top:6px;"><thead><tr><th>Floor</th><th>Now</th><th>On download</th><th>Featured reward and rewards</th></tr></thead><tbody>`;
     h += p.items.map(it => {
       const was = it.old ? blkKind(it.old.refareaid).label : '<span class="id">not planned yet</span>';
-      const now = it.entry ? `<b>${escapeHtml(blkKind(it.entry.refareaid).label)}</b>${it.old ? '' : ' <span class="id">(added)</span>'}` : '<span class="id">unchanged</span>';
+      const now = (it.entry ? `<b>${escapeHtml(blkKind(it.entry.refareaid).label)}</b>${it.old ? '' : ' <span class="id">(added)</span>'}` : '<span class="id">unchanged</span>') + (it.fallback ? ` <span class="id">(no ${escapeHtml(BLK_MODES[p.mode].noun)} on this floor)</span>` : '');
       return `<tr><td>${escapeHtml(hvnFloorLabel(it.floor))}</td><td>${it.old ? escapeHtml(was) : was}</td><td>${now}</td><td>${blkRewardText(it.entry || it.old, nm)}</td></tr>`;
     }).join('');
     h += `</tbody></table><div class="toolbar" style="margin-top:6px;"><button class="subtle" id="blk-reroll">Reroll again</button><span class="capNote" style="margin:0;">${changed.length} floor${changed.length === 1 ? '' : 's'} will be written. Rewards are drawn from each floor's own tables for the new arena.</span></div>`;
-    h += `<div class="capNote">Not changed: the floor you're on (already built), NEO map B floors (one fixed arena), and planned floors that are already ${escapeHtml(BLK_MODES[p.mode].label.replace(/ only.*$/, '').toLowerCase())} floors.${p.mode === 'boss' ? ' Main bosses have no boss drop, so their floors get the featured reward and three large boxes, as the game writes them.' : ''}${from !== s.flrid ? ' Applied after the floor move above, so it replaces the moved floors\' rerolled rewards.' : ''} New floors get a normal (not rare) featured reward.</div>`;
+    h += `<div class="capNote">Not changed: the floor you're on (already built), NEO map B floors (one fixed arena), and planned floors that are already ${escapeHtml(BLK_MODES[p.mode].noun)} floors.${p.mode === 'don' ? ' Regular Heaven has no Dons below 100F (the game only offers a mid-boss or a Screamer Pit there), so those floors become mid-boss floors.' : ''}${p.mode === 'don' || p.mode === 'boss' ? ' Dons have no boss drop: their floors get the featured reward and two large chests, as the game writes them.' : ''}${from !== s.flrid ? ' Applied after the floor move above, so it replaces the moved floors\' rerolled rewards.' : ''} New floors get a normal (not rare) featured reward.</div>`;
     if (p.items.some(it => /_KIS_RUSH/.test((arr(AP.hvnBossKis).find(r => r.areaid === (it.entry || it.old || {}).refareaid) || {}).kis || ''))) h += `<div class="capNote">Screamer Pit chests (treasure enemies) can hold any faction's metal, on every route: the game's own pit table mixes all four (a W.E pit can drop D.O.D. ARMS, Candle Wolf or M.I.L.K. metal). The large boxes, featured reward and boss drop stay the route's own faction.</div>`;
     h += `<div class="capNote"><b>To test:</b> download, play past two or three boss floors, quit on any Heaven floor and load the save here. If the floors below still show as locked, the game kept the entries.</div>`;
   }
@@ -4507,13 +4558,16 @@ function renderLocation() {
   h += `<div class="field" style="margin-bottom:10px;"><label>Paused on</label><div style="padding:6px 0; font-size:14px;"><b>${escapeHtml(where)}</b>${chr ? ` <span class="id">— ${escapeHtml(chr.name || '')}</span>` : ''}</div></div>`;
   if (FLOOR_MOVE.msg) h += `<pre class="stewLog">${escapeHtml(FLOOR_MOVE.msg)}</pre>`;
   const targets = flmTargets();
+  // floors left out because the arena already built here can't appear on them (e.g. a Don below 100F)
+  const curRef = flmCurRef(), sameMap = f ? arr(AP && AP.hvnFloors).filter(x => x.areaid === f.areaid && x.id !== f.id && hvnRoute(x.id).key === hvnRoute(f.id).key).length : 0;
+  const arenaNote = curRef && sameMap > targets.length ? `<div class="capNote" style="margin-top:0;">This floor is a <b>${escapeHtml(blkKind(curRef).label)}</b> floor and it's already built, so only floors where that arena can appear are listed (${sameMap - targets.length} left out${blkKind(curRef).kind === 'boss' && hvnRoute(f.id).key === 'main' ? ': regular Heaven has no Dons below 100F' : ''}).</div>` : '';
   if (cur.stgid !== 'S_HVN' || !f) h += `<div class="capNote">Only Heaven boss floors can be moved (the fighter is paused outside Heaven).</div>`;
   else if (!(Number(f.mbsmax) > 0)) h += `<div class="capNote">The fighter is on a normal Heaven floor, not a boss floor. Normal floors are built at random, so only boss floors (which always use the same map) can be moved.</div>`;
-  else if (!targets.length) h += `<div class="capNote">No other boss floor uses this map.</div>`;
+  else if (!targets.length) h += arenaNote || `<div class="capNote">No other boss floor uses this map.</div>`;
   else {
     const sel = 'background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);';
     const t = FLOOR_MOVE.target ? hvnFloor(FLOOR_MOVE.target) : null;
-    h += `<div class="capNote" style="margin-top:0;">Only boss floors of the same route that use the same map are listed (${escapeHtml(hvnRoute(f.id).name)}, ${escapeHtml(hvnMapLabel(f.areaid))}). The boss waiting on the floor is set to the new floor's boss level. Your records (deepest floor, clear times) are left as they are.</div>
+    h += `<div class="capNote" style="margin-top:0;">Only boss floors of the same route that use the same map are listed (${escapeHtml(hvnRoute(f.id).name)}, ${escapeHtml(hvnMapLabel(f.areaid))}). The boss waiting on the floor is set to the new floor's boss level. Your records (deepest floor, clear times) are left as they are.</div>${arenaNote}
       <div class="toolbar"><select id="loc-target" style="${sel} min-width:340px;"><option value="">— keep ${escapeHtml(f.no + 'F')} —</option>${targets.map(x => `<option value="${x.id}" ${FLOOR_MOVE.target === x.id ? 'selected' : ''}>${escapeHtml(hvnFloorLabel(x))} · boss Lv ${x.mbslvlmin}${x.no < f.no ? ' (lower)' : ''}</option>`).join('')}</select>
       <button class="action" id="loc-apply">${FLOOR_MOVE.armed ? 'Click again to confirm' : 'Move to this floor'}</button>${FLOOR_MOVE.target ? '<button class="subtle" id="loc-undo">Undo</button>' : ''}</div>`;
     if (t) {
@@ -4522,6 +4576,8 @@ function renderLocation() {
       const n = r ? r.boxes.length + (r.boss ? 1 : 0) + (r.featured ? 1 : 0) + arr(r.upcoming).length : 0;
       const up = flmUpcoming(t.id);
       h += `<div class="capNote">The map's upcoming rewards move with you: ${up.length ? up.map(u => u.floor.no + 'F').join(', ') : 'no further boss floors on this route'}.</div>`;
+      const fx = Object.entries((r && r.refix) || {});
+      if (fx.length) h += `<div class="capNote">Planned boss floors re-picked for their new floor (their arena can't appear there): ${fx.map(([ id, x ]) => `${escapeHtml((hvnFloor(id) || {}).no + 'F')} ${escapeHtml(blkKind(x.from).label)} → <b>${escapeHtml(blkKind(x.to).label)}</b>`).join(', ')}. Rewards are drawn from the new floor's tables.</div>`;
       h += `<div class="subDetails" style="padding:10px; margin-top:8px;"><label style="cursor:pointer;"><input type="checkbox" id="loc-reroll" ${FLOOR_MOVE.reroll ? 'checked' : ''} style="width:auto; margin-right:6px;">Reroll the boss floor rewards for ${escapeHtml(t.no + 'F')}</label>`;
       if (!n) h += `<div class="capNote">No unopened rewards on this floor to reroll.</div>`;
       else if (FLOOR_MOVE.reroll) {
@@ -4529,7 +4585,7 @@ function renderLocation() {
         h += r.boxes.map((b, i) => `<tr><td>${b.gentype === 'PTGENTP_TRZAKO' ? 'Treasure enemy' : b.gentype === 'featured' ? 'Featured box (extra large)' : 'Treasure box ' + (i + 1)}</td><td>${nm(b.from)}</td><td>${nm(b.to)}</td></tr>`).join('');
         if (r.boss) h += `<tr><td>Boss drop</td><td>${nm(r.boss.from)}</td><td>${nm(r.boss.to)}</td></tr>`;
         if (r.featured) h += `<tr><td>Featured reward (map)</td><td>${nm(r.featured.from)}</td><td>${nm(r.featured.to)}</td></tr>`;
-        for (const u of arr(r.upcoming)) h += `<tr><td>Upcoming ${u.no}F${u.rare ? ' (rare)' : ''}</td><td class="id">shown on the map</td><td>${u.featured ? nm(u.featured.to) : '—'} ${flmUpText(u.rwds, nm)}</td></tr>`;
+        for (const u of arr(r.upcoming)) h += `<tr><td>Upcoming ${u.no}F${u.rare ? ' (rare)' : ''}${u.refix ? `<br><span class="id">${escapeHtml(blkKind(u.refix.from).label)} → ${escapeHtml(blkKind(u.refix.to).label)}</span>` : ''}</td><td class="id">shown on the map</td><td>${u.featured ? nm(u.featured.to) : '—'} ${flmUpText(u.rwds, nm)}</td></tr>`;
         h += `</tbody></table><div class="toolbar" style="margin-top:6px;"><button class="subtle" id="loc-reroll-again">Reroll again</button><span class="capNote" style="margin:0;">Drawn from ${escapeHtml(t.no + 'F')}'s own drop table, the way the game rolls them.</span></div>`;
       } else h += `<div class="capNote">The rewards rolled for ${escapeHtml(f.no + 'F')} are kept.</div>`;
       h += '</div>';
