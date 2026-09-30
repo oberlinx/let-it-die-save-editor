@@ -1369,7 +1369,7 @@ async function loadMastersBuffer(buf) {
       atkattr: all('SELECT * FROM master_part_atkattr'),
       bodydetail: all('SELECT * FROM master_body_detail')
     };
-    for (const [key, sql] of [['questParamText', 'SELECT qid, no, val FROM master_quest_param_text'], ['questParamDesc', 'SELECT qid, no, val FROM master_quest_param_desc_text'], ['rewards', 'SELECT * FROM master_reward'], ['expertLvl', 'SELECT ptarmtp, lvl, abp FROM master_expert_lvl_reward'], ['stampBonus', 'SELECT * FROM master_stamp_bonus'], ['stampFloors', 'SELECT * FROM master_stamp'], ['hvnFloors', "SELECT id, areaid, no, mbsmin, mbsmax, mbslvlmin, mbslvlmax FROM master_floor WHERE stgid = 'S_HVN'"], ['jackals', 'SELECT * FROM master_jackal'], ['magazines', 'SELECT * FROM master_magazine'], ['magazineBonus', 'SELECT * FROM master_magazine_bonus'], ['hvnBossDrops', "SELECT d.flrid, d.areaid, d.refareaid, d.type, d.grp, d.freq FROM master_floor_drop_gen d JOIN master_floor f ON f.id = d.flrid AND f.areaid = d.areaid WHERE f.stgid = 'S_HVN' AND f.mbsmax > 0 AND (d.type IN ('PTGENTP_TRBOX_L', 'PTGENTP_TRBOX_SPXL_RARE', 'PTGENTP_SPXL', 'PTGENTP_TRZAKO') OR d.type LIKE 'PTGENTP_MBOSS%')"], ['questCats', 'SELECT * FROM master_quest_category'], ['bagGen', 'SELECT * FROM master_mysterybag_content_gen'], ['bagGenOdds', "SELECT * FROM master_mysterybag_content_gen_odds WHERE odds_id = (SELECT odds_id FROM master_mysterybag_content_odds ORDER BY expires DESC LIMIT 1)"], ['boxGen', 'SELECT * FROM master_deathbox_content_gen'], ['hubCustom', 'SELECT * FROM master_hubcustomize'], ['floorInfo', 'SELECT id, sname, stgid, stgpfx, name FROM master_floor'], ['freezer', 'SELECT * FROM master_freezer'], ['bodies', 'SELECT id, gender FROM master_body'], ['gasmasks', 'SELECT id, gender FROM master_gasmask'], ['fortWhistle', 'SELECT * FROM master_fort_whistle']]) {
+    for (const [key, sql] of [['questParamText', 'SELECT qid, no, val FROM master_quest_param_text'], ['questParamDesc', 'SELECT qid, no, val FROM master_quest_param_desc_text'], ['rewards', 'SELECT * FROM master_reward'], ['expertLvl', 'SELECT ptarmtp, lvl, abp FROM master_expert_lvl_reward'], ['stampBonus', 'SELECT * FROM master_stamp_bonus'], ['stampFloors', 'SELECT * FROM master_stamp'], ['hvnFloors', "SELECT id, areaid, no, mbsmin, mbsmax, mbslvlmin, mbslvlmax FROM master_floor WHERE stgid = 'S_HVN'"], ['jackals', 'SELECT * FROM master_jackal'], ['magazines', 'SELECT * FROM master_magazine'], ['magazineBonus', 'SELECT * FROM master_magazine_bonus'], ['hvnBossDrops', "SELECT d.flrid, d.areaid, d.refareaid, d.type, d.grp, d.freq FROM master_floor_drop_gen d JOIN master_floor f ON f.id = d.flrid AND f.areaid = d.areaid WHERE f.stgid = 'S_HVN' AND f.mbsmax > 0 AND (d.type IN ('PTGENTP_TRBOX_L', 'PTGENTP_TRBOX_SPXL_RARE', 'PTGENTP_SPXL', 'PTGENTP_TRZAKO') OR d.type LIKE 'PTGENTP_MBOSS%')"], ['questCats', 'SELECT * FROM master_quest_category'], ['bagGen', 'SELECT * FROM master_mysterybag_content_gen'], ['bagGenOdds', "SELECT * FROM master_mysterybag_content_gen_odds WHERE odds_id = (SELECT odds_id FROM master_mysterybag_content_odds ORDER BY expires DESC LIMIT 1)"], ['boxGen', 'SELECT * FROM master_deathbox_content_gen'], ['hubCustom', 'SELECT * FROM master_hubcustomize'], ['floorInfo', 'SELECT id, sname, stgid, stgpfx, name FROM master_floor'], ['freezer', 'SELECT * FROM master_freezer'], ['bodies', 'SELECT id, gender FROM master_body'], ['gasmasks', 'SELECT id, gender FROM master_gasmask'], ['fortWhistle', 'SELECT * FROM master_fort_whistle'], ['hvnBossAreas', 'SELECT flrid, refareaid, freq FROM master_ref_boss_area_setting'], ['hvnBossKis', "SELECT areaid, kis FROM master_area_setting_unit WHERE stgid = 'S_HVN' AND unit = 'HEAVEN_BOSS'"]]) {
       try { AP[key] = all(sql); } catch (err) { AP[key] = []; console.warn(`${key} not available in this masters.db:`, err); }
     }
     AP.stewOdds = [];
@@ -4269,16 +4269,156 @@ function applyFloorMove(root) {
   }
   return root;
 }
+// ---------------------------------------------------------------------------
+// Boss floor lock (EXPERIMENTAL, not confirmed in game): make the run's upcoming Heaven boss floors all
+// boss fights or all Screamer Pits.
+// Each boss floor rolls an arena (refareaid) from master_ref_boss_area_setting (flrid, refareaid, freq).
+// master_area_setting_unit (unit HEAVEN_BOSS) says what the arena holds: KIS_BOSS1-4 = main boss
+// (HVN_AREA_003-006), KIS_MBOSS1-4 = mid-boss (007-010), KIS_RUSH1-10 = Screamer Pit (011-015, 018-022).
+// The NEO routes' map B floors have one fixed arena (ARC/MET/AMS/RFT_AREA_HVN) and are never either.
+// The roll is kept in soul.hvntrinfo (the floor you're on plus the next three boss floors) with the
+// rewards drawn for that arena. As seen in saves: mid-boss = [MBOSSn drop, 3x TRBOX_L]; pit = [3x TRZAKO,
+// 3x TRBOX_L placeholders from the pit's one-item table]; map B = [3x TRBOX_L]. Main bosses have no drop
+// table, so their entry is taken to be [3x TRBOX_L] (not seen in a save yet).
+// A lock redraws each upcoming entry that isn't already of the chosen kind (not the floor you're on: it's
+// already built) from the arenas of that kind, with the game's weights. It can also write entries for
+// every remaining boss floor of the route, to test whether the game keeps them for the whole run.
+// hvntrinfo is emptied between runs, so this only works on a save paused mid-run.
+// ---------------------------------------------------------------------------
+let BOSS_LOCK = { root: null, mode: '', extend: true, plan: null };
+function blkSync() { if (BOSS_LOCK.root !== RAW_SAV_ROOT) BOSS_LOCK = { root: RAW_SAV_ROOT, mode: '', extend: true, plan: null }; }
+const BLK_MODES = { boss: { kinds: [ 'boss', 'mboss' ], label: 'Boss only (mid-bosses and main bosses)' }, mboss: { kinds: [ 'mboss' ], label: 'Mid-boss only' }, pit: { kinds: [ 'pit' ], label: 'Screamer Pit only' } };
+function blkKind(refareaid) {
+  const k = (arr(AP && AP.hvnBossKis).find(r => r.areaid === refareaid) || {}).kis || '';
+  let m;
+  if ((m = /_KIS_MBOSS(\d+)$/.exec(k))) return { kind: 'mboss', n: m[1], label: `Mid-boss (MBOSS${m[1]})` };
+  if ((m = /_KIS_BOSS(\d+)$/.exec(k))) return { kind: 'boss', n: m[1], label: `Main boss (BOSS${m[1]})` };
+  if ((m = /_KIS_RUSH(\d+)$/.exec(k))) return { kind: 'pit', n: m[1], label: 'Screamer Pit' };
+  return { kind: 'fixed', n: '', label: 'Fixed arena' };
+}
+function blkPick(rows) {
+  const total = rows.reduce((n, r) => n + (Number(r.freq) || 0), 0);
+  if (!total) return rows.length ? rows[0] : null;
+  let x = Math.random() * total;
+  for (const r of rows) if ((x -= Number(r.freq) || 0) < 0) return r;
+  return rows[rows.length - 1];
+}
+// a floor's own table for the arena when it has one (a pit's TRBOX_L is its one placeholder item),
+// otherwise the floor's general ('-') table
+function blkDraw(floor, refareaid, type) {
+  const own = arr(AP && AP.hvnBossDrops).some(r => r.flrid === floor.id && r.areaid === floor.areaid && r.type === type && r.refareaid === refareaid);
+  return own ? flmDraw(floor.id, floor.areaid, refareaid, type) : flmDraw(floor.id, floor.areaid, '-', type);
+}
+function blkEntry(floor, refareaid, isRare) {
+  const k = blkKind(refareaid), rw = (gentype, ref) => ({ gentype, rwdtype: 'TBRWD_ITEM', rwdid: blkDraw(floor, ref, gentype) });
+  const rwds = [];
+  if (k.kind === 'mboss') rwds.push(rw('PTGENTP_MBOSS' + k.n, '-'));
+  if (k.kind === 'pit') for (let i = 0; i < 3; i++) rwds.push(rw('PTGENTP_TRZAKO', '-'));
+  for (let i = 0; i < 3; i++) rwds.push(rw('PTGENTP_TRBOX_L', refareaid));
+  const rwdid = blkDraw(floor, refareaid, isRare ? 'PTGENTP_TRBOX_SPXL_RARE' : 'PTGENTP_SPXL');
+  if (!rwdid || rwds.some(w => !w.rwdid)) return null;
+  return { flrid: floor.id, areaid: floor.areaid, refareaid, rwdtype: 'TBRWD_ITEM', rwdid, is_rare: isRare ? 1 : 0, created: 0, rwds };
+}
+// the floor the fighter will be on at download (a pending floor move counts) and its upcoming entries
+function blkFrom() {
+  const s = RAW_SAV_ROOT && RAW_SAV_ROOT.soul;
+  return (FLOOR_MOVE.root === RAW_SAV_ROOT && FLOOR_MOVE.target) || (s && s.flrid) || '';
+}
+function blkExisting(from) {
+  const s = RAW_SAV_ROOT && RAW_SAV_ROOT.soul;
+  if (!s) return new Map();
+  if (from !== s.flrid) return new Map(flmUpcoming(from).map(u => [ u.id, u.entry ]));
+  return new Map(arr(s.hvntrinfo).filter(e => e && e.flrid).map(e => [ e.flrid, e ]));
+}
+function blkPlan() {
+  const from = blkFrom(), cur = hvnFloor(from), mode = BLK_MODES[BOSS_LOCK.mode];
+  if (!cur || !mode) return null;
+  const have = blkExisting(from), items = [];
+  for (const f of flmRouteBoss(from).filter(x => x.no > cur.no)) {
+    const old = have.get(f.id) || null;
+    const rows = arr(AP && AP.hvnBossAreas).filter(r => r.flrid === f.id);
+    if (!rows.length) continue;
+    const want = rows.filter(r => mode.kinds.includes(blkKind(r.refareaid).kind));
+    if (old && (!want.length || mode.kinds.includes(blkKind(old.refareaid).kind))) { items.push({ floor: f, old, entry: null }); continue; }
+    if (!old && !BOSS_LOCK.extend) continue;
+    const r = blkPick(want.length ? want : rows);
+    items.push({ floor: f, old, entry: r && blkEntry(f, r.refareaid, old ? Number(old.is_rare) === 1 : false) });
+  }
+  return { from, mode: BOSS_LOCK.mode, extend: BOSS_LOCK.extend, items };
+}
+function blkPlanFresh() {
+  const p = BOSS_LOCK.plan;
+  if (!BOSS_LOCK.mode) return null;
+  if (!p || p.from !== blkFrom() || p.mode !== BOSS_LOCK.mode || p.extend !== BOSS_LOCK.extend) BOSS_LOCK.plan = blkPlan();
+  return BOSS_LOCK.plan;
+}
+function applyBossLock(root) {
+  if (BOSS_LOCK.root !== RAW_SAV_ROOT || !BOSS_LOCK.mode || !root || !root.soul) return root;
+  const p = blkPlanFresh();
+  if (!p || p.from !== root.soul.flrid) return root;
+  if (!Array.isArray(root.soul.hvntrinfo)) root.soul.hvntrinfo = [];
+  const list = root.soul.hvntrinfo;
+  for (const it of p.items) {
+    if (!it.entry) continue;
+    const e = JSON.parse(JSON.stringify(it.entry)), i = list.findIndex(x => x && x.flrid === it.floor.id);
+    if (i >= 0) list[i] = e; else if (p.extend) list.push(e);
+  }
+  return root;
+}
+function blkRewardText(e, nm) {
+  if (!e) return '';
+  const pit = arr(e.rwds).some(w => w && w.gentype === 'PTGENTP_TRZAKO');
+  const rw = arr(e.rwds).map(w => ({ gentype: w.gentype, placeholder: pit && w.gentype === 'PTGENTP_TRBOX_L', to: w.rwdid }));
+  return `${e.rwdid ? nm(e.rwdid) + (Number(e.is_rare) ? ' (rare)' : '') : '—'} ${flmUpText(rw, nm)}`;
+}
+function renderBossLock() {
+  const host = document.getElementById('loc-lock');
+  if (!host || !SAVE || !RAW_SAV_ROOT) return;
+  blkSync();
+  const s = RAW_SAV_ROOT.soul || {};
+  let h = `<h3 style="margin:18px 0 6px;">Lock boss floors <span class="id">(experimental)</span></h3>
+    <div class="warnNote" style="margin:0 0 10px;"><b>Experimental — not confirmed in game.</b> Test on a backup first and keep your original save. Makes the run's upcoming Heaven boss floors all boss fights or all Screamer Pits.</div>`;
+  if (!s.pause || s.stgid !== 'S_HVN') { host.innerHTML = h + `<div class="capNote" style="margin-top:0;">Only works on a fighter paused mid-run in Heaven (the game clears the planned boss floors between runs). Quit the game anywhere in Heaven, then load that save here.</div>`; return; }
+  if (!arr(AP && AP.hvnBossAreas).length || !arr(AP && AP.hvnBossKis).length) { host.innerHTML = h + `<div class="capNote" style="margin-top:0;">This masters.db doesn't have the Heaven boss arena tables.</div>`; return; }
+  const from = blkFrom(), cur = hvnFloor(from);
+  if (!cur) { host.innerHTML = h + `<div class="capNote" style="margin-top:0;">The paused floor isn't a known Heaven floor.</div>`; return; }
+  const sel = 'background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);';
+  const remaining = flmRouteBoss(from).filter(x => x.no > cur.no).length;
+  h += `<div class="toolbar"><select id="blk-mode" style="${sel} min-width:340px;"><option value="">Leave as rolled</option>${Object.entries(BLK_MODES).map(([ k, m ]) => `<option value="${k}" ${BOSS_LOCK.mode === k ? 'selected' : ''}>${escapeHtml(m.label)}</option>`).join('')}</select></div>
+    <label style="cursor:pointer; display:block; margin:6px 0;"><input type="checkbox" id="blk-extend" ${BOSS_LOCK.extend ? 'checked' : ''} style="width:auto; margin-right:6px;">Also write every remaining boss floor of the route (${remaining} after ${escapeHtml(cur.no + 'F')}), not only the ones the game has planned so far. This is the test for a whole-run lock.</label>`;
+  const p = blkPlanFresh();
+  if (p) {
+    const nm = id => escapeHtml(itemDisplayName(id));
+    const changed = p.items.filter(it => it.entry);
+    h += `<table class="stewTable" style="margin-top:6px;"><thead><tr><th>Floor</th><th>Now</th><th>On download</th><th>Featured reward and rewards</th></tr></thead><tbody>`;
+    h += p.items.map(it => {
+      const was = it.old ? blkKind(it.old.refareaid).label : '<span class="id">not planned yet</span>';
+      const now = it.entry ? `<b>${escapeHtml(blkKind(it.entry.refareaid).label)}</b>${it.old ? '' : ' <span class="id">(added)</span>'}` : '<span class="id">unchanged</span>';
+      return `<tr><td>${escapeHtml(hvnFloorLabel(it.floor))}</td><td>${it.old ? escapeHtml(was) : was}</td><td>${now}</td><td>${blkRewardText(it.entry || it.old, nm)}</td></tr>`;
+    }).join('');
+    h += `</tbody></table><div class="toolbar" style="margin-top:6px;"><button class="subtle" id="blk-reroll">Reroll again</button><span class="capNote" style="margin:0;">${changed.length} floor${changed.length === 1 ? '' : 's'} will be written. Rewards are drawn from each floor's own tables for the new arena.</span></div>`;
+    h += `<div class="capNote">Not changed: the floor you're on (already built), NEO map B floors (one fixed arena), and planned floors that are already ${escapeHtml(BLK_MODES[p.mode].label.replace(/ only.*$/, '').toLowerCase())} floors.${p.mode === 'boss' ? ' Main bosses have no boss drop, so their floors get only the three large boxes; that layout hasn\'t been seen in a save yet (pick Mid-boss only to avoid it).' : ''}${from !== s.flrid ? ' Applied after the floor move above, so it replaces the moved floors\' rerolled rewards.' : ''} New floors get a normal (not rare) featured reward.</div>`;
+    h += `<div class="capNote"><b>To test:</b> download, play past two or three boss floors, quit on any Heaven floor and load the save here. If the floors below still show as locked, the game kept the entries.</div>`;
+  }
+  host.innerHTML = h;
+  const ms = document.getElementById('blk-mode');
+  if (ms) ms.addEventListener('change', () => { BOSS_LOCK.mode = ms.value; BOSS_LOCK.plan = null; renderBossLock(); toast(ms.value ? 'Boss floor lock set — download to apply' : 'Boss floors left as rolled'); });
+  const ex = document.getElementById('blk-extend');
+  if (ex) ex.addEventListener('change', () => { BOSS_LOCK.extend = ex.checked; BOSS_LOCK.plan = null; renderBossLock(); });
+  const rr = document.getElementById('blk-reroll');
+  if (rr) rr.addEventListener('click', () => { BOSS_LOCK.plan = null; renderBossLock(); });
+}
 function blockLocation() {
   return `<section class="block">
     <div class="block-head"><div><div class="eyebrow">Heaven</div><h2>Location</h2></div></div>
-    <div class="block-body"><div id="loc-body"></div></div>
+    <div class="block-body"><div id="loc-body"></div><div id="loc-lock"></div></div>
   </section>`;
 }
 function renderLocation() {
   const host = document.getElementById('loc-body');
   if (!host || !SAVE || !RAW_SAV_ROOT) return;
   flmSync();
+  renderBossLock();
   const cur = flmCurrent();
   const f = cur && hvnFloor(cur.flrid);
   let h = `<div class="capNote" style="margin-top:0;">Move a fighter paused on a Heaven boss floor to another boss floor of the same route and map (confirmed in game). Keep a backup of your save. The run's Exploration Bonus is based on the floor you end on, so moving deeper raises the Bloodnium bonus.</div>`;
@@ -8353,7 +8493,7 @@ function reviewFileName(ext, stamp) { return `brggame_${stamp || reviewStamp()}.
 function buildDownloadRoot() {
   normalizePresents(SAVE.presents);
   questOrdForSave();
-  return applyJackals(applyFloorMove(applyStampRally(applyStampMark(applyAccountChoice(restoreEmptyShapes(applyDateRules(buildRawSavRootFromSave(SAVE, RAW_SAV_ROOT, RAW_SAV_MAIN_UID)), RAW_SAV_ROOT))))));
+  return applyJackals(applyBossLock(applyFloorMove(applyStampRally(applyStampMark(applyAccountChoice(restoreEmptyShapes(applyDateRules(buildRawSavRootFromSave(SAVE, RAW_SAV_ROOT, RAW_SAV_MAIN_UID)), RAW_SAV_ROOT)))))));
 }
 
 const REVIEW_SOUL_LABELS = {
@@ -8546,6 +8686,16 @@ function reviewDiff(A, B, rawA, rawB) {
   const fa = rawA.soul && rawA.soul.flrid, fb = rawB.soul && rawB.soul.flrid;
   const locLbl = id => !id ? 'none' : hvnFloor(id) ? hvnFloorLabel(hvnFloor(id)) : id;
   if (fa !== fb) lc.lines.push(`Paused floor: ${locLbl(fa)} → ${locLbl(fb)}`);
+  if (BOSS_LOCK.root === RAW_SAV_ROOT && BOSS_LOCK.mode) {
+    const bl = sec('Boss floor lock (experimental)'), hA = new Map(arr(rawA.soul && rawA.soul.hvntrinfo).map(e => [ e.flrid, e ]));
+    bl.lines.push(`Locked to: ${BLK_MODES[BOSS_LOCK.mode].label}`);
+    for (const e of arr(rawB.soul && rawB.soul.hvntrinfo)) {
+      const o = hA.get(e.flrid), f = hvnFloor(e.flrid), lbl = f ? f.no + 'F' : e.flrid;
+      if (!o) bl.lines.push(`${lbl}: added as ${blkKind(e.refareaid).label}`);
+      else if (o.refareaid !== e.refareaid) bl.lines.push(`${lbl}: ${blkKind(o.refareaid).label} → ${blkKind(e.refareaid).label}`);
+    }
+    if (bl.lines.length > 14) { const n = bl.lines.length - 1; bl.lines.length = 1; bl.lines.push(`${n} boss floors written`); }
+  }
   const sk = sec('Armor Skins (unlocked by R&D at +4)');
   const skA = armorSkinsUnlocked(ra), skB = armorSkinsUnlocked(rb);
   const skNew = [ ...skB ].filter(x => !skA.has(x)).map(x => (PT_INDEX[x] || {}).name || x), skGone = [ ...skA ].filter(x => !skB.has(x)).map(x => (PT_INDEX[x] || {}).name || x);
