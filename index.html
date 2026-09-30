@@ -4303,8 +4303,8 @@ function applyFloorMove(root) {
 // The NEO routes' map B floors have one fixed arena (ARC/MET/AMS/RFT_AREA_HVN) and are never either.
 // The roll is kept in soul.hvntrinfo (the floor you're on plus the next three boss floors) with the
 // rewards drawn for that arena. As seen in saves: mid-boss = [MBOSSn drop, 3x TRBOX_L]; pit = [3x TRZAKO,
-// 3x TRBOX_L placeholders from the pit's one-item table]; map B = [3x TRBOX_L]. Main bosses have no drop
-// table, so their entry is taken to be [3x TRBOX_L] (not seen in a save yet).
+// 3x TRBOX_L placeholders from the pit's one-item table]; map B = [3x TRBOX_L]; main boss = [3x TRBOX_L]
+// (no boss drop; seen in a save paused on regular Heaven 105F with BOSS1 / BOSS4 floors planned).
 // A lock redraws each upcoming entry that isn't already of the chosen kind (not the floor you're on: it's
 // already built) from the arenas of that kind, with the game's weights. It can also write entries for
 // every remaining boss floor of the route, to test whether the game keeps them for the whole run.
@@ -4423,7 +4423,7 @@ function renderBossLock() {
       return `<tr><td>${escapeHtml(hvnFloorLabel(it.floor))}</td><td>${it.old ? escapeHtml(was) : was}</td><td>${now}</td><td>${blkRewardText(it.entry || it.old, nm)}</td></tr>`;
     }).join('');
     h += `</tbody></table><div class="toolbar" style="margin-top:6px;"><button class="subtle" id="blk-reroll">Reroll again</button><span class="capNote" style="margin:0;">${changed.length} floor${changed.length === 1 ? '' : 's'} will be written. Rewards are drawn from each floor's own tables for the new arena.</span></div>`;
-    h += `<div class="capNote">Not changed: the floor you're on (already built), NEO map B floors (one fixed arena), and planned floors that are already ${escapeHtml(BLK_MODES[p.mode].label.replace(/ only.*$/, '').toLowerCase())} floors.${p.mode === 'boss' ? ' Main bosses have no boss drop, so their floors get only the three large boxes; that layout hasn\'t been seen in a save yet (pick Mid-boss only to avoid it).' : ''}${from !== s.flrid ? ' Applied after the floor move above, so it replaces the moved floors\' rerolled rewards.' : ''} New floors get a normal (not rare) featured reward.</div>`;
+    h += `<div class="capNote">Not changed: the floor you're on (already built), NEO map B floors (one fixed arena), and planned floors that are already ${escapeHtml(BLK_MODES[p.mode].label.replace(/ only.*$/, '').toLowerCase())} floors.${p.mode === 'boss' ? ' Main bosses have no boss drop, so their floors get the featured reward and three large boxes, as the game writes them.' : ''}${from !== s.flrid ? ' Applied after the floor move above, so it replaces the moved floors\' rerolled rewards.' : ''} New floors get a normal (not rare) featured reward.</div>`;
     if (p.items.some(it => /_KIS_RUSH/.test((arr(AP.hvnBossKis).find(r => r.areaid === (it.entry || it.old || {}).refareaid) || {}).kis || ''))) h += `<div class="capNote">Screamer Pit chests (treasure enemies) can hold any faction's metal, on every route: the game's own pit table mixes all four (a W.E pit can drop D.O.D. ARMS, Candle Wolf or M.I.L.K. metal). The large boxes, featured reward and boss drop stay the route's own faction.</div>`;
     h += `<div class="capNote"><b>To test:</b> download, play past two or three boss floors, quit on any Heaven floor and load the save here. If the floors below still show as locked, the game kept the entries.</div>`;
   }
