@@ -4122,6 +4122,18 @@ function flmDraw(flrid, areaid, refareaid, type) {
 // whole block is shifted to the new floor and its next three boss floors (same route, same spacing, so
 // maps A/B stay in step). Without this the map shows no upcoming rewards for a while, and boss floors
 // with no entry fall back to Kill Coins in their chests.
+// Which of a boss floor's planned rewards (soul.hvntrinfo rwds) never become chests, as seen in game saves:
+// a Screamer Pit places no large boxes (its TRBOX_L entries are placeholders); a mid-boss or main-boss floor
+// places two large boxes holding the first two TRBOX_L rewards (master_stage_trbox gives the third mid-boss
+// spot a 0 chance), so the third TRBOX_L reward is never placed. Returns the unplaced rwds indexes.
+function flmUnplaced(e) {
+  const rw = arr(e && e.rwds), out = new Set();
+  const pit = rw.some(w => w && w.gentype === 'PTGENTP_TRZAKO');
+  const boss = !pit && (rw.some(w => w && /^PTGENTP_MBOSS/.test(w.gentype)) || blkKind(e && e.refareaid).kind === 'boss');
+  let n = 0;
+  rw.forEach((w, i) => { if (w && w.gentype === 'PTGENTP_TRBOX_L' && (pit || (boss && ++n > 2))) out.add(i); });
+  return out;
+}
 function flmRouteBoss(id) {
   const key = hvnRoute(id).key;
   return arr(AP && AP.hvnFloors).filter(f => Number(f.mbsmax) > 0 && hvnRoute(f.id).key === key).sort((a, b) => a.no - b.no);
@@ -4175,8 +4187,8 @@ function flmRoll(target) {
     // Treasure-enemy floors (the "rush" boss floors: TRZAKO entries) have no large boxes. The game still
     // lists three TRBOX_L placeholder entries (Death 'Roids Blue) for them, which never appear as chests,
     // so they're kept as they are and not shown.
-    const rush = arr(e.rwds).some(w => w && w.gentype === 'PTGENTP_TRZAKO');
-    const rw = arr(e.rwds).map(w => { const ph = rush && w.gentype === 'PTGENTP_TRBOX_L'; return { gentype: w.gentype, placeholder: ph, from: w.rwdid, to: ph ? w.rwdid : flmDraw(u.id, u.floor.areaid, refA, w.gentype) || w.rwdid }; });
+    const unplaced = flmUnplaced(e);
+    const rw = arr(e.rwds).map((w, i) => { const ph = unplaced.has(i); return { gentype: w.gentype, placeholder: ph, from: w.rwdid, to: ph ? w.rwdid : flmDraw(u.id, u.floor.areaid, refA, w.gentype) || w.rwdid }; });
     const fe = e.rwdid ? { from: e.rwdid, to: flmDraw(u.id, u.floor.areaid, refA, Number(e.is_rare) ? 'PTGENTP_TRBOX_SPXL_RARE' : 'PTGENTP_SPXL') || e.rwdid } : null;
     out.upcoming.push({ id: u.id, no: u.floor.no, featured: fe, rare: Number(e.is_rare) === 1, rwds: rw });
   }
@@ -4430,8 +4442,8 @@ function applyBossLock(root) {
 }
 function blkRewardText(e, nm) {
   if (!e) return '';
-  const pit = arr(e.rwds).some(w => w && w.gentype === 'PTGENTP_TRZAKO');
-  const rw = arr(e.rwds).map(w => ({ gentype: w.gentype, placeholder: pit && w.gentype === 'PTGENTP_TRBOX_L', to: w.rwdid }));
+  const unplaced = flmUnplaced(e);
+  const rw = arr(e.rwds).map((w, i) => ({ gentype: w.gentype, placeholder: unplaced.has(i), to: w.rwdid }));
   return `${e.rwdid ? nm(e.rwdid) + (Number(e.is_rare) ? ' (rare)' : '') : '—'} ${flmUpText(rw, nm)}`;
 }
 function renderBossLock() {
