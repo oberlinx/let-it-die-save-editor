@@ -4269,14 +4269,20 @@ function flmRoll(target) {
   return out;
 }
 // one upcoming floor's rewards as the map / floor has them: treasure enemies, large boxes, boss drop
+// Spoilers: the Location tab only names the rolled rewards (boxes, boss drops, the map's upcoming rewards)
+// when "Show rewards (spoilers)" is ticked; otherwise it shows how many there are and of what kind. The choice
+// is remembered in this browser.
+let LOC_SPOIL = false;
+try { LOC_SPOIL = localStorage.getItem('lid.locationSpoilers') === '1'; } catch (err) {}
+function locSetSpoil(on) { LOC_SPOIL = !!on; try { localStorage.setItem('lid.locationSpoilers', on ? '1' : '0'); } catch (err) {} }
 function flmUpText(rwds, nm) {
   const g = t => rwds.filter(w => !w.placeholder && w.gentype === t).map(w => nm(w.to));
-  const parts = [];
+  const parts = [], names = xs => LOC_SPOIL ? `: ${xs.join(', ')}` : '';
   const z = g('PTGENTP_TRZAKO'), l = g('PTGENTP_TRBOX_L');
-  if (z.length) parts.push(`${z.length} treasure enem${z.length === 1 ? 'y' : 'ies'}: ${z.join(', ')}`);
-  if (l.length) parts.push(`${l.length} large box${l.length === 1 ? '' : 'es'}: ${l.join(', ')}`);
+  if (z.length) parts.push(`${z.length} treasure enem${z.length === 1 ? 'y' : 'ies'}${names(z)}`);
+  if (l.length) parts.push(`${l.length} large box${l.length === 1 ? '' : 'es'}${names(l)}`);
   const b = rwds.filter(w => !w.placeholder && /^PTGENTP_MBOSS/.test(w.gentype)).map(w => nm(w.to));
-  if (b.length) parts.push(`boss drop: ${b.join(', ')}`);
+  if (b.length) parts.push(`boss drop${LOC_SPOIL ? ': ' + b.join(', ') : ''}`);
   return parts.length ? `<span class="id">· ${parts.join(' · ')}</span>` : '';
 }
 function flmApplyRolls(root, from, to) {
@@ -4495,7 +4501,7 @@ function blkRewardText(e, nm) {
   if (!e) return '';
   const unplaced = flmUnplaced(e);
   const rw = arr(e.rwds).map((w, i) => ({ gentype: w.gentype, placeholder: unplaced.has(i), to: w.rwdid }));
-  return `${e.rwdid ? nm(e.rwdid) + (Number(e.is_rare) ? ' (rare)' : '') : '—'} ${flmUpText(rw, nm)}`;
+  return `${e.rwdid ? (LOC_SPOIL ? nm(e.rwdid) : 'Featured reward') + (Number(e.is_rare) ? ' (rare)' : '') : '—'} ${flmUpText(rw, nm)}`;
 }
 function renderBossLock() {
   const host = document.getElementById('loc-lock');
@@ -4516,7 +4522,7 @@ function renderBossLock() {
   if (p) {
     const nm = id => escapeHtml(itemDisplayName(id));
     const changed = p.items.filter(it => it.entry);
-    h += `<table class="stewTable" style="margin-top:6px;"><thead><tr><th>Floor</th><th>Now</th><th>On download</th><th>Featured reward and rewards</th></tr></thead><tbody>`;
+    h += `<table class="stewTable" style="margin-top:6px;"><thead><tr><th>Floor</th><th>Now</th><th>On download</th><th>${LOC_SPOIL ? 'Featured reward and rewards' : 'Rewards (names hidden)'}</th></tr></thead><tbody>`;
     h += p.items.map(it => {
       const was = it.old ? blkKind(it.old.refareaid).label : '<span class="id">not planned yet</span>';
       const now = (it.entry ? `<b>${escapeHtml(blkKind(it.entry.refareaid).label)}</b>${it.old ? '' : ' <span class="id">(added)</span>'}` : '<span class="id">unchanged</span>') + (it.fallback ? ` <span class="id">(no ${escapeHtml(BLK_MODES[p.mode].noun)} on this floor)</span>` : '');
@@ -4538,12 +4544,16 @@ function renderBossLock() {
 function blockLocation() {
   return `<section class="block">
     <div class="block-head"><div><div class="eyebrow">Heaven</div><h2>Location</h2></div></div>
-    <div class="block-body"><div id="loc-body"></div><div id="loc-lock"></div></div>
+    <div class="block-body">
+      <label style="cursor:pointer; display:inline-block; margin:0 0 10px;" title="Rolled rewards are hidden until this is ticked"><input type="checkbox" id="loc-spoil" ${LOC_SPOIL ? 'checked' : ''} style="width:auto; margin-right:6px;">Show rewards (spoilers)</label>
+      <div id="loc-body"></div><div id="loc-lock"></div></div>
   </section>`;
 }
 function renderLocation() {
   const host = document.getElementById('loc-body');
   if (!host || !SAVE || !RAW_SAV_ROOT) return;
+  const sp = document.getElementById('loc-spoil');
+  if (sp && !sp.dataset.wired) { sp.dataset.wired = '1'; sp.checked = LOC_SPOIL; sp.addEventListener('change', () => { locSetSpoil(sp.checked); renderLocation(); }); }
   flmSync();
   renderBossLock();
   const cur = flmCurrent();
@@ -4580,7 +4590,9 @@ function renderLocation() {
       if (fx.length) h += `<div class="capNote">Planned boss floors re-picked for their new floor (their arena can't appear there): ${fx.map(([ id, x ]) => `${escapeHtml((hvnFloor(id) || {}).no + 'F')} ${escapeHtml(blkKind(x.from).label)} → <b>${escapeHtml(blkKind(x.to).label)}</b>`).join(', ')}. Rewards are drawn from the new floor's tables.</div>`;
       h += `<div class="subDetails" style="padding:10px; margin-top:8px;"><label style="cursor:pointer;"><input type="checkbox" id="loc-reroll" ${FLOOR_MOVE.reroll ? 'checked' : ''} style="width:auto; margin-right:6px;">Reroll the boss floor rewards for ${escapeHtml(t.no + 'F')}</label>`;
       if (!n) h += `<div class="capNote">No unopened rewards on this floor to reroll.</div>`;
-      else if (FLOOR_MOVE.reroll) {
+      else if (FLOOR_MOVE.reroll && !LOC_SPOIL) {
+        h += `<div class="capNote">${n} reward${n === 1 ? '' : 's'} will be rerolled from ${escapeHtml(t.no + 'F')}'s own drop table (${r.boxes.length} on this floor${r.boss ? ' plus the boss drop' : ''}${arr(r.upcoming).length ? `, and the map's upcoming ${arr(r.upcoming).map(u => u.no + 'F').join(', ')}` : ''}). Tick <b>Show rewards (spoilers)</b> to see them.</div><div class="toolbar" style="margin-top:6px;"><button class="subtle" id="loc-reroll-again">Reroll again</button></div>`;
+      } else if (FLOOR_MOVE.reroll) {
         h += `<table class="stewTable" style="margin-top:6px;"><thead><tr><th>Reward</th><th>Rolled for ${escapeHtml(f.no + 'F')}</th><th>Rerolled for ${escapeHtml(t.no + 'F')}</th></tr></thead><tbody>`;
         h += r.boxes.map((b, i) => `<tr><td>${b.gentype === 'PTGENTP_TRZAKO' ? 'Treasure enemy' : b.gentype === 'featured' ? 'Featured box (extra large)' : 'Treasure box ' + (i + 1)}</td><td>${nm(b.from)}</td><td>${nm(b.to)}</td></tr>`).join('');
         if (r.boss) h += `<tr><td>Boss drop</td><td>${nm(r.boss.from)}</td><td>${nm(r.boss.to)}</td></tr>`;
