@@ -4572,7 +4572,7 @@ function renderLocation() {
   const curRef = flmCurRef(), sameMap = f ? arr(AP && AP.hvnFloors).filter(x => x.areaid === f.areaid && x.id !== f.id && hvnRoute(x.id).key === hvnRoute(f.id).key).length : 0;
   const arenaNote = curRef && sameMap > targets.length ? `<div class="capNote" style="margin-top:0;">This floor is a <b>${escapeHtml(blkKind(curRef).label)}</b> floor and it's already built, so only floors where that arena can appear are listed (${sameMap - targets.length} left out${blkKind(curRef).kind === 'boss' && hvnRoute(f.id).key === 'main' ? ': regular Heaven has no Dons below 100F' : ''}).</div>` : '';
   if (cur.stgid !== 'S_HVN' || !f) h += `<div class="capNote">Only Heaven boss floors can be moved (the fighter is paused outside Heaven).</div>`;
-  else if (!(Number(f.mbsmax) > 0)) h += `<div class="capNote">The fighter is on a normal Heaven floor, not a boss floor. Normal floors are built at random, so only boss floors (which always use the same map) can be moved.</div>`;
+  else if (!(Number(f.mbsmax) > 0)) h += `<div class="warnNote" style="margin:0 0 10px;"><b>Floor move needs a boss floor.</b> The fighter is on ${escapeHtml(f.no + 'F')}, a normal Heaven floor. Normal floors are built at random, so only boss floors (which always use the same map) can be moved. To move, play to a boss floor (every 5th floor: 55F, 60F, 65F …), quit while standing on it, and load that save here. <b>Lock boss floors</b> below works from this floor.</div>`;
   else if (!targets.length) h += arenaNote || `<div class="capNote">No other boss floor uses this map.</div>`;
   else {
     const sel = 'background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);';
