@@ -4390,8 +4390,9 @@ function applyFloorMove(root) {
   return root;
 }
 // ---------------------------------------------------------------------------
-// Boss floor lock (EXPERIMENTAL, not confirmed in game): make the run's upcoming Heaven boss floors all
-// boss fights or all Screamer Pits.
+// Boss floor lock: make the run's upcoming Heaven boss floors all Dons, all mid-bosses, all Screamer Pits, or
+// Dons and mid-bosses. Confirmed in game for a whole run: on a D.O.D. run locked at 52F, the game built 75F and
+// 85F from the entries the editor added (not in the game's own plan) and kept every later entry unchanged.
 // Each boss floor rolls an arena (refareaid) from master_ref_boss_area_setting (flrid, refareaid, freq).
 // master_area_setting_unit (unit HEAVEN_BOSS) says what the arena holds: KIS_BOSS1-4 = main boss
 // (HVN_AREA_003-006), KIS_MBOSS1-4 = mid-boss (007-010), KIS_RUSH1-10 = Screamer Pit (011-015, 018-022).
@@ -4402,7 +4403,7 @@ function applyFloorMove(root) {
 // (no boss drop; seen in a save paused on regular Heaven 105F with BOSS1 / BOSS4 floors planned).
 // A lock redraws each upcoming entry that isn't already of the chosen kind (not the floor you're on: it's
 // already built) from the arenas of that kind, with the game's weights. It can also write entries for
-// every remaining boss floor of the route, to test whether the game keeps them for the whole run.
+// every remaining boss floor of the route, which the game keeps for the whole run.
 // hvntrinfo is emptied between runs, so this only works on a save paused mid-run.
 // ---------------------------------------------------------------------------
 let BOSS_LOCK = { root: null, mode: '', extend: true, plan: null };
@@ -4508,8 +4509,8 @@ function renderBossLock() {
   if (!host || !SAVE || !RAW_SAV_ROOT) return;
   blkSync();
   const s = RAW_SAV_ROOT.soul || {};
-  let h = `<h3 style="margin:18px 0 6px;">Lock boss floors <span class="id">(experimental)</span></h3>
-    <div class="warnNote" style="margin:0 0 10px;"><b>Experimental — not confirmed in game.</b> Test on a backup first and keep your original save. Makes the run's upcoming Heaven boss floors all boss fights or all Screamer Pits.</div>`;
+  let h = `<h3 style="margin:18px 0 6px;">Lock boss floors</h3>
+    <div class="capNote" style="margin:0 0 10px;">Makes the run's upcoming Heaven boss floors all Dons, all mid-bosses or all Screamer Pits, for the rest of the run (confirmed in game). Keep a backup of your save.</div>`;
   if (!s.pause || s.stgid !== 'S_HVN') { host.innerHTML = h + `<div class="capNote" style="margin-top:0;">Only works on a fighter paused mid-run in Heaven (the game clears the planned boss floors between runs). Quit the game anywhere in Heaven, then load that save here.</div>`; return; }
   if (!arr(AP && AP.hvnBossAreas).length || !arr(AP && AP.hvnBossKis).length) { host.innerHTML = h + `<div class="capNote" style="margin-top:0;">This masters.db doesn't have the Heaven boss arena tables.</div>`; return; }
   const from = blkFrom(), cur = hvnFloor(from);
@@ -4517,7 +4518,7 @@ function renderBossLock() {
   const sel = 'background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);';
   const remaining = flmRouteBoss(from).filter(x => x.no > cur.no).length;
   h += `<div class="toolbar"><select id="blk-mode" style="${sel} min-width:340px;"><option value="">Leave as rolled</option>${Object.entries(BLK_MODES).map(([ k, m ]) => `<option value="${k}" ${BOSS_LOCK.mode === k ? 'selected' : ''}>${escapeHtml(m.label)}</option>`).join('')}</select></div>
-    <label style="cursor:pointer; display:block; margin:6px 0;"><input type="checkbox" id="blk-extend" ${BOSS_LOCK.extend ? 'checked' : ''} style="width:auto; margin-right:6px;">Also write every remaining boss floor of the route (${remaining} after ${escapeHtml(cur.no + 'F')}), not only the ones the game has planned so far. This is the test for a whole-run lock.</label>`;
+    <label style="cursor:pointer; display:block; margin:6px 0;"><input type="checkbox" id="blk-extend" ${BOSS_LOCK.extend ? 'checked' : ''} style="width:auto; margin-right:6px;">Also write every remaining boss floor of the route (${remaining} after ${escapeHtml(cur.no + 'F')}), not only the ones the game has planned so far, so the lock lasts the whole run.</label>`;
   const p = blkPlanFresh();
   if (p) {
     const nm = id => escapeHtml(itemDisplayName(id));
@@ -4531,7 +4532,6 @@ function renderBossLock() {
     h += `</tbody></table><div class="toolbar" style="margin-top:6px;"><button class="subtle" id="blk-reroll">Reroll again</button><span class="capNote" style="margin:0;">${changed.length} floor${changed.length === 1 ? '' : 's'} will be written. Rewards are drawn from each floor's own tables for the new arena.</span></div>`;
     h += `<div class="capNote">Not changed: the floor you're on (already built), NEO map B floors (one fixed arena), and planned floors that are already ${escapeHtml(BLK_MODES[p.mode].noun)} floors.${p.mode === 'don' ? ' Regular Heaven has no Dons below 100F (the game only offers a mid-boss or a Screamer Pit there), so those floors become mid-boss floors.' : ''}${p.mode === 'don' || p.mode === 'boss' ? ' Dons have no boss drop: their floors get the featured reward and two large chests, as the game writes them.' : ''}${from !== s.flrid ? ' Applied after the floor move above, so it replaces the moved floors\' rerolled rewards.' : ''} New floors get a normal (not rare) featured reward.</div>`;
     if (p.items.some(it => /_KIS_RUSH/.test((arr(AP.hvnBossKis).find(r => r.areaid === (it.entry || it.old || {}).refareaid) || {}).kis || ''))) h += `<div class="capNote">Screamer Pit chests (treasure enemies) can hold any faction's metal, on every route: the game's own pit table mixes all four (a W.E pit can drop D.O.D. ARMS, Candle Wolf or M.I.L.K. metal). The large boxes, featured reward and boss drop stay the route's own faction.</div>`;
-    h += `<div class="capNote"><b>To test:</b> download, play past two or three boss floors, quit on any Heaven floor and load the save here. If the floors below still show as locked, the game kept the entries.</div>`;
   }
   host.innerHTML = h;
   const ms = document.getElementById('blk-mode');
@@ -8892,7 +8892,7 @@ function reviewDiff(A, B, rawA, rawB) {
   if (fa !== fb) lc.lines.push(`Paused floor: ${locLbl(fa)} → ${locLbl(fb)}`);
   if (BOSS_LOCK.root === RAW_SAV_ROOT && BOSS_LOCK.mode) {
     // compare with the planned floors as they'd be after any floor move (the paused floor is never locked)
-    const bl = sec('Boss floor lock (experimental)'), hA = blkExisting(rawB.soul && rawB.soul.flrid);
+    const bl = sec('Boss floor lock'), hA = blkExisting(rawB.soul && rawB.soul.flrid);
     bl.lines.push(`Locked to: ${BLK_MODES[BOSS_LOCK.mode].label}`);
     for (const e of arr(rawB.soul && rawB.soul.hvntrinfo)) {
       if (e.flrid === rawB.soul.flrid) continue;
