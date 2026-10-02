@@ -5264,6 +5264,9 @@ function runExtraCsv(d) {
   if (h.most) L.push([ 'Haters', 'Most on one floor', `${h.most.label}: ${h.most.n}` ].map(q).join(','));
   return L;
 }
+// Jackal rewards on the Current Run tab are hidden until this is ticked (remembered in this browser)
+let RUN_JKL_SPOIL = false;
+try { RUN_JKL_SPOIL = localStorage.getItem('lid.runJackalSpoilers') === '1'; } catch (err) {}
 function runExtraHtml(d) {
   const esc = escapeHtml;
   const pill = (t, cls) => ` <span class="runBadge ${cls}" style="font-size:10.5px; padding:1px 7px;">${t}</span>`;
@@ -5298,7 +5301,12 @@ function runExtraHtml(d) {
     if (fn.zombies.length) rows.push([ 'Zombies', String(fn.zombies.length), fn.zombies.slice(0, 6).map(z => `${z.fighter || '?'} (${z.player || '?'})`).join(', ') + (fn.zombies.length > 6 ? `, and ${fn.zombies.length - 6} more` : '') ]);
     h += rows.length ? `<table class="runTable"><thead><tr><th>What</th><th>Details</th><th>Contents</th></tr></thead><tbody>${rows.map(r => `<tr><td>${esc(r[0])}</td><td class="muted">${esc(r[1])}</td><td>${esc(r[2])}</td></tr>`).join('')}</tbody></table>` : '<div class="capNote" style="margin-top:0;">Nothing left on this floor.</div>';
     if (fn.jackals.length) {
-      h += `<h3 style="font-size:14px;">Jackals <span class="muted" style="font-weight:400; font-size:13px;">each keeps its reward until you beat it (also between runs)</span></h3><table class="runTable"><tbody>${fn.jackals.map(j => `<tr><td style="width:150px;">${esc(j.name)}</td><td>${esc(j.what)}</td><td class="n">${j.killed ? '<span class="muted">beaten</span>' : ''}</td></tr>`).join('')}</tbody></table>`;
+      const left = fn.jackals.filter(j => !j.killed).length;
+      h += `<h3 style="font-size:14px; display:flex; align-items:center; gap:12px; flex-wrap:wrap;">Jackals <span class="muted" style="font-weight:400; font-size:13px;">each keeps its reward until you beat it (also between runs)</span>
+        <label style="margin-left:auto; font-weight:400; font-size:13px; cursor:pointer; display:flex; align-items:center; gap:6px;"><input type="checkbox" id="run-jkl-spoil" ${RUN_JKL_SPOIL ? 'checked' : ''} style="width:auto;"> Show Jackal rewards (spoilers)</label></h3>`;
+      h += RUN_JKL_SPOIL
+        ? `<table class="runTable"><tbody>${fn.jackals.map(j => `<tr><td style="width:150px;">${esc(j.name)}</td><td>${esc(j.what)}</td><td class="n">${j.killed ? '<span class="muted">beaten</span>' : ''}</td></tr>`).join('')}</tbody></table>`
+        : `<div class="capNote" style="margin-top:0;">${fn.jackals.length} Jackal${fn.jackals.length === 1 ? '' : 's'}${left < fn.jackals.length ? ` (${left} not beaten yet)` : ''} carrying a reward. Tick the box to see what each one drops.</div>`;
     }
   }
   // 3. Pace
@@ -5372,6 +5380,8 @@ function renderRun() {
   h += `<details class="subDetails" style="margin-top:16px;"><summary>▸ Floors visited (${d.floors.length})</summary><div class="subDetailsBody"><table class="runTable"><thead><tr><th>#</th><th>Floor</th><th>Map used</th><th>Cleared at</th></tr></thead><tbody>${d.floors.slice().reverse().map(x => `<tr><td class="muted">${x.n}</td><td>${escapeHtml(x.label)}${x.boss ? ' <span class="runBadge ok" style="font-size:10.5px; padding:1px 7px;">boss</span>' : ''}</td><td class="muted">${escapeHtml(x.ref)}</td><td>${x.cleared ? escapeHtml(dtFmt(x.cleared)) : '<span class="muted">—</span>'}</td></tr>`).join('')}</tbody></table></div></details>`;
   h += `<div class="capNote" style="margin-top:12px;">Read from the save as loaded. "Run began" is when the first floor of the run was cleared; "last started or resumed" is when the game last picked the run up. Changes made on the Location tab (moving or ending the run) apply on download and aren't shown here.</div>`;
   host.innerHTML = h;
+  const js = document.getElementById('run-jkl-spoil');
+  if (js) js.addEventListener('change', () => { RUN_JKL_SPOIL = js.checked; try { localStorage.setItem('lid.runJackalSpoilers', js.checked ? '1' : '0'); } catch (err) {} renderRun(); });
 }
 function wireRun() {
   if (activeTab === 'run') renderRun();
