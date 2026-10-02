@@ -6781,7 +6781,7 @@ function renderStewReport() {
       <label class="stewHlOnly"><input type="checkbox" id="stew-hl-only" ${STEW_FORM.hlOnly ? 'checked' : ''} ${hl.size ? '' : 'disabled'}> Only show highlighted</label></div>`;
     const listed = order.slice(0, ahead).map((s, i) => ({ s, i })).filter(x => !(STEW_FORM.hlOnly && hl.size) || hl.has(rk(x.s)));
     const title = STEW_FORM.showAll || ahead >= order.length ? `Whole queue (${order.length} pulls, next pull first)` : `Next ${ahead} of ${order.length} pulls`;
-    html += `<h3 class="stewH">${title}${STEW_FORM.hlOnly && hl.size ? ` · ${listed.length} highlighted` : ''}</h3><div class="listBlock" style="max-height:${STEW_FORM.showAll ? 600 : 420}px;">`;
+    html += `<h3 class="stewH" style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">${title}${STEW_FORM.hlOnly && hl.size ? ` · ${listed.length} highlighted` : ''}<button class="subtle" id="stew-csv" style="margin-left:auto;" title="Every pull in the queue (next pull first) and the game's odds for every decal, as a spreadsheet file">Export to CSV</button></h3><div class="listBlock" style="max-height:${STEW_FORM.showAll ? 600 : 420}px;">`;
     html += listed.map(({ s, i }) => { const k = rk(s); const on = hl.has(k); return `<div class="listRow${on ? ' stewHl' : ''}" ${on ? `style="--rc:${stewRarColor(k)}"` : ''}><span style="width:44px; color:var(--text-faint);">${i + 1}.</span><div class="name">${escapeHtml(stewName(s))}</div><span class="badge stewRarBadge" style="--rc:${stewRarColor(k)}">r${k}</span>${isNew[i] ? '<span class="badge current" style="width:44px; text-align:center;">NEW</span>' : `<span class="badge" style="width:44px; text-align:center; opacity:0.5;">${owned.has(s) ? 'own' : 'dupe'}</span>`}<div class="id">${s}</div></div>`; }).join('') || '<div style="padding:10px; color:var(--text-faint); font-size:12px;">No pulls of the highlighted rarities in this range.</div>';
     html += '</div>';
   }
@@ -6814,6 +6814,39 @@ function renderStewReport() {
   if (hlOnly) hlOnly.addEventListener('change', () => { STEW_FORM.hlOnly = hlOnly.checked; renderStewReport(); });
   const det = document.getElementById('stew-odds');
   if (det) det.addEventListener('toggle', () => { STEW_FORM.showOdds = det.open; });
+  const csv = document.getElementById('stew-csv');
+  if (csv) csv.addEventListener('click', () => {
+    const t = new Date(), p = n => String(n).padStart(2, '0');
+    const nm = `stew_queue_${String((SAVE.user && SAVE.user.nm) || 'save').replace(/[^\w-]+/g, '_')}_${t.getFullYear()}-${p(t.getMonth() + 1)}-${p(t.getDate())}_${p(t.getHours())}${p(t.getMinutes())}.csv`;
+    triggerDownload(stewCsv(), nm, 'text/csv;charset=utf-8');
+    toast('Exported ' + nm);
+  });
+}
+
+// The stew queue as CSV: every pull, next pull first, as it stands now (edits included), then the game's odds
+// for every decal in the pool. New / own / dupe match the list on the tab.
+const csvCell = v => { const s = String(v == null ? '' : v); return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+function stewCsv() {
+  const q = stewQueue() || [], order = q.slice().reverse(), owned = stewOwnedDecals();
+  const rows = arr(AP && AP.stewOdds), total = rows.reduce((a, r) => a + r.odds, 0) || 0;
+  const odds = {};
+  for (const r of rows) odds[r.sklid] = (odds[r.sklid] || 0) + r.odds;
+  const pct = id => total && odds[id] ? Number((100 * odds[id] / total).toFixed(4)) : '';
+  const rar = id => stewRarity(id) == null ? '?' : stewRarity(id);
+  const changed = JSON.stringify(q) !== JSON.stringify(STEW_STATE.original || []);
+  const L = [ [ 'Stew queue', changed ? 'edited in the editor, not downloaded yet' : 'as in the save', `${order.length} pulls` ].map(csvCell).join(','), '' ];
+  L.push([ 'Pull', 'Decal', 'Rarity', 'Status', 'Chance per pull (%)', 'Decal ID' ].join(','));
+  const seen = new Set();
+  order.forEach((id, i) => {
+    const st = owned.has(id) ? 'own' : seen.has(id) ? 'dupe' : 'NEW';
+    seen.add(id);
+    L.push([ i + 1, String(stewName(id)).trim(), rar(id), st, pct(id), id ].map(csvCell).join(','));
+  });
+  if (rows.length) {
+    L.push('', [ 'Game odds', 'Decal', 'Rarity', 'Chance per pull (%)', 'On average (1 in N pulls)', 'Owned', 'Decal ID' ].join(','));
+    for (const id of Object.keys(odds).sort((a, b) => odds[a] - odds[b])) L.push([ 'Game odds', String(stewName(id)).trim(), rar(id), pct(id), Math.round(total / odds[id]), owned.has(id) ? 'yes' : '', id ].map(csvCell).join(','));
+  }
+  return '\ufeff' + L.join('\r\n') + '\r\n';
 }
 
 function runStewAction(mode) {
