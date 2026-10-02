@@ -5087,7 +5087,9 @@ function runRewardText(e) {
   const grp = (re, label) => { const L = rw.filter(w => re.test(w.gentype || '')).map(nm); return L.length ? `${label}: ${L.join(', ')}` : ''; };
   return [ grp(/TRZAKO$/, 'Treasure enemies'), grp(/TRBOX_L$/, 'Large boxes'), grp(/MBOSS/, 'Boss drop') ].filter(Boolean).join(' · ');
 }
-const runDur = sec => { sec = Math.max(0, Math.floor(sec)); const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60); return h ? `${h}h ${m}m` : `${m}m`; };
+const runDur = sec => { sec = Math.max(0, Math.floor(sec)); const dd = Math.floor(sec / 86400), h = Math.floor(sec % 86400 / 3600), m = Math.floor(sec % 3600 / 60); return dd >= 2 ? `${dd}d ${h}h` : (dd ? `${dd * 24 + h}h ${m}m` : h ? `${h}h ${m}m` : `${m}m`); };
+// short times (floor pace): 45s, 4m 12s
+const runDurS = sec => { sec = Math.max(0, Math.round(sec)); const m = Math.floor(sec / 60), x = sec % 60; return m >= 60 ? runDur(sec) : m ? `${m}m ${String(x).padStart(2, '0')}s` : `${x}s`; };
 const runN = v => Number(v || 0).toLocaleString();
 function runRows(d) {
   // [section, field, value] for the page and the CSV
@@ -5112,6 +5114,211 @@ function runRows(d) {
   for (const [ k, n ] of Object.entries(d.owners)) add('Health', 'Left behind: ' + k, n);
   return R;
 }
+// ---- Current Run extras: Death Bag, current floor, pace, Haters ----------------------------------------
+const RUN_CHEST = { TBTP_SMALL: 'Small chest', TBTP_MEDIUM: 'Medium chest', TBTP_LARGE: 'Large chest', TBTP_EXLARGE: 'Extra-large chest (featured)', TBTP_SPXL: 'Extra-large chest (featured)' };
+const RUN_SITES = [ [ 'EQSITE_HEAD', 'Head' ], [ 'EQSITE_BODY', 'Body' ], [ 'EQSITE_LEGS', 'Legs' ] ];
+function runInstName(root, uid, eid) {
+  // a part / item / mushroom / beast instance by eid, as a display name
+  for (const [ sec, key ] of [ [ 'part', 'pts' ], [ 'item', 'items' ], [ 'mushroom', 'msrs' ], [ 'beast', 'bsts' ] ]) {
+    const v = root[sec] && root[sec][key], L = Array.isArray(v) ? v : v && typeof v === 'object' ? arr(v[uid]) : [];
+    const x = L.find(e => e && e.eid === eid);
+    if (!x) continue;
+    if (sec === 'part') { const r = PT_INDEX[x.ptid]; return r ? `${r.name} +${displayFromRaw(r, x.lvl)}` : x.ptid; }
+    if (sec === 'item') return itemDisplayName(x.itemid || x.itemId);
+    if (sec === 'mushroom') return msrDisplayName(x.msrid, x.cooked);
+    return bstDisplayName(x.bstid, x.cooked);
+  }
+  return '';
+}
+function runBag() {
+  const c = arr(SAVE && SAVE.soul && SAVE.soul.chrs).find(x => x && x.state === 'USE');
+  if (!c) return null;
+  const pts = arr(c.pspts), byEid = {};
+  for (const p of pts) byEid[p.eptid] = p;
+  const gear = p => {
+    const r = PT_INDEX[p.ptid];
+    if (!r) return { name: p.ptid, lvl: '', dur: '', ammo: '' };
+    const pct = durabilityPct(p, r);
+    return { name: r.name, lvl: '+' + displayFromRaw(r, p.lvl), dur: pct != null ? pct + '%' : '', ammo: String(ammoText(p, r) || '').replace(/^\s*·\s*/, '') };
+  };
+  const held = new Set(arr(c.eqpts).map(e => e.eptid));
+  const slots = [];
+  const as = c.armslots || {};
+  for (let i = 0; i < 6; i++) {
+    const eid = as[i] || as[String(i)], p = eid && byEid[eid];
+    slots.push(Object.assign({ slot: (i < 3 ? 'Right hand ' : 'Left hand ') + (i % 3 + 1), inHand: !!(p && held.has(eid)) }, p ? gear(p) : { name: '' }));
+  }
+  for (const [ site, label ] of RUN_SITES) {
+    const e = arr(c.eqpts).find(x => x.site === site), p = e && byEid[e.eptid];
+    slots.push(Object.assign({ slot: label, inHand: false }, p ? gear(p) : { name: '' }));
+  }
+  const used = new Set(Object.values(as).concat(arr(c.eqpts).map(e => e.eptid)));
+  const spare = pts.filter(p => !used.has(p.eptid)).map(gear);
+  const tally = list => { const m = new Map(); for (const n of list) m.set(n, (m.get(n) || 0) + 1); return [ ...m ].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])); };
+  const items = arr(c.psitems).map(it => itemDisplayName(it.itemId));
+  return {
+    slots, spare,
+    mushrooms: tally(arr(c.psmsrs).map(m => msrDisplayName(m.msrid, m.cooked))),
+    beasts: tally(arr(c.psbsts).map(b => bstDisplayName(b.bstid, b.cooked))),
+    blueprints: tally(items.filter(n => /^Blueprint/.test(n))),
+    items: tally(items.filter(n => !/^Blueprint/.test(n))),
+    count: fighterItemCount(c), cap: deathBagLimit(c), slotsNote: (() => { const cap = deathBagLimit(c), n = fighterItemCount(c), bonus = constIntOf('VIP_INCREASE_DEATHBAG', 10); return n > cap && !vipBagBonus() && n <= cap + bonus ? `fits the ${cap + bonus} slots the Express Pass gives; the pass has run out` : ''; })()
+  };
+}
+function runFloorNow() {
+  const root = RAW_SAV_ROOT, fl = root && root.floor;
+  if (!fl) return null;
+  const uid = String(RAW_SAV_MAIN_UID || (root.user && root.user.uid) || '');
+  const out = { chests: [], enemies: [], boss: [], zombies: [], loose: [], jackals: [] };
+  const reward = (type, id) => type === 'TBRWD_MONEY' ? `${runN(id)} Kill Coins` : runInstName(root, uid, id) || 'item';
+  for (const t of arr(fl.trbox)) if (t) out.chests.push({ kind: RUN_CHEST[t.type] || t.type, what: reward(t.rwdtype, t.contentid) });
+  for (const z of arr(fl.zako && fl.zako.zks)) {
+    if (!z) continue;
+    const bits = [];
+    if (Number(z.money)) bits.push(`${runN(z.money)} Kill Coins`);
+    if (z.eitemid) bits.push(runInstName(root, uid, z.eitemid));
+    out.enemies.push({ kind: z.type === 'ZAKO_TREASURE' ? 'Treasure enemy' : z.type, lvl: z.lvl, what: bits.filter(Boolean).join(' + ') || '—' });
+  }
+  const zt = arr(fl.zako && fl.zako.trbox);
+  zt.forEach((b, i) => { if (b && b.contentid && out.enemies[i]) out.enemies[i].what = [ out.enemies[i].what === '—' ? '' : out.enemies[i].what, reward(b.rwdtype, b.contentid) ].filter(Boolean).join(' + '); });
+  for (const m of arr(fl.mboss && fl.mboss.mbss)) {
+    if (!m) continue;
+    const kind = /^STAGE_BOSS/.test(m.type) ? 'Don (main boss)' : /^MBOSS/.test(m.type) ? 'Mid-boss' : m.type;
+    out.boss.push({ kind, lvl: m.lvl, beaten: Number(m.state) === 0, what: m.eitemid ? runInstName(root, uid, m.eitemid) : '' });
+  }
+  const here = new Set(arr(root.zombie && root.zombie.flrzmbs && root.zombie.flrzmbs[uid]).map(z => z && z.zid));
+  for (const L of Object.values((root.zombie && root.zombie.zmbs) || {})) for (const z of arr(L)) if (z && here.has(z.zid)) out.zombies.push({ player: z.name || '', fighter: z.cname || '', cls: [ z.type, z.limit_break ? 'LB ' + z.limit_break : '' ].filter(Boolean).join(' '), lvl: z.lvl });
+  for (const it of arr(fl.item)) if (it && it.eid) out.loose.push(runInstName(root, uid, it.eid) || 'item');
+  for (const j of arr(fl.jkls)) {
+    if (!j) continue;
+    let r = {};
+    try { r = JSON.parse(j.rwd || '{}') || {}; } catch (e) {}
+    const bits = [];
+    if (Number(r.money)) bits.push(`${runN(r.money)} Kill Coins`);
+    if (Number(r.spirit)) bits.push(`${runN(r.spirit)} SPLithium`);
+    for (const p of arr(r.pts)) if (p && p.eptid) bits.push(runInstName(root, uid, p.eptid));
+    for (const i of arr(r.items)) if (i) bits.push(i.itemId ? itemDisplayName(i.itemId) : runInstName(root, uid, i.eitemid));
+    for (const m of arr(r.msrs)) if (m && m.emsrid) bits.push(runInstName(root, uid, m.emsrid));
+    out.jackals.push({ name: String(j.type || '').replace(/^JACKAL_/, 'Jackal '), what: bits.filter(Boolean).join(', ') || 'nothing', killed: Number(j.killed) > 0 });
+  }
+  return out;
+}
+function runPace(d) {
+  const f = d.floors.filter(x => x.cleared);
+  const steps = [];
+  for (let i = 1; i < f.length; i++) { const hf = hvnFloor(f[i].id); steps.push({ label: hf ? hf.no + 'F' + (f[i].boss ? ' (boss)' : '') : f[i].label, boss: f[i].boss, sec: f[i].cleared - f[i - 1].cleared }); }
+  const BREAK = 3600, act = steps.filter(x => x.sec > 0 && x.sec <= BREAK), breaks = steps.filter(x => x.sec > BREAK);
+  const med = L => { if (!L.length) return 0; const v = L.map(x => x.sec).sort((a, b) => a - b); return v[Math.floor(v.length / 2)]; };
+  const total = act.reduce((a, x) => a + x.sec, 0);
+  const by = act.slice().sort((a, b) => a.sec - b.sec);
+  return {
+    cleared: f.length, typical: med(act), avg: act.length ? total / act.length : 0, perHour: total ? act.length * 3600 / total : 0,
+    boss: med(act.filter(x => x.boss)), normal: med(act.filter(x => !x.boss)),
+    fastest: by.slice(0, 3), slowest: by.slice(-3).reverse(), breaks: breaks.length, breakTime: breaks.reduce((a, x) => a + x.sec, 0)
+  };
+}
+function runHaters(d) {
+  const root = RAW_SAV_ROOT, began = d.began || d.started;
+  const ids = new Set(d.floors.map(x => x.id));
+  const per = {};
+  let n = 0;
+  for (const L of Object.values((root.diedchara && root.diedchara.dchrarcs) || {})) for (const a of arr(L)) {
+    if (!a || a.state !== 'ENEMY' || !ids.has(a.flrid) || (began && Number(a.created) < began - 600)) continue;
+    n++; per[a.flrid] = (per[a.flrid] || 0) + 1;
+  }
+  // the run's first floor (Heaven's entrance, revisited by every trip up) collects far more than a normal floor
+  const first = d.floors.length ? d.floors[0].id : '';
+  const most = Object.entries(per).filter(([ id ]) => id !== first).sort((a, b) => b[1] - a[1])[0];
+  const mf = most && hvnFloor(most[0]);
+  const nf = Object.keys(per).length;
+  return { n, floors: nf, avg: nf ? n / nf : 0, most: most ? { label: mf ? mf.no + 'F' : most[0], n: most[1] } : null };
+}
+function runExtraCsv(d) {
+  const q = csvCell, L = [];
+  const bag = runBag();
+  if (bag) {
+    L.push('', [ 'Death Bag', 'Slot', 'Item', 'Level', 'Durability', 'Ammo / in hand' ].join(','));
+    for (const x of bag.slots) L.push([ 'Death Bag', x.slot, x.name || '(empty)', x.lvl || '', x.dur || '', x.inHand ? 'in hand' : x.ammo || '' ].map(q).join(','));
+    for (const x of bag.spare) L.push([ 'Death Bag', 'Spare gear', x.name, x.lvl, x.dur, x.ammo ].map(q).join(','));
+    for (const [ grp, list ] of [ [ 'Mushroom', bag.mushrooms ], [ 'Beast', bag.beasts ], [ 'Blueprint', bag.blueprints ], [ 'Item', bag.items ] ]) for (const [ n, c ] of list) L.push([ 'Death Bag', grp, n, '', '', 'x' + c ].map(q).join(','));
+    L.push([ 'Death Bag', 'Total', `${bag.count} of ${bag.cap} slots${bag.slotsNote ? ' (' + bag.slotsNote + ')' : ''}` ].map(q).join(','));
+  }
+  const fn = runFloorNow();
+  if (fn) {
+    L.push('', [ 'Current floor', 'What', 'Details', 'Contents' ].join(','));
+    for (const x of fn.boss) L.push([ 'Current floor', x.kind, `Lv ${x.lvl}${x.beaten ? ' (beaten)' : ''}`, x.what ].map(q).join(','));
+    for (const x of fn.chests) L.push([ 'Current floor', x.kind, 'unopened', x.what ].map(q).join(','));
+    for (const x of fn.enemies) L.push([ 'Current floor', x.kind, `Lv ${x.lvl}`, x.what ].map(q).join(','));
+    for (const x of fn.loose) L.push([ 'Current floor', 'On the ground', '', x ].map(q).join(','));
+    for (const x of fn.zombies) L.push([ 'Current floor', 'Zombie', `${x.fighter} (${x.player})`, x.cls ].map(q).join(','));
+    for (const x of fn.jackals) L.push([ 'Jackals', x.name, x.killed ? 'beaten' : 'roaming', x.what ].map(q).join(','));
+  }
+  const pc = runPace(d);
+  L.push('', [ 'Pace', 'Field', 'Value' ].join(','));
+  for (const [ k, v ] of [ [ 'Floors with a clear time', pc.cleared ], [ 'Typical time per floor', runDurS(pc.typical) ], [ 'Average time per floor', runDurS(pc.avg) ], [ 'Floors per hour (playing)', Number(pc.perHour.toFixed(1)) ], [ 'Typical normal floor', runDurS(pc.normal) ], [ 'Typical boss floor', runDurS(pc.boss) ], [ 'Breaks over 1 hour', pc.breaks ], [ 'Time in breaks', runDur(pc.breakTime) ] ]) L.push([ 'Pace', k, v ].map(q).join(','));
+  for (const x of pc.fastest) L.push([ 'Pace', 'Fastest floor', `${x.label}: ${runDurS(x.sec)}` ].map(q).join(','));
+  for (const x of pc.slowest) L.push([ 'Pace', 'Slowest floor', `${x.label}: ${runDurS(x.sec)}` ].map(q).join(','));
+  const h = runHaters(d);
+  L.push('', [ 'Haters', 'Field', 'Value' ].join(','));
+  L.push([ 'Haters', 'Enemy fighters on this run\'s floors', h.n ].map(q).join(','), [ 'Haters', 'Per floor (average)', Number(h.avg.toFixed(1)) ].map(q).join(','));
+  if (h.most) L.push([ 'Haters', 'Most on one floor', `${h.most.label}: ${h.most.n}` ].map(q).join(','));
+  return L;
+}
+function runExtraHtml(d) {
+  const esc = escapeHtml;
+  const pill = (t, cls) => ` <span class="runBadge ${cls}" style="font-size:10.5px; padding:1px 7px;">${t}</span>`;
+  let h = '';
+  // 1. Death Bag
+  const bag = runBag();
+  if (bag) {
+    h += `<h3>Death Bag <span class="muted" style="font-weight:400; font-size:13px;">${bag.count} of ${bag.cap} slots used${bag.slotsNote ? ' · ' + esc(bag.slotsNote) : ''}</span></h3>`;
+    h += `<table class="runTable"><thead><tr><th>Slot</th><th>Equipped</th><th style="text-align:right;">Level</th><th style="text-align:right;">Durability</th><th>Ammo</th></tr></thead><tbody>`;
+    h += bag.slots.map(x => `<tr><td>${esc(x.slot)}${x.inHand ? pill('in hand', 'ok') : ''}</td><td>${x.name ? esc(x.name) : '<span class="muted">empty</span>'}</td><td class="n">${esc(x.lvl || '')}</td><td class="n">${esc(x.dur || '')}</td><td class="muted">${esc(x.ammo || '')}</td></tr>`).join('');
+    h += '</tbody></table>';
+    const groups = [ [ 'Spare weapons & armor', bag.spare.map(x => [ `${x.name} ${x.lvl}`, 1, x.dur ]) ], [ 'Mushrooms', bag.mushrooms ], [ 'Beasts', bag.beasts ], [ 'Blueprints', bag.blueprints ], [ 'Items', bag.items ] ].filter(g => g[1].length);
+    if (groups.length) {
+      h += `<div class="runTiles" style="grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)); margin-top:10px;">`;
+      for (const [ title, list ] of groups) {
+        const n = list.reduce((a, x) => a + x[1], 0);
+        h += `<div class="runTile" style="--tile:#5b6b7a;"><div class="k">${esc(title)} · ${n}</div><div style="margin-top:6px; font-size:13.5px; line-height:1.65;">${list.map(([ nm, c, extra ]) => `<div style="display:flex; justify-content:space-between; gap:10px;"><span>${esc(nm)}</span><span class="muted">${extra ? esc(extra) : c > 1 ? '×' + c : ''}</span></div>`).join('')}</div></div>`;
+      }
+      h += '</div>';
+    }
+  }
+  // 2. Current floor
+  const fn = runFloorNow();
+  if (fn) {
+    const floorNo = (d.where.match(/(\d+)F/) || [])[1];
+    h += `<h3>On ${floorNo ? floorNo + 'F' : 'the current floor'} right now</h3>`;
+    const rows = [];
+    for (const x of fn.boss) rows.push([ x.kind, `Lv ${x.lvl}${x.beaten ? ' · beaten' : ''}`, x.what || '' ]);
+    for (const x of fn.chests) rows.push([ x.kind, 'unopened', x.what ]);
+    for (const x of fn.enemies) rows.push([ x.kind, `Lv ${x.lvl}`, x.what ]);
+    if (fn.loose.length) { const m = new Map(); for (const n of fn.loose) m.set(n, (m.get(n) || 0) + 1); rows.push([ 'On the ground', `${fn.loose.length} item${fn.loose.length === 1 ? '' : 's'}`, [ ...m ].map(([ n, c ]) => c > 1 ? `${n} ×${c}` : n).join(', ') ]); }
+    if (fn.zombies.length) rows.push([ 'Zombies', String(fn.zombies.length), fn.zombies.slice(0, 6).map(z => `${z.fighter || '?'} (${z.player || '?'})`).join(', ') + (fn.zombies.length > 6 ? `, and ${fn.zombies.length - 6} more` : '') ]);
+    h += rows.length ? `<table class="runTable"><thead><tr><th>What</th><th>Details</th><th>Contents</th></tr></thead><tbody>${rows.map(r => `<tr><td>${esc(r[0])}</td><td class="muted">${esc(r[1])}</td><td>${esc(r[2])}</td></tr>`).join('')}</tbody></table>` : '<div class="capNote" style="margin-top:0;">Nothing left on this floor.</div>';
+    if (fn.jackals.length) {
+      h += `<h3 style="font-size:14px;">Jackals <span class="muted" style="font-weight:400; font-size:13px;">each keeps its reward until you beat it (also between runs)</span></h3><table class="runTable"><tbody>${fn.jackals.map(j => `<tr><td style="width:150px;">${esc(j.name)}</td><td>${esc(j.what)}</td><td class="n">${j.killed ? '<span class="muted">beaten</span>' : ''}</td></tr>`).join('')}</tbody></table>`;
+    }
+  }
+  // 3. Pace
+  const pc = runPace(d);
+  if (pc.cleared > 1) {
+    h += `<h3>Pace</h3><div class="runTiles">
+      <div class="runTile" style="--tile:#4f8fd6;"><div class="k">Typical floor</div><div class="v">${runDurS(pc.typical)}</div><div class="s">average ${runDurS(pc.avg)}</div></div>
+      <div class="runTile" style="--tile:#4f8fd6;"><div class="k">Floors per hour</div><div class="v">${pc.perHour.toFixed(1)}</div><div class="s">while playing</div></div>
+      <div class="runTile" style="--tile:#4f8fd6;"><div class="k">Normal floor</div><div class="v">${runDurS(pc.normal)}</div><div class="s">typical time</div></div>
+      <div class="runTile" style="--tile:#d6392c;"><div class="k">Boss floor</div><div class="v">${runDurS(pc.boss)}</div><div class="s">typical time</div></div>
+      <div class="runTile" style="--tile:#666;"><div class="k">Breaks over 1 hour</div><div class="v">${pc.breaks}</div><div class="s">${pc.breaks ? runDur(pc.breakTime) + ' in total, left out of the pace' : 'none'}</div></div>
+    </div><table class="runTable"><thead><tr><th>Fastest floors</th><th style="text-align:right;">Time</th><th>Slowest floors</th><th style="text-align:right;">Time</th></tr></thead><tbody>${[ 0, 1, 2 ].map(i => { const a = pc.fastest[i], b = pc.slowest[i]; return a || b ? `<tr><td>${a ? esc(a.label) : ''}</td><td class="n up">${a ? runDurS(a.sec) : ''}</td><td>${b ? esc(b.label) : ''}</td><td class="n down">${b ? runDurS(b.sec) : ''}</td></tr>` : ''; }).join('')}</tbody></table>
+    <div class="capNote">Worked out from when each floor was cleared. A floor's time counts from clearing the floor before it, so menus and short pauses are included; gaps over an hour count as breaks.</div>`;
+  }
+  // 4. Haters
+  const ht = runHaters(d);
+  if (ht.n) h += `<h3>Haters</h3><div class="runTiles"><div class="runTile" style="--tile:#8e6bd6;"><div class="k">Enemy fighters this run</div><div class="v">${runN(ht.n)}</div><div class="s">on ${runN(ht.floors)} floors · about ${ht.avg.toFixed(1)} per floor</div></div>${ht.most ? `<div class="runTile" style="--tile:#8e6bd6;"><div class="k">Most on one floor</div><div class="v">${runN(ht.most.n)}</div><div class="s">${esc(ht.most.label)}</div></div>` : ''}</div>
+    <div class="capNote" style="margin-top:0;">Other players' fighters the game placed on this run's floors. The game keeps a record of each one.</div>`;
+  return h;
+}
 function runCsv(d) {
   const q = v => { const s = String(v == null ? '' : v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
   const lines = [ [ 'Section', 'Field', 'Value' ].join(',') ];
@@ -5122,6 +5329,7 @@ function runCsv(d) {
   }
   lines.push('', [ 'Floors visited', '#', 'Floor', 'Boss floor', 'Map used', 'Cleared at' ].join(','));
   for (const x of d.floors) lines.push([ 'Floors visited', x.n, x.label, x.boss ? 'yes' : '', x.ref, x.cleared ? dtFmt(x.cleared) : '' ].map(q).join(','));
+  lines.push(...runExtraCsv(d));
   return '﻿' + lines.join('\r\n') + '\r\n';
 }
 function blockRun() {
@@ -5155,6 +5363,7 @@ function renderRun() {
     <tr><td>Bank + Kill Coins carried</td><td class="n muted">—</td><td class="n">${runN(d.bank + d.money)}</td><td></td></tr>
   </tbody></table>`;
   h += `<h3>Run details</h3><table class="runTable"><tbody>${runRows(d).filter(r => [ 'Where', 'Time', 'Health', 'Fighter' ].includes(r[0])).map(r => `<tr><td>${escapeHtml(r[1])}</td><td class="n">${escapeHtml(typeof r[2] === 'number' ? runN(r[2]) : String(r[2]))}</td></tr>`).join('')}</tbody></table>`;
+  h += runExtraHtml(d);
   if (d.upcoming.length) {
     h += `<h3>Map rewards</h3>`;
     if (!LOC_SPOIL) h += `<div class="capNote" style="margin-top:0;">${d.upcoming.length} boss floor${d.upcoming.length === 1 ? '' : 's'} with rewards on the map. Tick "Show rewards (spoilers)" on the Location tab to list them here.</div>`;
