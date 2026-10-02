@@ -2788,7 +2788,9 @@ function syncHeldWeapons(chr, held) {
 // that aren't real weapons (first aid, food, sand), the "no mask / pants"
 // placeholders, gas masks and broken parts are never offered.
 const GEAR_SITE_TYPES = { EQSITE_ARMR: [ 'PTTP_ARM' ], EQSITE_ARML: [ 'PTTP_ARM' ], EQSITE_HEAD: [ 'PTTP_HEAD' ], EQSITE_BODY: [ 'PTTP_BODY' ], EQSITE_LEGS: [ 'PTTP_LEGS' ] };
-const GEAR_NEVER = /^PT_(ARM_(FirstAid|Food|Sand)$|NONE_|GAS_|MASK_|PANTS_)/;
+// PT_GAS_HEAD_* are real head gear (M42 Gas Mask, Surgical Mask, ... and their N versions), not the
+// fighter's built-in gas mask (that's chr.gasmask, an ASSET_ id), so they're allowed.
+const GEAR_NEVER = /^PT_(ARM_(FirstAid|Food|Sand)$|NONE_|MASK_|PANTS_)/;
 function fighterStatValue(chr, stat) {
   const k = String(stat || '').toLowerCase();
   const lvl = (chr.bodylvl || {})[k] || 1;
@@ -6153,7 +6155,7 @@ function wireStamp() {
 const VIP_PLANS = [ { id: 'none', label: 'None' }, { id: 'day', label: '1-Day Express' }, { id: 'month', label: '30-Day Express' } ];
 function vipPlanOf(v) { return !v || !Number(v.vip_flag) ? 'none' : Number(v.vip_type) === 1 ? 'day' : 'month'; }
 function setVipPlan(plan, restart) {
-  const v = SAVE.soul.vip, now = Math.floor(Date.now() / 1e3);
+  const v = SAVE.soul.vip, now = Math.floor(Date.now() / 1e3), oldType = v.vip_type;
   if (plan === 'none') {
     // off: keep the type the save had, so turning it back on returns to the same pass
     v.vip_flag = 0; v.automatic_renewal = 0;
@@ -6163,7 +6165,9 @@ function setVipPlan(plan, restart) {
     // a new pass (type changed) starts its own length; turning an existing pass back on keeps a future expiry
     if (restart || !(Number(v.expired_time) > now)) v.expired_time = now + (plan === 'day' ? 86400 : 30 * 86400);
   }
-  if (SAVE.user) SAVE.user.vip_level = v.vip_type;
+  // user.vip_level usually equals the type, but not always (an unedited PS save had type 1, level 0):
+  // only follow the type when it matched before
+  if (SAVE.user && Number(SAVE.user.vip_level) === Number(oldType)) SAVE.user.vip_level = v.vip_type;
 }
 
 // ---------------------------------------------------------------------------
@@ -6182,6 +6186,19 @@ function fcSync() { if (FREE_CONT.root !== RAW_SAV_ROOT) FREE_CONT = { root: RAW
 function fcClamp(v) { v = Math.floor(Number(v)); return Number.isFinite(v) ? Math.max(0, Math.min(FREE_CONT_MAX, v)) : 0; }
 // all of today's free continues are left
 function fcValues() { const n = fcClamp(FREE_CONT.perDay); return { max: n, count: n }; }
+// force_shutdown_counts {cid: n} (top level of the save): the game adds 1 for the fighter in a run each
+// time the game is closed or crashes without pausing (soul.pause then reads e.g. HEAVEN_CRASH). From
+// FORCE_SHUTDOWN_BLOODNIUM_PENALTY_COUNT (3) the run's Bloodnium gets FORCE_SHUTDOWN_BLOODNIUM_PENALTY_RATE
+// (-100), from ..._LARGE_PENALTY_COUNT (10) the large rate (-500). The save check can reset a count to 0.
+const SHUTDOWN_RESET = { root: null, cids: new Set() };
+function constIntOf(id, d) { const r = arr(AP && AP.constInt).find(x => x.id === id); return r ? Number(r.value) : d; }
+function shutdownCounts(root) { const f = root && root.force_shutdown_counts; return f && typeof f === 'object' && !Array.isArray(f) ? f : {}; }
+function applyShutdownReset(root) {
+  if (SHUTDOWN_RESET.root !== RAW_SAV_ROOT || !root) return root;
+  const f = shutdownCounts(root);
+  for (const cid of SHUTDOWN_RESET.cids) if (cid in f) f[cid] = 0;
+  return root;
+}
 function applyFreeCont(root) {
   if (FREE_CONT.root !== RAW_SAV_ROOT || !FREE_CONT.on || !root || !root.soul) return root;
   const v = fcValues();
@@ -7693,6 +7710,19 @@ function runSaveCheck() {
     });
   });
 
+  // fighters closed mid-run (game closed or crashed without pausing) get a Bloodnium penalty
+  safe('force-close', () => {
+    const f = shutdownCounts(RAW_SAV_ROOT), lim = constIntOf('FORCE_SHUTDOWN_BLOODNIUM_PENALTY_COUNT', 3), big = constIntOf('FORCE_SHUTDOWN_BLOODNIUM_LARGE_PENALTY_COUNT', 10);
+    const reset = SHUTDOWN_RESET.root === RAW_SAV_ROOT ? SHUTDOWN_RESET.cids : new Set();
+    const hit = arr(soul.chrs).filter(c => c && c.cid && !reset.has(c.cid) && Number(f[c.cid]) >= lim);
+    if (!hit.length) return;
+    const pause = String(soul.pause || '');
+    const crash = /_CRASH$/.test(pause) ? ` The last session ended without pausing (${escapeHtml(pause)}${soul.flrid ? ` on ${escapeHtml(hvnFloor(soul.flrid) ? hvnFloorLabel(hvnFloor(soul.flrid)) : soul.flrid)}` : ''}).` : '';
+    add('warning', `${hit.map(c => `${escapeHtml(c.name || 'a fighter')} (${Number(f[c.cid])}×)`).join(', ')} ${hit.length === 1 ? 'has' : 'have'} been force-closed during a run: the game or console was closed, or it crashed, without pausing.${crash} From ${lim} the game cuts the Bloodnium that run brings home, and from ${big} it cuts it much harder. Pause before quitting to avoid it.`, 'fighters', {
+      label: 'Reset the force-close count', run: () => { if (SHUTDOWN_RESET.root !== RAW_SAV_ROOT) SHUTDOWN_RESET.root = RAW_SAV_ROOT, SHUTDOWN_RESET.cids = new Set(); hit.forEach(c => SHUTDOWN_RESET.cids.add(c.cid)); return `Reset to 0 for ${hit.map(c => c.name).join(', ')} (applied when you download).`; }
+    });
+  });
+
   // fighters: bag overflow, duplicate or unknown items
   safe('fighters', () => {
     const seen = new Map;
@@ -7701,7 +7731,18 @@ function runSaveCheck() {
     for (const c of arr(soul.chrs)) {
       const name = c.name || 'a fighter';
       const cap = deathBagLimit(c), n = fighterItemCount(c);
-      if (cap && n > cap) add('warning', `${escapeHtml(name)} is carrying ${n} items but their Death Bag only holds ${cap}${vipBagBonus() ? ' (with the Express Pass bonus)' : ''}.`, 'fighters');
+      if (cap && n > cap) {
+        // an Express Pass that has run out: the game sized the bag (the save's slot list) with its +10
+        // while it was on, so the items fit the bag the game made; it's the pass, not the bag
+        const v = soul.vip || {}, bonus = constIntOf('VIP_INCREASE_DEATHBAG', 10);
+        const lapsed = Number(v.vip_flag != null ? v.vip_flag : v.flag) && !vipBagBonus();
+        const rawBag = RAW_SAV_ROOT && RAW_SAV_ROOT.soul && RAW_SAV_ROOT.soul.deathbag && RAW_SAV_ROOT.soul.deathbag[RAW_SAV_MAIN_UID];
+        const slotsInSave = Array.isArray(rawBag && rawBag[c.cid]) ? rawBag[c.cid].length : 0;
+        if (lapsed && n <= cap + bonus) add('note', `${escapeHtml(name)} is carrying ${n} items in a ${cap}-slot Death Bag. That only fits with the Express Pass's +${bonus}, and the pass ran out ${escapeHtml(dtFmt(v.expired_time))}${slotsInSave ? ` (the game last saved this bag with ${slotsInSave} slots)` : ''}. Starting a new pass in game (or on the VIP tab) gives the slots back.`, 'vip', {
+          label: 'Renew the Express Pass', run: () => { setVipPlan(vipPlanOf(SAVE.soul.vip) === 'none' ? 'day' : vipPlanOf(SAVE.soul.vip), true); return `Express Pass renewed until ${dtFmt(SAVE.soul.vip.expired_time)}.`; }
+        });
+        else add('warning', `${escapeHtml(name)} is carrying ${n} items but their Death Bag only holds ${cap}${vipBagBonus() ? ' (with the Express Pass bonus)' : ''}.`, 'fighters');
+      }
       if (c.state !== 'DUMMY') {
         const gp = gearProblems(c);
         if (gp.length) add('warning', `${escapeHtml(name)} has ${gp.length} piece${gp.length === 1 ? '' : 's'} of gear equipped that the game wouldn't allow (${escapeHtml(gp[0].why)}${gp.length > 1 ? ', …' : ''}).`, 'fighters', {
@@ -8748,7 +8789,7 @@ function reviewFileName(ext, stamp) { return `brggame_${stamp || reviewStamp()}.
 function buildDownloadRoot() {
   normalizePresents(SAVE.presents);
   questOrdForSave();
-  return applyFreeCont(applyJackals(applyBossLock(applyFloorMove(applyStampRally(applyStampMark(applyAccountChoice(restoreEmptyShapes(applyDateRules(buildRawSavRootFromSave(SAVE, RAW_SAV_ROOT, RAW_SAV_MAIN_UID)), RAW_SAV_ROOT))))))));
+  return applyShutdownReset(applyFreeCont(applyJackals(applyBossLock(applyFloorMove(applyStampRally(applyStampMark(applyAccountChoice(restoreEmptyShapes(applyDateRules(buildRawSavRootFromSave(SAVE, RAW_SAV_ROOT, RAW_SAV_MAIN_UID)), RAW_SAV_ROOT)))))))));
 }
 
 const REVIEW_SOUL_LABELS = {
@@ -8765,7 +8806,7 @@ const REVIEW_PART_LABELS = {
   openelvflr: 'Elevator stops', msrbook: 'Mushroom book', bstbook: 'Beast book', magazine: 'Magazines', waiting: 'Waiting Room',
   playlog: 'Play log counters', hitchart: 'Hit chart', teams: 'Teams', dests: 'Destinations', jointeams: 'Teams',
   terms: 'Terms', relationship: 'Relationships', hvntrinfo: 'Heaven treasure', areaflag: 'Area flags', areaescflag: 'Area flags',
-  areamapflags: 'Map flags'
+  areamapflags: 'Map flags', force_shutdown_counts: 'Force-close counts'
 };
 const REVIEW_KEY_WORDS = { tdm: 'TDM', hp: 'HP', exp: 'EXP', spl: 'SPL', vip: 'VIP', cnt: 'count', num: 'number', flg: 'flag' };
 function reviewKeyLabel(k) {
