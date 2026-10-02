@@ -4599,6 +4599,84 @@ function blockLocation() {
       <div id="loc-body"></div><div id="loc-lock"></div></div>
   </section>`;
 }
+
+// ---------------------------------------------------------------------------
+// End the run: send the fighter in a run back to the Waiting Room, the way the game leaves a save after
+// a run ends (from a paused save and the same account's save after the run: wr1 -> wr2). The game then:
+// clears soul.pause/stgid/flrid/areaid/unitid/relief_point, sets replica_money/spirit/bloodnium_point to
+// -1, empties soul.hvntrinfo and force_shutdown_counts, empties the run's floor data (rlg, pop, trbox,
+// item, dust, bo, mboss, ffm, vm) and zombie.flrzmbs, drops the item / part instances the run made (owners
+// FLOOR, TRBOX, ZAKO, ZOMBIE, MBOSS, JACKAL_*), and the fighter's carried Kill Coins and Bloodnium go to
+// the account (bloodnium_result reset). Everything in the Death Bag stays. Kill Coins are banked up to
+// the Bank's limit for its level.
+// ---------------------------------------------------------------------------
+const RUN_END = { root: null, on: false };
+const RUN_OWNERS = /^(FLOOR|TRBOX|ZAKO|ZOMBIE|MBOSS|JACKAL_.*)$/;
+function runEndInfo(root) {
+  const s = root && root.soul;
+  if (!s || !s.pause) return null;
+  const uid = String(RAW_SAV_MAIN_UID || (root.user && root.user.uid) || '');
+  const cl = s.chr && s.chr.chrs, list = Array.isArray(cl) ? cl : cl && typeof cl === 'object' ? arr(cl[uid]) : [];
+  const c = list.find(x => x && x.state === 'USE');
+  const money = c ? Number(c.money) || 0 : 0, blood = c ? Number(c.bloodnium) || 0 : 0;
+  const cap = bankCapacityForLevel(s.safe_level != null ? s.safe_level : 1);
+  const bank = Number(s.free_money) || 0;
+  const add = cap ? Math.max(0, Math.min(money, cap - bank)) : money;
+  const rlg = root.floor && root.floor.rlg, floors = Array.isArray(rlg && rlg.user) ? rlg.user.length : 0;
+  let made = 0;
+  for (const [sec, key] of [ [ 'item', 'items' ], [ 'part', 'pts' ] ]) {
+    const v = root[sec] && root[sec][key], L = Array.isArray(v) ? v : v && typeof v === 'object' ? arr(v[uid]) : [];
+    made += L.filter(x => x && RUN_OWNERS.test(String(x.owner || ''))).length;
+  }
+  return { chr: c, money, blood, cap, bank, add, lost: money - add, floors, made, pause: s.pause, flrid: s.flrid };
+}
+function applyRunEnd(root) {
+  if (RUN_END.root !== RAW_SAV_ROOT || !RUN_END.on || !root || !root.soul || !root.soul.pause) return root;
+  const s = root.soul, info = runEndInfo(root), uid = String(RAW_SAV_MAIN_UID);
+  for (const k of [ 'pause', 'stgid', 'flrid', 'areaid', 'unitid', 'relief_point' ]) if (k in s) s[k] = '';
+  for (const k of [ 'replica_money', 'replica_spirit', 'replica_bloodnium_point' ]) if (k in s) s[k] = -1;
+  if ('hvntrinfo' in s) s.hvntrinfo = {};
+  if ('force_shutdown_counts' in root) root.force_shutdown_counts = {};
+  const c = info && info.chr;
+  if (c) {
+    s.free_money = (Number(s.free_money) || 0) + info.add;
+    s.bloodnium_point = (Number(s.bloodnium_point) || 0) + info.blood;
+    c.money = 0; c.bloodnium = 0; c.pause = '';
+    c.bloodnium_result = JSON.stringify({ enemy_count: 0, bloodnium: 0, elapsed_time: 0, max_floor_id: '' });
+  }
+  const fl = root.floor;
+  if (fl) {
+    fl.rlg = { user: {}, archive: {} };
+    if (fl.pop && typeof fl.pop === 'object') for (const k of Object.keys(fl.pop)) fl.pop[k] = {};
+    for (const k of [ 'trbox', 'item', 'dust' ]) if (k in fl) fl[k] = {};
+    const empty = { bo: [ 'bos', 'flrbos' ], mboss: [ 'mbss', 'mbszmbs', 'flrmbss' ], ffm: [ 'ffms', 'flrffms', 'kill_areas' ], vm: [ 'vms', 'flrvms' ] };
+    for (const [k, keys] of Object.entries(empty)) if (k in fl) { fl[k] = {}; for (const kk of keys) fl[k][kk] = {}; }
+  }
+  const z = root.zombie && root.zombie.flrzmbs;
+  if (z && typeof z === 'object') for (const k of Object.keys(z)) z[k] = {};
+  for (const [sec, key] of [ [ 'item', 'items' ], [ 'part', 'pts' ] ]) {
+    const v = root[sec] && root[sec][key];
+    const keep = L => L.filter(x => !(x && RUN_OWNERS.test(String(x.owner || ''))));
+    if (Array.isArray(v)) root[sec][key] = keep(v);
+    else if (v && typeof v === 'object' && Array.isArray(v[uid])) v[uid] = keep(v[uid]);
+  }
+  return root;
+}
+function runEndHtml(cur) {
+  const info = runEndInfo(RAW_SAV_ROOT);
+  if (!info) return '';
+  const on = RUN_END.root === RAW_SAV_ROOT && RUN_END.on;
+  const nm = info.chr ? escapeHtml(info.chr.name || 'the fighter') : 'the fighter';
+  const crash = /_CRASH$/.test(info.pause);
+  let h = `<div class="subDetails" style="padding:10px; margin-bottom:12px;${crash ? ' border-color:var(--accent);' : ''}"><div class="eyebrow" style="margin-bottom:6px;">End the run (experimental)</div>
+    <div class="capNote" style="margin-top:0;">Send ${nm} back to the Waiting Room, the way the game leaves a save after a run ends. Everything in the Death Bag stays; the ${info.money.toLocaleString()} Kill Coins carried go to the Bank${info.lost > 0 ? ` <b>up to its limit (${info.cap.toLocaleString()}), so ${info.lost.toLocaleString()} are lost</b> (raise the Bank level on the Account tab first to keep them)` : ''} and the ${info.blood.toLocaleString()} Bloodnium to the account. The run's floor data (${info.floors} floor${info.floors === 1 ? '' : 's'}) and the ${info.made.toLocaleString()} item${info.made === 1 ? '' : 's'} it left on floors, in chests and on Jackals are cleared, like the game does. The run's Exploration Bonus isn't paid.${crash ? ' <b>This save ended without pausing (' + escapeHtml(info.pause) + '):</b> if the game crashes when it loads the run, ending it here lets the save load in the Waiting Room.' : ''}</div>
+    <label style="cursor:pointer;"><input type="checkbox" id="run-end" ${on ? 'checked' : ''} style="width:auto; margin-right:6px;">End the run when I download</label></div>`;
+  return h;
+}
+function wireRunEnd() {
+  const b = document.getElementById('run-end');
+  if (b) b.addEventListener('change', () => { RUN_END.root = RAW_SAV_ROOT; RUN_END.on = b.checked; renderLocation(); toast(b.checked ? 'The run will end on download (fighter back to the Waiting Room)' : 'Run kept'); });
+}
 function renderLocation() {
   const host = document.getElementById('loc-body');
   if (!host || !SAVE || !RAW_SAV_ROOT) return;
@@ -4615,7 +4693,9 @@ function renderLocation() {
   }
   const where = f ? hvnFloorLabel(f) : `${cur.flrid || '?'} (${cur.stgid || '?'})`;
   const chr = arr(SAVE.soul.chrs).find(c => c.state === 'USE');
-  h += `<div class="field" style="margin-bottom:10px;"><label>Paused on</label><div style="padding:6px 0; font-size:14px;"><b>${escapeHtml(where)}</b>${chr ? ` <span class="id">— ${escapeHtml(chr.name || '')}</span>` : ''}</div></div>`;
+  h += `<div class="field" style="margin-bottom:10px;"><label>Paused on</label><div style="padding:6px 0; font-size:14px;"><b>${escapeHtml(where)}</b>${chr ? ` <span class="id">— ${escapeHtml(chr.name || '')}</span>` : ''}${/_CRASH$/.test(cur.pause) ? ' <span class="badge" style="background:var(--accent); color:#fff;">closed without pausing</span>' : ''}</div></div>`;
+  h += runEndHtml(cur);
+  if (RUN_END.root === RAW_SAV_ROOT && RUN_END.on) { h += `<div class="capNote">Floor moves are off while the run is set to end.</div>`; host.innerHTML = h; wireRunEnd(); return; }
   if (FLOOR_MOVE.msg) h += `<pre class="stewLog">${escapeHtml(FLOOR_MOVE.msg)}</pre>`;
   const targets = flmTargets();
   // floors left out because the arena already built here can't appear on them (e.g. a Don below 100F)
@@ -4654,6 +4734,7 @@ function renderLocation() {
     }
   }
   host.innerHTML = h;
+  wireRunEnd();
   const tsel = document.getElementById('loc-target');
   let pick = FLOOR_MOVE.target;
   if (tsel) tsel.addEventListener('change', () => { pick = tsel.value; FLOOR_MOVE.armed = false; });
@@ -7723,6 +7804,14 @@ function runSaveCheck() {
     });
   });
 
+  // a run that ended without pausing (game closed or crashed): the game resumes it on load
+  safe('run-crash', () => {
+    const pz = String((RAW_SAV_ROOT && RAW_SAV_ROOT.soul && RAW_SAV_ROOT.soul.pause) || '');
+    if (!/_CRASH$/.test(pz) || (RUN_END.root === RAW_SAV_ROOT && RUN_END.on)) return;
+    const ri = runEndInfo(RAW_SAV_ROOT), fl = hvnFloor(RAW_SAV_ROOT.soul.flrid);
+    add('note', `The save is in a run that ended without pausing (${escapeHtml(pz)}${fl ? ', ' + escapeHtml(hvnFloorLabel(fl)) : ''}${ri && ri.floors ? `, ${ri.floors} floors into the run` : ''}). The game picks the run up again when it loads. If it crashes instead, the Location tab can end the run and send ${escapeHtml(ri && ri.chr ? ri.chr.name || 'the fighter' : 'the fighter')} back to the Waiting Room.`, 'location');
+  });
+
   // fighters: bag overflow, duplicate or unknown items
   safe('fighters', () => {
     const seen = new Map;
@@ -8789,7 +8878,7 @@ function reviewFileName(ext, stamp) { return `brggame_${stamp || reviewStamp()}.
 function buildDownloadRoot() {
   normalizePresents(SAVE.presents);
   questOrdForSave();
-  return applyShutdownReset(applyFreeCont(applyJackals(applyBossLock(applyFloorMove(applyStampRally(applyStampMark(applyAccountChoice(restoreEmptyShapes(applyDateRules(buildRawSavRootFromSave(SAVE, RAW_SAV_ROOT, RAW_SAV_MAIN_UID)), RAW_SAV_ROOT)))))))));
+  return applyRunEnd(applyShutdownReset(applyFreeCont(applyJackals(applyBossLock(applyFloorMove(applyStampRally(applyStampMark(applyAccountChoice(restoreEmptyShapes(applyDateRules(buildRawSavRootFromSave(SAVE, RAW_SAV_ROOT, RAW_SAV_MAIN_UID)), RAW_SAV_ROOT))))))))));
 }
 
 const REVIEW_SOUL_LABELS = {
@@ -9047,6 +9136,7 @@ function reviewDiff(A, B, rawA, rawB) {
   }
   for (const k of [ 'all_quests', 'prison', 'playlog', 'hitchart', 'teams', 'dests' ]) if (JSON.stringify(A[k]) !== JSON.stringify(B[k])) note(k);
   if (DATE_RULES.length) ot.lines.push('Dates fixed by the Dates tab rules');
+  if (RUN_END.root === RAW_SAV_ROOT && RUN_END.on) { const ri = runEndInfo(RAW_SAV_ROOT); if (ri) ot.lines.push(`Run ended: the run's floor data (${ri.floors} floors), its force-close count and ${ri.made.toLocaleString()} items it left on floors, in chests and on Jackals cleared`); }
   if (!stampFlagIn(rawA) && stampFlagIn(rawB)) ot.lines.push("Game's one-time Funshot setup marked as done (so it won't re-count research)");
   return S.filter(s => s.lines.length);
 }
