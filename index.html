@@ -5094,7 +5094,7 @@ function runRows(d) {
   const R = [];
   const add = (sec, k, v) => R.push([ sec, k, v ]);
   // numbers stay numbers (formatted on the page, plain in the CSV)
-  add('Fighter', 'Name', d.name); add('Fighter', 'Class', d.cls); add('Fighter', 'HP (as saved)', d.hp);
+  add('Fighter', 'Name', d.name); add('Fighter', 'Class', d.cls); add('Fighter', 'HP (as saved)', d.hp === 999999 ? 'Full (the game saves 999,999 to mean full HP)' : d.hp);
   add('Where', 'Floor', d.where); add('Where', 'State', d.crashed ? `Closed without pausing (${d.pause})` : `Paused (${d.pause})`);
   add('Where', 'Deepest floor this run', d.deepest); add('Where', 'Floors visited', d.floors.length);
   add('Where', 'Position', d.pos);
