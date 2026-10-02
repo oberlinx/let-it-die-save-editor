@@ -427,7 +427,7 @@ function buildStampEligibleSet() {
   for (const p of AP.pts || []) {
     if (!p.is_stamp) continue;
     if (!openResearch.has(p.id)) continue;
-    if (p.platform === 1 || RESEARCH_BLOCKLIST.has(p.id)) continue;
+    if ((p.platform === 1 && !isPsSave()) || RESEARCH_BLOCKLIST.has(p.id)) continue;
     const hasBlueprint = blueprintIds.has('ITMP_' + p.id.slice(3));
     const reachableByUpgrade = nextptidTargets.has(p.id);
     if (hasBlueprint || reachableByUpgrade) eligible.add(p.id);
@@ -1532,6 +1532,7 @@ document.getElementById('file-save').addEventListener('change', async e => {
     if (soulEntry && soulEntry.obj && soulEntry.obj.__rawSavRoot) {
       RAW_SAV_ROOT = soulEntry.obj.__rawSavRoot;
       RAW_SAV_MAIN_UID = soulEntry.obj.__rawSavMainUid;
+      applyPlatformDefaults();
       reviewSnapshot(soulEntry.file);
       document.getElementById('btn-download-sav').disabled = false;
       document.getElementById('btn-download-json').disabled = false;
@@ -3223,7 +3224,7 @@ function wireAutocomplete(input, dropEl, category, onPick, ptType, levelInputId,
 }
 
 function blockBlueprints() {
-  return `<section class="block">\n    <div class="block-head">\n      <div><div class="eyebrow">Chokufunsha</div><h2>Research</h2></div>\n    </div>\n    <div class="block-body">\n      <div class="toolbar">\n        <input type="text" id="bp-filter" placeholder="Filter by name..." style="flex:1; max-width:320px; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);">\n        <button class="subtle" id="bp-max-all">Max all visible research</button>\n        <button class="subtle" id="bp-plus5-all" title="In-game +5. Normal parts max out at +4; Uncap parts get +5. Earlier parts in the same chain are maxed.">Set all visible research to +5</button>\n        <button class="subtle" id="bp-remove-all">Remove all</button>\n        <label style="display:flex; align-items:center; gap:4px; font-size:11.5px;" title="PlayStation-only blueprints (master_part.platform 1). A PC game only has them if it has been modded to include them."><input type="checkbox" id="bp-include-ps"> Include PS-only (modded PC games)</label>\n        <div class="count" id="bp-count"></div>\n      </div>\n      <div id="bp-suspicious-summary" style="font-size:12px; color:var(--warn); margin-bottom:8px;"></div>\n      <div class="tabbar" id="bp-subtabs" style="margin-bottom:12px;"></div>\n      <div id="bp-slot-content"></div>\n      ${stampBlockHtml()}\n    </div>\n  </section>`;
+  return `<section class="block">\n    <div class="block-head">\n      <div><div class="eyebrow">Chokufunsha</div><h2>Research</h2></div>\n    </div>\n    <div class="block-body">\n      <div class="toolbar">\n        <input type="text" id="bp-filter" placeholder="Filter by name..." style="flex:1; max-width:320px; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);">\n        <button class="subtle" id="bp-max-all">Max all visible research</button>\n        <button class="subtle" id="bp-plus5-all" title="In-game +5. Normal parts max out at +4; Uncap parts get +5. Earlier parts in the same chain are maxed.">Set all visible research to +5</button>\n        <button class="subtle" id="bp-remove-all">Remove all</button>\n        <label style="display:flex; align-items:center; gap:4px; font-size:11.5px;" title="PlayStation-only blueprints (master_part.platform 1). A PC game only has them if it has been modded to include them."><input type="checkbox" id="bp-include-ps"> Include PS-only ${psLabelNote()}</label>\n        <div class="count" id="bp-count"></div>\n      </div>\n      <div id="bp-suspicious-summary" style="font-size:12px; color:var(--warn); margin-bottom:8px;"></div>\n      <div class="tabbar" id="bp-subtabs" style="margin-bottom:12px;"></div>\n      <div id="bp-slot-content"></div>\n      ${stampBlockHtml()}\n    </div>\n  </section>`;
 }
 
 function partFamily(p) {
@@ -3624,7 +3625,7 @@ function wireBlueprints() {
   document.getElementById('bp-filter').addEventListener('input', e => renderList(e.target.value));
   const psBox = document.getElementById('bp-include-ps');
   psBox.checked = RESEARCH_FORM.includePs;
-  psBox.addEventListener('change', () => { RESEARCH_FORM.includePs = psBox.checked; toast(psBox.checked ? 'Max all / +5 now include PS-only blueprints (only for PC games modded to have them)' : 'Max all / +5 skip PS-only blueprints again'); });
+  psBox.addEventListener('change', () => { RESEARCH_FORM.includePs = psBox.checked; toast(psBox.checked ? `Max all / +5 now include PS-only blueprints${isPsSave() ? '' : ' (only for PC games modded to have them)'}` : 'Max all / +5 skip PS-only blueprints again'); });
   document.getElementById('bp-max-all').addEventListener('click', () => {
     const filter = document.getElementById('bp-filter').value;
     const shown = blueprintableParts().filter(p => (!filter || norm(p.name).includes(norm(filter))) && partSlotLabel(p) === researchSubTab);
@@ -5102,7 +5103,7 @@ function decalOffered(id) {
 }
 
 function blockSkillDecals() {
-  return `<section class="block">\n    <div class="block-head"><div><div class="eyebrow">Account</div><h2>Skill Decals</h2></div></div>\n    <div class="block-body">\n      <div class="toolbar">\n        <input type="text" id="decal-filter" placeholder="Filter by name..." style="flex:1; max-width:280px; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);">\n        <button class="subtle" id="decal-max-all">Max all (${DECAL_CAP})</button>\n        <input type="number" id="decal-apply-val" min="0" max="${DECAL_CAP}" value="${DECAL_CAP}" style="width:60px; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:6px;">\n        <button class="subtle" id="decal-apply-all">Apply to all filtered</button>\n        <label class="stewHlOnly" title="PlayStation-only decals only work in PC games that were modded to have them"><input type="checkbox" id="decal-ps" ${DECAL_FORM.includePs ? 'checked' : ''}> Include PS-only (modded PC games)</label>\n        <div class="count" id="decal-count"></div>\n      </div>\n      <div id="decal-odd"></div>\n      <div class="listBlock" id="decal-list" style="max-height:360px;"></div>\n    </div>\n  </section>`;
+  return `<section class="block">\n    <div class="block-head"><div><div class="eyebrow">Account</div><h2>Skill Decals</h2></div></div>\n    <div class="block-body">\n      <div class="toolbar">\n        <input type="text" id="decal-filter" placeholder="Filter by name..." style="flex:1; max-width:280px; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);">\n        <button class="subtle" id="decal-max-all">Max all (${DECAL_CAP})</button>\n        <input type="number" id="decal-apply-val" min="0" max="${DECAL_CAP}" value="${DECAL_CAP}" style="width:60px; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:6px;">\n        <button class="subtle" id="decal-apply-all">Apply to all filtered</button>\n        <label class="stewHlOnly" title="PlayStation-only decals only work in PC games that were modded to have them"><input type="checkbox" id="decal-ps" ${DECAL_FORM.includePs ? 'checked' : ''}> Include PS-only ${psLabelNote()}</label>\n        <div class="count" id="decal-count"></div>\n      </div>\n      <div id="decal-odd"></div>\n      <div class="listBlock" id="decal-list" style="max-height:360px;"></div>\n    </div>\n  </section>`;
 }
 
 function wireSkillDecals() {
@@ -5134,7 +5135,7 @@ function wireSkillDecals() {
     const all = Object.values(SKL_INDEX).filter(s => decalOffered(s.id) || owned(s.id)).sort((a, b) => a.name.localeCompare(b.name));
     const shown = all.filter(s => !filter || norm(s.name).includes(norm(filter)));
     document.getElementById('decal-count').textContent = `${shown.length} shown / ${all.length} total`;
-    const odd = soul.psskls.filter(e => e.cnt > 0 && !decalOffered(e.id));
+    const odd = isPsSave() ? [] : soul.psskls.filter(e => e.cnt > 0 && !decalOffered(e.id));
     const oddEl = document.getElementById('decal-odd');
     if (oddEl) oddEl.innerHTML = odd.length ? `<div class="warnNote" style="margin:6px 0;">This save holds ${odd.length} PS-only decal${odd.length === 1 ? '' : 's'}, marked below. A normal PC game doesn't have them (fine on PlayStation or a modded PC game). <button class="subtle" id="decal-clear-odd">Set them to 0</button></div>` : '';
     document.getElementById('decal-list').innerHTML = shown.map(s => {
@@ -5168,7 +5169,7 @@ function wireSkillDecals() {
   document.getElementById('decal-ps').addEventListener('change', e => {
     DECAL_FORM.includePs = e.target.checked;
     renderList(currentFilter);
-    toast(e.target.checked ? 'PS-only decals now listed (only for PC games modded to have them)' : 'PS-only decals hidden');
+    toast(e.target.checked ? `PS-only decals now listed${isPsSave() ? '' : ' (only for PC games modded to have them)'}` : 'PS-only decals hidden');
   });
   document.getElementById('decal-max-all').addEventListener('click', () => {
     for (const s of Object.values(SKL_INDEX)) if (decalOffered(s.id)) setCnt(s.id, DECAL_CAP);
@@ -5718,7 +5719,7 @@ function rbAddFormHtml() {
     let extraField = '';
     if (rbType === 'BP') extraField = `<div class="field"><label><input type="checkbox" id="rb-add-unrevealed" style="width:auto; margin-right:6px;" ${RB_FORM.unrevealed ? 'checked' : ''}>Unrevealed</label></div>`;
     if (rbType === 'PT') extraField = `<div class="field"><label>Level (in-game +n)</label><input type="number" id="rb-add-lvl" min="0" value="${escapeHtml(RB_FORM.ptLvl)}"></div>`;
-    if ([ 'PT', 'BP', 'SKILL' ].includes(rbType)) extraField += `<div class="field"><label title="PlayStation-only items only work in PC games that were modded to have them"><input type="checkbox" id="rb-include-ps" style="width:auto; margin-right:6px;" ${RB_FORM.includePs ? 'checked' : ''}>Include PS-only (modded PC games)</label></div>`;
+    if ([ 'PT', 'BP', 'SKILL' ].includes(rbType)) extraField += `<div class="field"><label title="PlayStation-only items only work in PC games that were modded to have them"><input type="checkbox" id="rb-include-ps" style="width:auto; margin-right:6px;" ${RB_FORM.includePs ? 'checked' : ''}>Include PS-only ${psLabelNote()}</label></div>`;
     return `<div class="grid">\n      <div class="searchwrap" style="grid-column:span 2;"><input type="text" id="rb-search" placeholder="Search ${rbType === 'BP' ? 'blueprint (by the weapon/armor it unlocks)' : 'name'}..."><div class="acdrop" id="rb-acdrop"></div></div>\n      <div class="field"><label>Quantity</label><input type="number" id="rb-num" min="1" value="${escapeHtml(RB_FORM.searchNum)}"></div>\n      ${extraField}\n    </div>`;
   }
   return `<div class="grid">\n    <div class="field"><label>Amount</label><input type="number" id="rb-num" min="1" value="${escapeHtml(RB_FORM.amountNum)}"></div>\n    <div class="field" style="display:flex; align-items:end;"><button class="subtle" id="rb-add">+ Add</button></div>\n  </div>`;
@@ -7608,11 +7609,11 @@ function runSaveCheck() {
 
   // rewards the PC game can't hand over (placeholders, unnamed, PS-only)
   safe('rewards-unfit', () => {
-    const bad = arr(SAVE.presents).map(p => [ p, presentUnfit(p, false) ]).filter(x => x[1]);
+    const bad = arr(SAVE.presents).map(p => [ p, presentUnfit(p, isPsSave()) ]).filter(x => x[1]);
     if (!bad.length) return;
     const ps = bad.filter(x => x[1] === 'PlayStation-only').length, other = bad.length - ps;
     add(other ? 'warning' : 'note', `${bad.length} Reward Box item${bad.length === 1 ? '' : 's'} the PC game may not hand over properly: ${bad.slice(0, 4).map(([p, why]) => `${escapeHtml(cmpPresentLabel(p))} (${escapeHtml(why)})`).join(', ')}${bad.length > 4 ? '…' : ''}.${ps ? ' PlayStation-only ones only work in PC games modded to have them.' : ''}`, 'rewards', {
-      label: other ? 'Remove the ones that can\'t work' : 'Remove them', run: () => { const drop = new Set(arr(SAVE.presents).filter(p => { const w = presentUnfit(p, false); return w && (!other || w !== 'PlayStation-only'); })); SAVE.presents = SAVE.presents.filter(p => !drop.has(p)); return `Removed ${drop.size} reward${drop.size === 1 ? '' : 's'}.`; }
+      label: other ? 'Remove the ones that can\'t work' : 'Remove them', run: () => { const drop = new Set(arr(SAVE.presents).filter(p => { const w = presentUnfit(p, isPsSave()); return w && (!other || w !== 'PlayStation-only'); })); SAVE.presents = SAVE.presents.filter(p => !drop.has(p)); return `Removed ${drop.size} reward${drop.size === 1 ? '' : 's'}.`; }
     });
   });
 
@@ -8310,6 +8311,15 @@ function cmpCopyFighter(cid) {
 // download, and neither original file is changed.
 let CLONE_NOTE = { root: null, text: '' };
 let CLONE_ARMED = false;
+// PlayStation saves: PS-only content belongs there, so the "Include PS-only" boxes start ticked
+// and the save check / clone notes don't warn about it. PC saves start with them unticked.
+function isPsSave() { return savePlatform(RAW_SAV_ROOT) === 'PS'; }
+function applyPlatformDefaults() {
+  const ps = isPsSave();
+  RESEARCH_FORM.includePs = DECAL_FORM.includePs = RB_FORM.includePs = HUB_FORM.includePs = ps;
+  STAMP_ELIGIBLE_SET = null;
+}
+const psLabelNote = () => isPsSave() ? '(PlayStation save)' : '(modded PC games)';
 function savePlatform(root) {
   const u = (root && root.user) || {};
   if (/^7656119\d{10}$/.test(String(u.psnacid || ''))) return 'PC';
@@ -8381,9 +8391,9 @@ async function cmpCloneWhole() {
   let t = `This save is now a full copy of ${fileB} (${nmB}, ${platformName(platB)}) on ${nmA}'s account (uid ${uA}, ${platformName(platA)}). Nothing is written until you download the .sav; both original files are unchanged.`;
   if (left) t += `\nNote: the other account's uid still appears ${left} time${left === 1 ? '' : 's'} as a plain value (not a uid field) -- usually harmless.`;
   if (platB === 'PS' && platA !== 'PS') t += `\n\nWARNING: the cloned save is a PlayStation save.${ps.length ? ' It has PlayStation-only content that an unmodded PC game doesn\'t have -- it may not show up or may cause problems:' : ' No PlayStation-only weapons, armor, decals, research, decorations or rewards were found in it.'}`;
-  else if (ps.length) t += '\n\nIt has PlayStation-only content that an unmodded PC game doesn\'t have:';
-  for (const g of ps) t += `\n  - ${g.where}: ${g.names.slice(0, 12).join(', ')}${g.names.length > 12 ? ` and ${g.names.length - 12} more` : ''}`;
-  if (ps.length) t += '\nTo clean up: Decals tab "Set them to 0", the save check\'s Reward Box fix, and remove PS-only gear from the fighters and Storage Box tabs.';
+  else if (ps.length && platA !== 'PS') t += '\n\nIt has PlayStation-only content that an unmodded PC game doesn\'t have:';
+  if (platA !== 'PS') for (const g of ps) t += `\n  - ${g.where}: ${g.names.slice(0, 12).join(', ')}${g.names.length > 12 ? ` and ${g.names.length - 12} more` : ''}`;
+  if (ps.length && platA !== 'PS') t += '\nTo clean up: Decals tab "Set them to 0", the save check\'s Reward Box fix, and remove PS-only gear from the fighters and Storage Box tabs.';
   CLONE_NOTE = { root: RAW_SAV_ROOT, text: t };
   activeTab = 'compare';
   renderAll();
@@ -8396,7 +8406,7 @@ function cloneBlockHtml() {
   const psCount = ps.reduce((n, g) => n + g.names.length, 0);
   let warn = '';
   if (platB === 'PS' && platA !== 'PS') warn = `<div class="warnNote" style="margin:6px 0;"><b>${escapeHtml(nmB)}'s save is a PlayStation save</b> and this account is ${platformName(platA)}. ${psCount ? `It has ${psCount} PlayStation-only thing${psCount === 1 ? '' : 's'} an unmodded PC game doesn't have (${ps.map(g => escapeHtml(g.where)).slice(0, 5).join('; ')}${ps.length > 5 ? '…' : ''}). They'll be listed after cloning so you can clean them up.` : 'No PlayStation-only weapons, armor, decals, research, decorations or rewards were found in it.'}</div>`;
-  else if (psCount) warn = `<div class="warnNote" style="margin:6px 0;">${escapeHtml(nmB)}'s save has ${psCount} PlayStation-only thing${psCount === 1 ? '' : 's'} an unmodded PC game doesn't have. They'll be listed after cloning.</div>`;
+  else if (psCount && platA !== 'PS') warn = `<div class="warnNote" style="margin:6px 0;">${escapeHtml(nmB)}'s save has ${psCount} PlayStation-only thing${psCount === 1 ? '' : 's'} an unmodded PC game doesn't have. They'll be listed after cloning.</div>`;
   return `<div class="subDetails" style="padding:10px; margin-bottom:12px;"><div class="eyebrow" style="margin-bottom:6px;">Clone the whole save</div>
     <div class="capNote" style="margin-top:0;">Replace everything in the save you're editing with <b>${escapeHtml(nmB)}</b>'s save (${platformName(platB)}): fighters, gear, research, decals, money, quests, settings and flags. Only the account stays <b>${escapeHtml(nmA)}</b>'s (uid ${escapeHtml(cmpUidA())}, ${platformName(platA)}): the account id is moved everywhere the save uses it, and the name, Steam/PSN ids and login ids are kept. Changes you made to this save that you haven't downloaded are lost. Nothing is written until you download.</div>
     ${warn}
