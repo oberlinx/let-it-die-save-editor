@@ -224,6 +224,27 @@
   .stewTable { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 12px; }
   .stewTable th { text-align: left; font-size: 10.5px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.4px; font-weight: normal; padding: 4px 8px; border-bottom: 1px solid var(--panel-border); }
   .stewTable td { padding: 5px 8px; border-bottom: 1px solid rgba(255,255,255,0.04); }
+  /* Current Run tab: plain sans-serif for reading, colored tiles */
+  .run { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 14px; }
+  .run .runHead { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-bottom: 14px; }
+  .run .runName { font-size: 22px; font-weight: 700; color: var(--text); }
+  .run .runWhere { font-size: 15px; color: var(--text-dim); }
+  .run .runBadge { font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px; letter-spacing: .3px; }
+  .run .runBadge.ok { background: #1f3d2a; color: #8fe0a8; border: 1px solid #2f6a44; }
+  .run .runBadge.bad { background: #4a1712; color: #ffb3a8; border: 1px solid var(--accent); }
+  .run .runTiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; margin-bottom: 18px; }
+  .run .runTile { background: var(--bg-raised); border: 1px solid var(--panel-border); border-left: 4px solid var(--tile, #666); border-radius: 6px; padding: 10px 12px; }
+  .run .runTile .k { font-size: 11.5px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .5px; }
+  .run .runTile .v { font-size: 22px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; margin-top: 2px; }
+  .run .runTile .s { font-size: 12px; color: var(--text-faint); margin-top: 2px; }
+  .run h3 { font-size: 15px; font-weight: 700; margin: 18px 0 8px; color: var(--text); }
+  .run table.runTable { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  .run table.runTable th { text-align: left; font-size: 11.5px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: .4px; padding: 6px 10px; border-bottom: 1px solid var(--panel-border); }
+  .run table.runTable td { padding: 6px 10px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+  .run table.runTable td.n { text-align: right; font-variant-numeric: tabular-nums; }
+  .run table.runTable tr:nth-child(even) td { background: rgba(255,255,255,0.02); }
+  .run .up { color: #8fe0a8; } .run .down { color: #ffb3a8; } .run .muted { color: var(--text-faint); }
+  @media (max-width: 600px) { .run .runTile .v { font-size: 18px; } .run .runName { font-size: 18px; } }
   .stewBar { height: 8px; background: var(--bg); border: 1px solid var(--panel-border); min-width: 80px; }
   .stewBar span { display: block; height: 100%; background: var(--accent); }
   .stewHlBar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 14px 0 4px; font-size: 11.5px; }
@@ -1953,6 +1974,10 @@ const TABS = [ {
   id: 'location',
   label: 'Location'
 }, {
+  id: 'run',
+  label: 'Current Run',
+  when: () => !!runData()
+}, {
   id: 'collection',
   label: 'Collection'
 }, {
@@ -1978,7 +2003,8 @@ function renderAll() {
   app.querySelectorAll('[id]').forEach(el => {
     if (el.scrollTop > 0) scrollStates[el.id] = el.scrollTop;
   });
-  app.innerHTML = `\n    ${blockHealth()}\n    <div class="tabbar">\n      ${TABS.map(t => `<button class="tabbtn ${activeTab === t.id ? 'active' : ''}" data-tab-btn="${t.id}">${t.label}</button>`).join('')}\n    </div>\n    <div class="tabpanel" data-tab-panel="account" style="display:${activeTab === 'account' ? 'block' : 'none'}">${blockCurrency()}</div>\n    <div class="tabpanel" data-tab-panel="fighters" style="display:${activeTab === 'fighters' ? 'block' : 'none'}">${blockCharacters()}${blockSkins()}</div>\n    <div class="tabpanel" data-tab-panel="research" style="display:${activeTab === 'research' ? 'block' : 'none'}">${blockBlueprints()}</div>\n    <div class="tabpanel" data-tab-panel="decals" style="display:${activeTab === 'decals' ? 'block' : 'none'}">${blockSkillDecals()}</div>\n    <div class="tabpanel" data-tab-panel="stews" style="display:${activeTab === 'stews' ? 'block' : 'none'}">${blockStews()}</div>\n    <div class="tabpanel" data-tab-panel="bags" style="display:${activeTab === 'bags' ? 'block' : 'none'}">${blockBags()}</div>\n    <div class="tabpanel" data-tab-panel="boxes" style="display:${activeTab === 'boxes' ? 'block' : 'none'}">${blockBoxes()}</div>\n    <div class="tabpanel" data-tab-panel="hub" style="display:${activeTab === 'hub' ? 'block' : 'none'}">${blockHub()}</div>\n    <div class="tabpanel" data-tab-panel="defense" style="display:${activeTab === 'defense' ? 'block' : 'none'}">${blockDefense()}</div>\n    <div class="tabpanel" data-tab-panel="photos" style="display:${activeTab === 'photos' ? 'block' : 'none'}">${blockPhotos()}</div>\n    <div class="tabpanel" data-tab-panel="graves" style="display:${activeTab === 'graves' ? 'block' : 'none'}">${blockGraves()}</div>\n    <div class="tabpanel" data-tab-panel="dates" style="display:${activeTab === 'dates' ? 'block' : 'none'}">${blockDates()}</div>\n    <div class="tabpanel" data-tab-panel="storage" style="display:${activeTab === 'storage' ? 'block' : 'none'}">${blockStorageBox()}</div>\n    <div class="tabpanel" data-tab-panel="rewards" style="display:${activeTab === 'rewards' ? 'block' : 'none'}">${blockRewardBox()}</div>\n    <div class="tabpanel" data-tab-panel="quests" style="display:${activeTab === 'quests' ? 'block' : 'none'}">${blockQuests()}</div>\n    <div class="tabpanel" data-tab-panel="rally" style="display:${activeTab === 'rally' ? 'block' : 'none'}">${blockRally()}</div>\n    <div class="tabpanel" data-tab-panel="location" style="display:${activeTab === 'location' ? 'block' : 'none'}">${blockLocation()}</div>\n    <div class="tabpanel" data-tab-panel="collection" style="display:${activeTab === 'collection' ? 'block' : 'none'}">${blockCollection()}</div>\n    <div class="tabpanel" data-tab-panel="jackals" style="display:${activeTab === 'jackals' ? 'block' : 'none'}">${blockJackals()}</div>\n    <div class="tabpanel" data-tab-panel="stats" style="display:${activeTab === 'stats' ? 'block' : 'none'}">${blockStats()}</div>\n    <div class="tabpanel" data-tab-panel="vip" style="display:${activeTab === 'vip' ? 'block' : 'none'}">${blockVip()}${blockFreeCont()}</div>\n    <div class="tabpanel" data-tab-panel="compare" style="display:${activeTab === 'compare' ? 'block' : 'none'}">${blockCompare()}</div>\n  `;
+  if (TABS.some(t => t.id === activeTab && t.when && !t.when())) activeTab = 'account';
+  app.innerHTML = `\n    ${blockHealth()}\n    <div class="tabbar">\n      ${TABS.filter(t => !t.when || t.when()).map(t => `<button class="tabbtn ${activeTab === t.id ? 'active' : ''}" data-tab-btn="${t.id}">${t.label}</button>`).join('')}\n    </div>\n    <div class="tabpanel" data-tab-panel="account" style="display:${activeTab === 'account' ? 'block' : 'none'}">${blockCurrency()}</div>\n    <div class="tabpanel" data-tab-panel="fighters" style="display:${activeTab === 'fighters' ? 'block' : 'none'}">${blockCharacters()}${blockSkins()}</div>\n    <div class="tabpanel" data-tab-panel="research" style="display:${activeTab === 'research' ? 'block' : 'none'}">${blockBlueprints()}</div>\n    <div class="tabpanel" data-tab-panel="decals" style="display:${activeTab === 'decals' ? 'block' : 'none'}">${blockSkillDecals()}</div>\n    <div class="tabpanel" data-tab-panel="stews" style="display:${activeTab === 'stews' ? 'block' : 'none'}">${blockStews()}</div>\n    <div class="tabpanel" data-tab-panel="bags" style="display:${activeTab === 'bags' ? 'block' : 'none'}">${blockBags()}</div>\n    <div class="tabpanel" data-tab-panel="boxes" style="display:${activeTab === 'boxes' ? 'block' : 'none'}">${blockBoxes()}</div>\n    <div class="tabpanel" data-tab-panel="hub" style="display:${activeTab === 'hub' ? 'block' : 'none'}">${blockHub()}</div>\n    <div class="tabpanel" data-tab-panel="defense" style="display:${activeTab === 'defense' ? 'block' : 'none'}">${blockDefense()}</div>\n    <div class="tabpanel" data-tab-panel="photos" style="display:${activeTab === 'photos' ? 'block' : 'none'}">${blockPhotos()}</div>\n    <div class="tabpanel" data-tab-panel="graves" style="display:${activeTab === 'graves' ? 'block' : 'none'}">${blockGraves()}</div>\n    <div class="tabpanel" data-tab-panel="dates" style="display:${activeTab === 'dates' ? 'block' : 'none'}">${blockDates()}</div>\n    <div class="tabpanel" data-tab-panel="storage" style="display:${activeTab === 'storage' ? 'block' : 'none'}">${blockStorageBox()}</div>\n    <div class="tabpanel" data-tab-panel="rewards" style="display:${activeTab === 'rewards' ? 'block' : 'none'}">${blockRewardBox()}</div>\n    <div class="tabpanel" data-tab-panel="quests" style="display:${activeTab === 'quests' ? 'block' : 'none'}">${blockQuests()}</div>\n    <div class="tabpanel" data-tab-panel="rally" style="display:${activeTab === 'rally' ? 'block' : 'none'}">${blockRally()}</div>\n    <div class="tabpanel" data-tab-panel="location" style="display:${activeTab === 'location' ? 'block' : 'none'}">${blockLocation()}</div>\n    <div class="tabpanel" data-tab-panel="run" style="display:${activeTab === 'run' ? 'block' : 'none'}">${blockRun()}</div>\n    <div class="tabpanel" data-tab-panel="collection" style="display:${activeTab === 'collection' ? 'block' : 'none'}">${blockCollection()}</div>\n    <div class="tabpanel" data-tab-panel="jackals" style="display:${activeTab === 'jackals' ? 'block' : 'none'}">${blockJackals()}</div>\n    <div class="tabpanel" data-tab-panel="stats" style="display:${activeTab === 'stats' ? 'block' : 'none'}">${blockStats()}</div>\n    <div class="tabpanel" data-tab-panel="vip" style="display:${activeTab === 'vip' ? 'block' : 'none'}">${blockVip()}${blockFreeCont()}</div>\n    <div class="tabpanel" data-tab-panel="compare" style="display:${activeTab === 'compare' ? 'block' : 'none'}">${blockCompare()}</div>\n  `;
   wireHealth();
   wireCurrency();
   wireCharacters();
@@ -1997,6 +2023,7 @@ function renderAll() {
   wireQuests();
   wireRally();
   wireLocation();
+  wireRun();
   wireCollection();
   wireStats();
   wireJackals();
@@ -2016,6 +2043,7 @@ function renderAll() {
       if (activeTab === 'quests') renderQuests();
       if (activeTab === 'rally') renderRally();
       if (activeTab === 'location') renderLocation();
+      if (activeTab === 'run') renderRun();
       if (activeTab === 'collection') renderCollection();
       if (activeTab === 'stats') renderStats();
       if (activeTab === 'jackals') renderJackals();
@@ -5003,6 +5031,150 @@ function renderStats() {
     if (top.length) h += `<details class="subDetails"><summary>▸ Most used decals (top ${top.length})</summary><div class="subDetailsBody"><table class="stewTable"><tbody>${top.map(([ id, n ]) => `<tr><td>${escapeHtml(SKL_INDEX[id] ? decalNameP(id) : id)}</td><td style="text-align:right;">${Number(n).toLocaleString()}</td></tr>`).join('')}</tbody></table></div></details>`;
   } catch (e) {}
   host.innerHTML = h;
+}
+
+// ---------------------------------------------------------------------------
+// CURRENT RUN (read only). Shown only while the save is in a run (soul.pause set). Everything comes from the
+// save as loaded: the fighter in the run (money, bloodnium, bloodnium_result {enemy_count, bloodnium,
+// msr_bloodnium, start_time, elapsed_time, max_floor_id}, gain_exp/start_exp, hp, sklgauge), soul run state
+// (stgid/flrid/areaid, pause + pause_x/y/z, area_start_time, replica_* = account values copied at the start),
+// force_shutdown_counts, soul.hvntrinfo (map rewards), floor.rlg (floors visited, with ref areas), clear_times,
+// and the item instances the run made (owners FLOOR, TRBOX, ZAKO, ZOMBIE, MBOSS, JACKAL_*). Export as CSV.
+// ---------------------------------------------------------------------------
+function runData() {
+  const root = RAW_SAV_ROOT, s = root && root.soul;
+  if (!s || !s.pause) return null;
+  const uid = String(RAW_SAV_MAIN_UID || (root.user && root.user.uid) || '');
+  const cl = s.chr && s.chr.chrs, list = Array.isArray(cl) ? cl : cl && typeof cl === 'object' ? arr(cl[uid]) : [];
+  const c = list.find(x => x && x.state === 'USE') || null;
+  let br = {};
+  try { br = JSON.parse((c && c.bloodnium_result) || '{}') || {}; } catch (e) {}
+  const num = v => Number(v) || 0;
+  const f = hvnFloor(s.flrid);
+  const where = f ? hvnFloorLabel(f) : [ s.stgid, s.flrid, s.areaid ].filter(Boolean).join(' / ') || '—';
+  const rlg = root.floor && root.floor.rlg;
+  const archive = {};
+  for (const a of arr(rlg && rlg.archive)) if (a && a.flrid) archive[a.flrid + '|' + a.areaid] = a;
+  const ct = root.clear_times || {};
+  const floors = arr(rlg && rlg.user).map((u, i) => {
+    const hf = hvnFloor(u.flrid), a = archive[u.flrid + '|' + u.areaid] || {};
+    return { n: i + 1, id: u.flrid, label: hf ? hvnFloorLabel(hf) : u.flrid, boss: hf ? Number(hf.mbsmax) > 0 : false, ref: a.ref_areaid || '', cleared: Number(ct[u.flrid + '-' + u.areaid]) || 0 };
+  });
+  const owners = {};
+  for (const [ sec, key ] of [ [ 'item', 'items' ], [ 'part', 'pts' ] ]) {
+    const v = root[sec] && root[sec][key], L = Array.isArray(v) ? v : v && typeof v === 'object' ? arr(v[uid]) : [];
+    for (const x of L) { const o = String((x && x.owner) || ''); if (RUN_OWNERS.test(o)) { const k = /^JACKAL_/.test(o) ? 'Jackals' : ({ FLOOR: 'On floors', TRBOX: 'In chests', ZAKO: 'Treasure enemies', ZOMBIE: 'Zombies', MBOSS: 'Bosses' })[o] || o; owners[k] = (owners[k] || 0) + 1; } }
+  }
+  const fsc = root.force_shutdown_counts && c ? num(root.force_shutdown_counts[c.cid]) : 0;
+  const maxF = hvnFloor(br.max_floor_id);
+  return {
+    name: c ? c.name || '' : '', cls: c ? [ c.type, c.grade != null ? 'Grade ' + c.grade : '', c.limit_break ? 'LB ' + c.limit_break : '' ].filter(Boolean).join(' · ') : '',
+    pause: s.pause, crashed: /_CRASH$/.test(s.pause), where, stage: s.stgid || '', flrid: s.flrid || '',
+    deepest: maxF ? maxF.no + 'F' : br.max_floor_id || '', money: c ? num(c.money) : 0, blood: c ? num(c.bloodnium) : 0,
+    bloodFloors: num(br.bloodnium), bloodMsr: num(br.msr_bloodnium), enemies: num(br.enemy_count),
+    began: floors.length ? floors[0].cleared : 0, started: num(br.start_time), elapsed: num(br.elapsed_time), floorStart: num(s.area_start_time),
+    exp: c ? num(c.gain_exp) - num(c.start_exp) : 0, expNow: c ? num(c.gain_exp) : 0, hp: c ? num(c.hp) : 0,
+    bank: num(s.free_money), bankStart: num(s.replica_money), spl: num(s.spirit), splStart: num(s.replica_spirit),
+    bp: num(s.bloodnium_point), bpStart: num(s.replica_bloodnium_point), bankCap: bankCapacityForLevel(s.safe_level != null ? s.safe_level : 1),
+    fsc, floors, owners, made: Object.values(owners).reduce((a, b) => a + b, 0), upcoming: arr(s.hvntrinfo),
+    pos: [ s.pause_x, s.pause_y, s.pause_z ].map(v => Math.round(num(v))).join(', ')
+  };
+}
+// a map entry's other rewards as the floor has them (unplaced placeholder boxes left out)
+function runRewardText(e) {
+  const unp = flmUnplaced(e), rw = arr(e && e.rwds).filter((w, i) => w && !unp.has(i));
+  const nm = w => w.rwdtype === 'TBRWD_MONEY' || !w.rwdid ? 'Kill Coins' : itemDisplayName(w.rwdid);
+  const grp = (re, label) => { const L = rw.filter(w => re.test(w.gentype || '')).map(nm); return L.length ? `${label}: ${L.join(', ')}` : ''; };
+  return [ grp(/TRZAKO$/, 'Treasure enemies'), grp(/TRBOX_L$/, 'Large boxes'), grp(/MBOSS/, 'Boss drop') ].filter(Boolean).join(' · ');
+}
+const runDur = sec => { sec = Math.max(0, Math.floor(sec)); const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60); return h ? `${h}h ${m}m` : `${m}m`; };
+const runN = v => Number(v || 0).toLocaleString();
+function runRows(d) {
+  // [section, field, value] for the page and the CSV
+  const R = [];
+  const add = (sec, k, v) => R.push([ sec, k, v ]);
+  // numbers stay numbers (formatted on the page, plain in the CSV)
+  add('Fighter', 'Name', d.name); add('Fighter', 'Class', d.cls); add('Fighter', 'HP (as saved)', d.hp);
+  add('Where', 'Floor', d.where); add('Where', 'State', d.crashed ? `Closed without pausing (${d.pause})` : `Paused (${d.pause})`);
+  add('Where', 'Deepest floor this run', d.deepest); add('Where', 'Floors visited', d.floors.length);
+  add('Where', 'Position', d.pos);
+  add('Earned', 'Kill Coins carried', d.money); add('Earned', 'Bloodnium carried', d.blood);
+  add('Earned', 'Bloodnium from floors and kills', d.bloodFloors); add('Earned', 'Bloodnium from mushrooms', d.bloodMsr);
+  add('Earned', 'Enemies killed', d.enemies); add('Earned', 'EXP gained', d.exp);
+  add('Time', 'Play time in the run', runDur(d.elapsed)); add('Time', 'Run began (first floor cleared)', d.began ? dtFmt(d.began) : ''); add('Time', 'Run last started or resumed', d.started ? dtFmt(d.started) : '');
+  add('Time', 'Current floor entered', d.floorStart ? dtFmt(d.floorStart) : '');
+  add('Account', 'Bank Kill Coins now', d.bank); add('Account', 'Bank Kill Coins at run start', d.bankStart);
+  add('Account', 'Bank limit', d.bankCap); add('Account', 'Bank + Kill Coins carried', d.bank + d.money);
+  add('Account', 'SPLithium now', d.spl); add('Account', 'SPLithium at run start', d.splStart);
+  add('Account', 'Bloodnium now', d.bp); add('Account', 'Bloodnium at run start', d.bpStart);
+  add('Health', 'Force-closes this run', d.fsc);
+  add('Health', 'Items the run left behind', d.made);
+  for (const [ k, n ] of Object.entries(d.owners)) add('Health', 'Left behind: ' + k, n);
+  return R;
+}
+function runCsv(d) {
+  const q = v => { const s = String(v == null ? '' : v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const lines = [ [ 'Section', 'Field', 'Value' ].join(',') ];
+  for (const r of runRows(d)) lines.push(r.map(q).join(','));
+  if (d.upcoming.length) {
+    lines.push('', [ 'Map rewards', 'Floor', 'Featured reward', 'Rare', 'Other rewards' ].join(','));
+    for (const e of d.upcoming) { const hf = hvnFloor(e.flrid); lines.push([ 'Map rewards', hf ? hf.no + 'F' : e.flrid, e.rwdid ? itemDisplayName(e.rwdid) : '', Number(e.is_rare) ? 'yes' : '', runRewardText(e) ].map(q).join(',')); }
+  }
+  lines.push('', [ 'Floors visited', '#', 'Floor', 'Boss floor', 'Map used', 'Cleared at' ].join(','));
+  for (const x of d.floors) lines.push([ 'Floors visited', x.n, x.label, x.boss ? 'yes' : '', x.ref, x.cleared ? dtFmt(x.cleared) : '' ].map(q).join(','));
+  return '﻿' + lines.join('\r\n') + '\r\n';
+}
+function blockRun() {
+  return `<section class="block">
+    <div class="block-head"><div><div class="eyebrow">Read only</div><h2>Current Run</h2></div></div>
+    <div class="block-body"><div class="toolbar" style="margin-bottom:10px;"><button class="action" id="run-csv">Export to CSV</button><span class="capNote" style="margin:0;">Everything on this tab, the map rewards and every floor visited, as a spreadsheet file.</span></div><div id="run-body" class="run"></div></div>
+  </section>`;
+}
+function renderRun() {
+  const host = document.getElementById('run-body');
+  if (!host) return;
+  const d = runData();
+  if (!d) { host.innerHTML = '<div class="capNote">This save isn\'t in a run.</div>'; return; }
+  const tile = (k, v, sub, color) => `<div class="runTile" style="--tile:${color};"><div class="k">${k}</div><div class="v">${v}</div>${sub ? `<div class="s">${sub}</div>` : ''}</div>`;
+  const delta = (now, then) => { const x = now - then; return x ? `<span class="${x > 0 ? 'up' : 'down'}">${x > 0 ? '+' : ''}${runN(x)}</span>` : '<span class="muted">no change</span>'; };
+  let h = `<div class="runHead"><span class="runName">${escapeHtml(d.name || 'Fighter')}</span><span class="runWhere">${escapeHtml(d.where)}</span>
+    <span class="runBadge ${d.crashed ? 'bad' : 'ok'}">${d.crashed ? 'Closed without pausing' : 'Paused'}</span>${d.cls ? `<span class="runWhere" style="font-size:13px;">${escapeHtml(d.cls)}</span>` : ''}</div>`;
+  h += `<div class="runTiles">
+    ${tile('Floor', escapeHtml(d.where.match(/(\d+)F/) ? d.where.match(/(\d+)F/)[1] + 'F' : '—'), `deepest ${escapeHtml(d.deepest || '—')} · ${runN(d.floors.length)} floors visited`, '#d6392c')}
+    ${tile('Kill Coins carried', runN(d.money), `Bank ${runN(d.bank)} of ${runN(d.bankCap)}`, '#e0b341')}
+    ${tile('Bloodnium carried', runN(d.blood), `${runN(d.bloodFloors)} floors/kills · ${runN(d.bloodMsr)} mushrooms`, '#c0392b')}
+    ${tile('Enemies killed', runN(d.enemies), '', '#8e6bd6')}
+    ${tile('Play time in run', runDur(d.elapsed), d.began ? 'began ' + escapeHtml(dtFmt(d.began)) : d.started ? 'resumed ' + escapeHtml(dtFmt(d.started)) : '', '#4f8fd6')}
+    ${tile('EXP gained', runN(d.exp), `now ${runN(d.expNow)}`, '#4fb37a')}
+    ${tile('Force-closes', runN(d.fsc), d.fsc >= 3 ? '<span class="down">Bloodnium penalty</span>' : 'no penalty', d.fsc >= 3 ? '#d6392c' : '#666')}
+  </div>`;
+  h += `<h3>Account since the run started</h3><table class="runTable"><thead><tr><th></th><th style="text-align:right;">At run start</th><th style="text-align:right;">Now</th><th style="text-align:right;">Change</th></tr></thead><tbody>
+    <tr><td>Bank Kill Coins</td><td class="n">${runN(d.bankStart)}</td><td class="n">${runN(d.bank)}</td><td class="n">${delta(d.bank, d.bankStart)}</td></tr>
+    <tr><td>SPLithium</td><td class="n">${runN(d.splStart)}</td><td class="n">${runN(d.spl)}</td><td class="n">${delta(d.spl, d.splStart)}</td></tr>
+    <tr><td>Bloodnium</td><td class="n">${runN(d.bpStart)}</td><td class="n">${runN(d.bp)}</td><td class="n">${delta(d.bp, d.bpStart)}</td></tr>
+    <tr><td>Bank + Kill Coins carried</td><td class="n muted">—</td><td class="n">${runN(d.bank + d.money)}</td><td></td></tr>
+  </tbody></table>`;
+  h += `<h3>Run details</h3><table class="runTable"><tbody>${runRows(d).filter(r => [ 'Where', 'Time', 'Health', 'Fighter' ].includes(r[0])).map(r => `<tr><td>${escapeHtml(r[1])}</td><td class="n">${escapeHtml(typeof r[2] === 'number' ? runN(r[2]) : String(r[2]))}</td></tr>`).join('')}</tbody></table>`;
+  if (d.upcoming.length) {
+    h += `<h3>Map rewards</h3>`;
+    if (!LOC_SPOIL) h += `<div class="capNote" style="margin-top:0;">${d.upcoming.length} boss floor${d.upcoming.length === 1 ? '' : 's'} with rewards on the map. Tick "Show rewards (spoilers)" on the Location tab to list them here.</div>`;
+    else h += `<table class="runTable"><thead><tr><th>Floor</th><th>Featured reward</th><th>Other rewards</th></tr></thead><tbody>${d.upcoming.map(e => { const hf = hvnFloor(e.flrid); return `<tr><td>${escapeHtml(hf ? hf.no + 'F' : e.flrid)}${Number(e.is_rare) ? ' <span class="runBadge bad" style="font-size:10.5px; padding:1px 7px;">rare</span>' : ''}</td><td>${escapeHtml(e.rwdid ? itemDisplayName(e.rwdid) : '—')}</td><td class="muted">${escapeHtml(runRewardText(e))}</td></tr>`; }).join('')}</tbody></table>`;
+  }
+  h += `<details class="subDetails" style="margin-top:16px;"><summary>▸ Floors visited (${d.floors.length})</summary><div class="subDetailsBody"><table class="runTable"><thead><tr><th>#</th><th>Floor</th><th>Map used</th><th>Cleared at</th></tr></thead><tbody>${d.floors.slice().reverse().map(x => `<tr><td class="muted">${x.n}</td><td>${escapeHtml(x.label)}${x.boss ? ' <span class="runBadge ok" style="font-size:10.5px; padding:1px 7px;">boss</span>' : ''}</td><td class="muted">${escapeHtml(x.ref)}</td><td>${x.cleared ? escapeHtml(dtFmt(x.cleared)) : '<span class="muted">—</span>'}</td></tr>`).join('')}</tbody></table></div></details>`;
+  h += `<div class="capNote" style="margin-top:12px;">Read from the save as loaded. "Run began" is when the first floor of the run was cleared; "last started or resumed" is when the game last picked the run up. Changes made on the Location tab (moving or ending the run) apply on download and aren't shown here.</div>`;
+  host.innerHTML = h;
+}
+function wireRun() {
+  if (activeTab === 'run') renderRun();
+  const b = document.getElementById('run-csv');
+  if (b) b.addEventListener('click', () => {
+    const d = runData();
+    if (!d) { toast('This save isn\'t in a run', true); return; }
+    const p = n => String(n).padStart(2, '0'), t = new Date();
+    const nm = `current_run_${String(d.name || 'fighter').replace(/[^\w-]+/g, '_')}_${t.getFullYear()}-${p(t.getMonth() + 1)}-${p(t.getDate())}_${p(t.getHours())}${p(t.getMinutes())}.csv`;
+    triggerDownload(runCsv(d), nm, 'text/csv;charset=utf-8');
+    toast('Exported ' + nm);
+  });
 }
 function wireStats() { if (activeTab === 'stats') renderStats(); }
 
