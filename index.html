@@ -5041,6 +5041,34 @@ function renderStats() {
 // force_shutdown_counts, soul.hvntrinfo (map rewards), floor.rlg (floors visited, with ref areas), clear_times,
 // and the item instances the run made (owners FLOOR, TRBOX, ZAKO, ZOMBIE, MBOSS, JACKAL_*). Export as CSV.
 // ---------------------------------------------------------------------------
+// When the game made each floor of the run. clear_times is the FIRST time a floor was ever cleared (a record,
+// not rewritten by later runs), so it can't time this run. The floor list's arcid is a time-based UUID (v1) on
+// most saves, giving the moment the floor was built; otherwise the batch of enemy fighters (Haters) the game
+// archives when it builds a floor gives it (dchrarcs.created), found by walking back from the current floor.
+function uuidTime(u) {
+  const h = String(u || '').replace(/-/g, '');
+  if (h.length !== 32 || h[12] !== '1') return 0;
+  const v = parseInt(h.slice(13, 16), 16) * 281474976710656 + parseInt(h.slice(8, 12), 16) * 4294967296 + parseInt(h.slice(0, 8), 16);
+  const t = Math.round((v - 122192928000000000) / 1e7);
+  return t > 0 ? t : 0;
+}
+function runHaterIndex(root) {
+  const by = {};
+  for (const L of Object.values((root.diedchara && root.diedchara.dchrarcs) || {})) for (const a of arr(L)) if (a && a.state === 'ENEMY' && a.flrid) (by[a.flrid] = by[a.flrid] || []).push(Number(a.created) || 0);
+  return by;
+}
+function runEntryTimes(root, user) {
+  const by = runHaterIndex(root);
+  const t = user.map(u => uuidTime(u.arcid));
+  if (t.every(Boolean)) return { t, exact: true, by };
+  let bound = Infinity;
+  for (let i = user.length - 1; i >= 0; i--) {
+    if (t[i]) { bound = t[i]; continue; }
+    const c = arr(by[user[i].flrid]).filter(x => x <= bound + 5);
+    if (c.length) { t[i] = Math.max(...c); bound = t[i]; }
+  }
+  return { t, exact: false, by };
+}
 function runData() {
   const root = RAW_SAV_ROOT, s = root && root.soul;
   if (!s || !s.pause) return null;
@@ -5056,9 +5084,11 @@ function runData() {
   const archive = {};
   for (const a of arr(rlg && rlg.archive)) if (a && a.flrid) archive[a.flrid + '|' + a.areaid] = a;
   const ct = root.clear_times || {};
-  const floors = arr(rlg && rlg.user).map((u, i) => {
+  const users = arr(rlg && rlg.user);
+  const et = runEntryTimes(root, users);
+  const floors = users.map((u, i) => {
     const hf = hvnFloor(u.flrid), a = archive[u.flrid + '|' + u.areaid] || {};
-    return { n: i + 1, id: u.flrid, label: hf ? hvnFloorLabel(hf) : u.flrid, boss: hf ? Number(hf.mbsmax) > 0 : false, ref: a.ref_areaid || '', cleared: Number(ct[u.flrid + '-' + u.areaid]) || 0 };
+    return { n: i + 1, id: u.flrid, label: hf ? hvnFloorLabel(hf) : u.flrid, boss: hf ? Number(hf.mbsmax) > 0 : false, ref: a.ref_areaid || '', cleared: Number(ct[u.flrid + '-' + u.areaid]) || 0, entered: et.t[i] || 0, haters: et.t[i] ? arr(et.by[u.flrid]).filter(x => Math.abs(x - et.t[i]) <= 30).length : 0 };
   });
   const owners = {};
   for (const [ sec, key ] of [ [ 'item', 'items' ], [ 'part', 'pts' ] ]) {
@@ -5072,7 +5102,7 @@ function runData() {
     pause: s.pause, crashed: /_CRASH$/.test(s.pause), where, stage: s.stgid || '', flrid: s.flrid || '',
     deepest: maxF ? maxF.no + 'F' : br.max_floor_id || '', money: c ? num(c.money) : 0, blood: c ? num(c.bloodnium) : 0,
     bloodFloors: num(br.bloodnium), bloodMsr: num(br.msr_bloodnium), enemies: num(br.enemy_count),
-    began: floors.length ? floors[0].cleared : 0, started: num(br.start_time), elapsed: num(br.elapsed_time), floorStart: num(s.area_start_time),
+    began: floors.length ? floors[0].entered || (floors.find(x => x.entered) || {}).entered || 0 : 0, beganExact: et.exact, started: num(br.start_time), elapsed: num(br.elapsed_time), floorStart: num(s.area_start_time),
     exp: c ? num(c.gain_exp) - num(c.start_exp) : 0, expNow: c ? num(c.gain_exp) : 0, hp: c ? num(c.hp) : 0,
     bank: num(s.free_money), bankStart: num(s.replica_money), spl: num(s.spirit), splStart: num(s.replica_spirit),
     bp: num(s.bloodnium_point), bpStart: num(s.replica_bloodnium_point), bankCap: bankCapacityForLevel(s.safe_level != null ? s.safe_level : 1),
@@ -5103,7 +5133,7 @@ function runRows(d) {
   add('Earned', 'Kill Coins carried', d.money); add('Earned', 'Bloodnium carried', d.blood);
   add('Earned', 'Bloodnium from floors and kills', d.bloodFloors); add('Earned', 'Bloodnium from mushrooms', d.bloodMsr);
   add('Earned', 'Enemies killed', d.enemies); add('Earned', 'EXP gained', d.exp);
-  add('Time', 'Play time in the run', runDur(d.elapsed)); add('Time', 'Run began (first floor cleared)', d.began ? dtFmt(d.began) : ''); add('Time', 'Run last started or resumed', d.started ? dtFmt(d.started) : '');
+  add('Time', 'Play time in the run', runDur(d.elapsed)); add('Time', d.beganExact ? 'Run began (first floor entered)' : 'Run began (about)', d.began ? dtFmt(d.began) : ''); add('Time', 'Run last started or resumed', d.started ? dtFmt(d.started) : '');
   add('Time', 'Current floor entered', d.floorStart ? dtFmt(d.floorStart) : '');
   add('Account', 'Bank Kill Coins now', d.bank); add('Account', 'Bank Kill Coins at run start', d.bankStart);
   add('Account', 'Bank limit', d.bankCap); add('Account', 'Bank + Kill Coins carried', d.bank + d.money);
@@ -5204,34 +5234,33 @@ function runFloorNow() {
   return out;
 }
 function runPace(d) {
-  const f = d.floors.filter(x => x.cleared);
-  const steps = [];
-  for (let i = 1; i < f.length; i++) { const hf = hvnFloor(f[i].id); steps.push({ label: hf ? hf.no + 'F' + (f[i].boss ? ' (boss)' : '') : f[i].label, boss: f[i].boss, sec: f[i].cleared - f[i - 1].cleared }); }
+  // time on a floor = from when it was built to when the next floor was built (consecutive floors only)
+  const f = d.floors, steps = [];
+  for (let i = 0; i + 1 < f.length; i++) {
+    if (!f[i].entered || !f[i + 1].entered) continue;
+    const hf = hvnFloor(f[i].id);
+    steps.push({ label: hf ? hf.no + 'F' + (f[i].boss ? ' (boss)' : '') : f[i].label, boss: f[i].boss, sec: f[i + 1].entered - f[i].entered });
+  }
   const BREAK = 3600, act = steps.filter(x => x.sec > 0 && x.sec <= BREAK), breaks = steps.filter(x => x.sec > BREAK);
   const med = L => { if (!L.length) return 0; const v = L.map(x => x.sec).sort((a, b) => a - b); return v[Math.floor(v.length / 2)]; };
   const total = act.reduce((a, x) => a + x.sec, 0);
   const by = act.slice().sort((a, b) => a.sec - b.sec);
   return {
-    cleared: f.length, typical: med(act), avg: act.length ? total / act.length : 0, perHour: total ? act.length * 3600 / total : 0,
+    cleared: steps.length, typical: med(act), avg: act.length ? total / act.length : 0, perHour: total ? act.length * 3600 / total : 0,
     boss: med(act.filter(x => x.boss)), normal: med(act.filter(x => !x.boss)),
     fastest: by.slice(0, 3), slowest: by.slice(-3).reverse(), breaks: breaks.length, breakTime: breaks.reduce((a, x) => a + x.sec, 0)
   };
 }
+// Haters: the enemy fighters the game archives in one batch when it builds a floor (dchrarcs, state ENEMY,
+// created at the floor's build time). Only the batch from THIS run's visit counts: the archive keeps every
+// visit to a floor id, from every run and every fighter.
 function runHaters(d) {
-  const root = RAW_SAV_ROOT, began = d.began || d.started;
-  const ids = new Set(d.floors.map(x => x.id));
-  const per = {};
-  let n = 0;
-  for (const L of Object.values((root.diedchara && root.diedchara.dchrarcs) || {})) for (const a of arr(L)) {
-    if (!a || a.state !== 'ENEMY' || !ids.has(a.flrid) || (began && Number(a.created) < began - 600)) continue;
-    n++; per[a.flrid] = (per[a.flrid] || 0) + 1;
-  }
-  // the run's first floor (Heaven's entrance, revisited by every trip up) collects far more than a normal floor
-  const first = d.floors.length ? d.floors[0].id : '';
-  const most = Object.entries(per).filter(([ id ]) => id !== first).sort((a, b) => b[1] - a[1])[0];
-  const mf = most && hvnFloor(most[0]);
-  const nf = Object.keys(per).length;
-  return { n, floors: nf, avg: nf ? n / nf : 0, most: most ? { label: mf ? mf.no + 'F' : most[0], n: most[1] } : null };
+  const withN = d.floors.filter(x => x.haters);
+  const n = withN.reduce((a, x) => a + x.haters, 0);
+  const top = withN.slice().sort((a, b) => b.haters - a.haters)[0];
+  const tf = top && hvnFloor(top.id);
+  const known = d.floors.filter(x => x.entered).length;
+  return { n, floors: withN.length, avg: withN.length ? n / withN.length : 0, most: top ? { label: tf ? tf.no + 'F' : top.id, n: top.haters } : null, none: known - withN.length, known };
 }
 function runExtraCsv(d) {
   const q = csvCell, L = [];
@@ -5255,7 +5284,7 @@ function runExtraCsv(d) {
   }
   const pc = runPace(d);
   L.push('', [ 'Pace', 'Field', 'Value' ].join(','));
-  for (const [ k, v ] of [ [ 'Floors with a clear time', pc.cleared ], [ 'Typical time per floor', runDurS(pc.typical) ], [ 'Average time per floor', runDurS(pc.avg) ], [ 'Floors per hour (playing)', Number(pc.perHour.toFixed(1)) ], [ 'Typical normal floor', runDurS(pc.normal) ], [ 'Typical boss floor', runDurS(pc.boss) ], [ 'Breaks over 1 hour', pc.breaks ], [ 'Time in breaks', runDur(pc.breakTime) ] ]) L.push([ 'Pace', k, v ].map(q).join(','));
+  for (const [ k, v ] of [ [ 'Floors timed', pc.cleared ], [ 'Typical time per floor', runDurS(pc.typical) ], [ 'Average time per floor', runDurS(pc.avg) ], [ 'Floors per hour (playing)', Number(pc.perHour.toFixed(1)) ], [ 'Typical normal floor', runDurS(pc.normal) ], [ 'Typical boss floor', runDurS(pc.boss) ], [ 'Breaks over 1 hour', pc.breaks ], [ 'Time in breaks', runDur(pc.breakTime) ] ]) L.push([ 'Pace', k, v ].map(q).join(','));
   for (const x of pc.fastest) L.push([ 'Pace', 'Fastest floor', `${x.label}: ${runDurS(x.sec)}` ].map(q).join(','));
   for (const x of pc.slowest) L.push([ 'Pace', 'Slowest floor', `${x.label}: ${runDurS(x.sec)}` ].map(q).join(','));
   const h = runHaters(d);
@@ -5319,12 +5348,12 @@ function runExtraHtml(d) {
       <div class="runTile" style="--tile:#d6392c;"><div class="k">Boss floor</div><div class="v">${runDurS(pc.boss)}</div><div class="s">typical time</div></div>
       <div class="runTile" style="--tile:#666;"><div class="k">Breaks over 1 hour</div><div class="v">${pc.breaks}</div><div class="s">${pc.breaks ? runDur(pc.breakTime) + ' in total, left out of the pace' : 'none'}</div></div>
     </div><table class="runTable"><thead><tr><th>Fastest floors</th><th style="text-align:right;">Time</th><th>Slowest floors</th><th style="text-align:right;">Time</th></tr></thead><tbody>${[ 0, 1, 2 ].map(i => { const a = pc.fastest[i], b = pc.slowest[i]; return a || b ? `<tr><td>${a ? esc(a.label) : ''}</td><td class="n up">${a ? runDurS(a.sec) : ''}</td><td>${b ? esc(b.label) : ''}</td><td class="n down">${b ? runDurS(b.sec) : ''}</td></tr>` : ''; }).join('')}</tbody></table>
-    <div class="capNote">Worked out from when each floor was cleared. A floor's time counts from clearing the floor before it, so menus and short pauses are included; gaps over an hour count as breaks.</div>`;
+    <div class="capNote">Time on a floor runs from when the game built it to when it built the next one, so menus and short pauses are included; stays over an hour count as breaks.</div>`;
   }
   // 4. Haters
   const ht = runHaters(d);
-  if (ht.n) h += `<h3>Haters</h3><div class="runTiles"><div class="runTile" style="--tile:#8e6bd6;"><div class="k">Enemy fighters this run</div><div class="v">${runN(ht.n)}</div><div class="s">on ${runN(ht.floors)} floors · about ${ht.avg.toFixed(1)} per floor</div></div>${ht.most ? `<div class="runTile" style="--tile:#8e6bd6;"><div class="k">Most on one floor</div><div class="v">${runN(ht.most.n)}</div><div class="s">${esc(ht.most.label)}</div></div>` : ''}</div>
-    <div class="capNote" style="margin-top:0;">Other players' fighters the game placed on this run's floors. The game keeps a record of each one.</div>`;
+  if (ht.n) h += `<h3>Haters</h3><div class="runTiles"><div class="runTile" style="--tile:#8e6bd6;"><div class="k">Enemy fighters this run</div><div class="v">${runN(ht.n)}</div><div class="s">on ${runN(ht.floors)} floors · about ${ht.avg.toFixed(1)} per floor${ht.none > 0 ? ` · ${runN(ht.none)} floors had none` : ''}</div></div>${ht.most ? `<div class="runTile" style="--tile:#8e6bd6;"><div class="k">Most on one floor</div><div class="v">${runN(ht.most.n)}</div><div class="s">${esc(ht.most.label)}</div></div>` : ''}</div>
+    <div class="capNote" style="margin-top:0;">Other players' fighters the game placed on each floor when it built it for this run. Boss floors usually have none.</div>`;
   return h;
 }
 function runCsv(d) {
@@ -5335,8 +5364,8 @@ function runCsv(d) {
     lines.push('', [ 'Map rewards', 'Floor', 'Featured reward', 'Rare', 'Other rewards' ].join(','));
     for (const e of d.upcoming) { const hf = hvnFloor(e.flrid); lines.push([ 'Map rewards', hf ? hf.no + 'F' : e.flrid, e.rwdid ? itemDisplayName(e.rwdid) : '', Number(e.is_rare) ? 'yes' : '', runRewardText(e) ].map(q).join(',')); }
   }
-  lines.push('', [ 'Floors visited', '#', 'Floor', 'Boss floor', 'Map used', 'Cleared at' ].join(','));
-  for (const x of d.floors) lines.push([ 'Floors visited', x.n, x.label, x.boss ? 'yes' : '', x.ref, x.cleared ? dtFmt(x.cleared) : '' ].map(q).join(','));
+  lines.push('', [ 'Floors visited', '#', 'Floor', 'Boss floor', 'Map used', 'Entered this run', 'Haters', 'First ever cleared' ].join(','));
+  for (const x of d.floors) lines.push([ 'Floors visited', x.n, x.label, x.boss ? 'yes' : '', x.ref, x.entered ? dtFmt(x.entered) : '', x.haters, x.cleared ? dtFmt(x.cleared) : '' ].map(q).join(','));
   lines.push(...runExtraCsv(d));
   return '﻿' + lines.join('\r\n') + '\r\n';
 }
@@ -5377,8 +5406,8 @@ function renderRun() {
     if (!LOC_SPOIL) h += `<div class="capNote" style="margin-top:0;">${d.upcoming.length} boss floor${d.upcoming.length === 1 ? '' : 's'} with rewards on the map. Tick "Show rewards (spoilers)" on the Location tab to list them here.</div>`;
     else h += `<table class="runTable"><thead><tr><th>Floor</th><th>Featured reward</th><th>Other rewards</th></tr></thead><tbody>${d.upcoming.map(e => { const hf = hvnFloor(e.flrid); return `<tr><td>${escapeHtml(hf ? hf.no + 'F' : e.flrid)}${Number(e.is_rare) ? ' <span class="runBadge bad" style="font-size:10.5px; padding:1px 7px;">rare</span>' : ''}</td><td>${escapeHtml(e.rwdid ? itemDisplayName(e.rwdid) : '—')}</td><td class="muted">${escapeHtml(runRewardText(e))}</td></tr>`; }).join('')}</tbody></table>`;
   }
-  h += `<details class="subDetails" style="margin-top:16px;"><summary>▸ Floors visited (${d.floors.length})</summary><div class="subDetailsBody"><table class="runTable"><thead><tr><th>#</th><th>Floor</th><th>Map used</th><th>Cleared at</th></tr></thead><tbody>${d.floors.slice().reverse().map(x => `<tr><td class="muted">${x.n}</td><td>${escapeHtml(x.label)}${x.boss ? ' <span class="runBadge ok" style="font-size:10.5px; padding:1px 7px;">boss</span>' : ''}</td><td class="muted">${escapeHtml(x.ref)}</td><td>${x.cleared ? escapeHtml(dtFmt(x.cleared)) : '<span class="muted">—</span>'}</td></tr>`).join('')}</tbody></table></div></details>`;
-  h += `<div class="capNote" style="margin-top:12px;">Read from the save as loaded. "Run began" is when the first floor of the run was cleared; "last started or resumed" is when the game last picked the run up. Changes made on the Location tab (moving or ending the run) apply on download and aren't shown here.</div>`;
+  h += `<details class="subDetails" style="margin-top:16px;"><summary>▸ Floors visited (${d.floors.length})</summary><div class="subDetailsBody"><table class="runTable"><thead><tr><th>#</th><th>Floor</th><th>Map used</th><th>Entered this run</th><th style="text-align:right;">Haters</th><th>First ever cleared</th></tr></thead><tbody>${d.floors.slice().reverse().map(x => `<tr><td class="muted">${x.n}</td><td>${escapeHtml(x.label)}${x.boss ? ' <span class="runBadge ok" style="font-size:10.5px; padding:1px 7px;">boss</span>' : ''}</td><td class="muted">${escapeHtml(x.ref)}</td><td>${x.entered ? escapeHtml(dtFmt(x.entered)) : '<span class="muted">—</span>'}</td><td class="n">${x.haters || '<span class="muted">0</span>'}</td><td class="muted">${x.cleared ? escapeHtml(dtFmt(x.cleared)) : '—'}</td></tr>`).join('')}</tbody></table></div></details>`;
+  h += `<div class="capNote" style="margin-top:12px;">Read from the save as loaded. "Run began" is when the game built the run's first floor; "last started or resumed" is when it last picked the run up. "First ever cleared" is the game's record of the first time each floor was cleared, in any run. Changes made on the Location tab (moving or ending the run) apply on download and aren't shown here.</div>`;
   host.innerHTML = h;
   const js = document.getElementById('run-jkl-spoil');
   if (js) js.addEventListener('change', () => { RUN_JKL_SPOIL = js.checked; try { localStorage.setItem('lid.runJackalSpoilers', js.checked ? '1' : '0'); } catch (err) {} renderRun(); });
