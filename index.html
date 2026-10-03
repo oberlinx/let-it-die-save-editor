@@ -4701,7 +4701,7 @@ function runEndHtml(cur) {
   const on = RUN_END.root === RAW_SAV_ROOT && RUN_END.on;
   const nm = info.chr ? escapeHtml(info.chr.name || 'the fighter') : 'the fighter';
   const crash = /_CRASH$/.test(info.pause);
-  let h = `<div class="subDetails" style="padding:10px; margin-bottom:12px;${crash ? ' border-color:var(--accent);' : ''}"><div class="eyebrow" style="margin-bottom:6px;">End the run (experimental)</div>
+  let h = `<div class="subDetails" style="padding:10px; margin-bottom:12px;${crash ? ' border-color:var(--accent);' : ''}"><div class="eyebrow" style="margin-bottom:6px;">End the run <span style="text-transform:none; letter-spacing:0;">(confirmed in game)</span></div>
     <div class="capNote" style="margin-top:0;">Send ${nm} back to the Waiting Room, the way the game leaves a save after a run ends. Everything in the Death Bag stays; the ${info.money.toLocaleString()} Kill Coins carried go to the Bank${info.lost > 0 ? ` <b>up to its limit (${info.cap.toLocaleString()}), so ${info.lost.toLocaleString()} are lost</b> (raise the Bank level on the Account tab first to keep them)` : ''} and the ${info.blood.toLocaleString()} Bloodnium to the account. The run's floor data (${info.floors} floor${info.floors === 1 ? '' : 's'}) and the ${info.made.toLocaleString()} item${info.made === 1 ? '' : 's'} it left on floors, in chests and on Jackals are cleared, like the game does. The run's Exploration Bonus isn't paid.${crash ? ' <b>This save ended without pausing (' + escapeHtml(info.pause) + '):</b> if the game crashes when it loads the run, ending it here lets the save load in the Waiting Room.' : ''}</div>
     <label style="cursor:pointer;"><input type="checkbox" id="run-end" ${on ? 'checked' : ''} style="width:auto; margin-right:6px;">End the run when I download</label></div>`;
   return h;
@@ -8730,6 +8730,7 @@ function runSaveCheck() {
   // fighters closed mid-run (game closed or crashed without pausing) get a Bloodnium penalty
   safe('force-close', () => {
     const f = shutdownCounts(RAW_SAV_ROOT), lim = constIntOf('FORCE_SHUTDOWN_BLOODNIUM_PENALTY_COUNT', 3), big = constIntOf('FORCE_SHUTDOWN_BLOODNIUM_LARGE_PENALTY_COUNT', 10);
+    if (RUN_END.root === RAW_SAV_ROOT && RUN_END.on) return; // ending the run clears the counts, like the game
     const reset = SHUTDOWN_RESET.root === RAW_SAV_ROOT ? SHUTDOWN_RESET.cids : new Set();
     const hit = arr(soul.chrs).filter(c => c && c.cid && !reset.has(c.cid) && Number(f[c.cid]) >= lim);
     if (!hit.length) return;
@@ -8745,7 +8746,11 @@ function runSaveCheck() {
     const pz = String((RAW_SAV_ROOT && RAW_SAV_ROOT.soul && RAW_SAV_ROOT.soul.pause) || '');
     if (!/_CRASH$/.test(pz) || (RUN_END.root === RAW_SAV_ROOT && RUN_END.on)) return;
     const ri = runEndInfo(RAW_SAV_ROOT), fl = hvnFloor(RAW_SAV_ROOT.soul.flrid);
-    add('note', `The save is in a run that ended without pausing (${escapeHtml(pz)}${fl ? ', ' + escapeHtml(hvnFloorLabel(fl)) : ''}${ri && ri.floors ? `, ${ri.floors} floors into the run` : ''}). The game picks the run up again when it loads. If it crashes instead, the Location tab can end the run and send ${escapeHtml(ri && ri.chr ? ri.chr.name || 'the fighter' : 'the fighter')} back to the Waiting Room.`, 'location');
+    const who = escapeHtml(ri && ri.chr ? ri.chr.name || 'the fighter' : 'the fighter');
+    const loss = ri && ri.lost > 0 ? ` Kill Coins carried go to the Bank up to its limit, so ${ri.lost.toLocaleString()} would be lost (raise the Bank level first to keep them).` : '';
+    add('warning', `The save is in a run that ended without pausing (${escapeHtml(pz)}${fl ? ', ' + escapeHtml(hvnFloorLabel(fl)) : ''}${ri && ri.floors ? `, ${ri.floors} floors into the run` : ''}). The game tries to pick the run up again when it loads, and saves like this can crash on load. <b>Ending the run fixes that (confirmed in game)</b>: ${who} goes back to the Waiting Room with the Death Bag. Renewing the Express Pass doesn't fix it.${loss}`, 'location', {
+      label: `End the run (send ${who} home)`, run: () => { RUN_END.root = RAW_SAV_ROOT; RUN_END.on = true; return `The run will end when you download: ${ri && ri.chr ? ri.chr.name : 'the fighter'} goes back to the Waiting Room. Untick it on the Location tab to keep the run.`; }
+    });
   });
 
   // fighters: bag overflow, duplicate or unknown items
