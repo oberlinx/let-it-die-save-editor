@@ -90,6 +90,12 @@ Stew results are pre-rolled and stored in the save as a queue, and the game pull
 
 Moving the PC clock forward and back, or past January 2038, leaves bad timestamps that can crash the game. The Dates tab compares every date with your PC clock (or a time you choose). It flags the bad ones and can set them to the reference time. Only the flagged dates change. Future login-bonus days are removed rather than duplicated, and expiry timers are only changed if they overflow.
 
+### Layouts
+
+A layout is a saved loadout: the 6 weapon quick slots (and which one is in hand), head, body and legs armor, and decals. The library is kept in your browser, so the same layouts work with any save, and you can export and import it as a `.json` file to move or share it. Make one from scratch, or save a fighter's current loadout as a layout.
+
+To apply one, pick a fighter and where the pieces come from, separately for gear and for decals: **stock** (the fighter's Death Bag, then the Storage Box; the decal stock for decals), **create** (a new copy, with full durability and ammo for gear, and not taken from the decal stock), or stock first and create only what's missing. The usual equipment rules still apply, including stat requirements counted with the layout's decals, and anything that fails is skipped with the reason. Press **Preview** to see every change before it happens and **Undo** to put the fighter, Storage Box and decal stock back. Replacing decals loses normal decals that come off (premium ones go back to stock), so you're asked first.
+
 ## Safety
 
 - Everything runs locally in the browser. The only network request is a one-time fetch of [sql.js](https://sql.js.org/) from cdnjs to read masters.db.
