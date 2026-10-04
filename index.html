@@ -7181,7 +7181,7 @@ function wireMastery() {
 }
 
 function stampBlockHtml() {
-  return `\n      <div class="eyebrow" style="margin:16px 0 6px;">Research Stamp (Funshots)</div><div id="stamp-note"></div>\n      <div class="toolbar"><button class="subtle" id="stamp-sync-all">Sync all from Research</button></div>\n      <div class="grid" style="grid-template-columns: repeat(3, 1fr);" id="stamp-grid"></div>`;
+  return `\n      <div class="eyebrow" style="margin:16px 0 6px;">Research Stamp (Funshots)</div><div class="capNote" style="margin-top:0;">Each researched part adds its Funshot once: Slash and Shoot +0.4, Hit +0.8, Head, Body and Legs +0.2. Upgrading a part (+1 to +4) adds nothing, and some parts give none (for example the 0A/0N weapon variants, and PS-only blueprints on stock game data). Changing any research sets all six to what research gives, so values a save held below that go up. The totals follow the masters.db you loaded: a modded one that opens extra blueprints gives more.</div><div id="stamp-note"></div>\n      <div class="toolbar"><button class="subtle" id="stamp-sync-all">Sync all from Research</button></div>\n      <div class="grid" style="grid-template-columns: repeat(3, 1fr);" id="stamp-grid"></div>`;
 }
 
 let REFRESH_STAMP_GRID = null;
@@ -8815,6 +8815,12 @@ function runSaveCheck() {
       });
     } else if (high.length) {
       add('warning', `Funshots are higher than your research gives: ${high.map(t => `${STAMP_LABELS[t]} ${cur[t]} (research gives ${comp[t]})`).join(', ')}. This is what the game's setup does on research made by the editor.`, 'research', {
+        label: 'Set Funshots from research', run: () => { syncStampFromResearch(); return 'Funshots set from research.'; }
+      });
+    } else {
+      // long-played saves often hold less than their research gives (seen in many real saves, never more)
+      const low = RESEARCH_STAMP_TYPES.filter(t => (cur[t] || 0) < (comp[t] || 0) - 0.05);
+      if (low.length) add('note', `Funshots are lower than your research gives: ${low.map(t => `${STAMP_LABELS[t]} ${cur[t] || 0} (research gives ${comp[t]})`).join(', ')}. Long-played saves often have this; the game shows what's saved. Any research change on the Research tab sets all six to what research gives.`, 'research', {
         label: 'Set Funshots from research', run: () => { syncStampFromResearch(); return 'Funshots set from research.'; }
       });
     }
