@@ -4794,6 +4794,26 @@ function applyRewind(root) {
   fl.dust = [ 'BOSS_START', 'BOSS_GOAL' ].map(unit => ({ flrid: ri.flrid, areaid: ri.areaid, unit, pntid: 'HVN_DST_TGT_00', type: 'CHARGE' }));
   const z = root.zombie && root.zombie.flrzmbs;
   if (z && typeof z === 'object') for (const k of Object.keys(z)) z[k] = {};
+  // boss floors between the one we go back to and the map's first upcoming entry (a skipped NEO map B floor)
+  // get their reward entry, drawn from that floor's own tables the way the game rolls them
+  if (ri.skipped && Array.isArray(s.hvntrinfo)) {
+    const L = flmRouteBoss(ri.flrid), from = L.findIndex(f => f.id === ri.flrid);
+    const have = new Set(s.hvntrinfo.map(e => e && e.flrid));
+    const firstUp = s.hvntrinfo.map(e => L.findIndex(f => f.id === (e && e.flrid))).filter(i => i >= 0).sort((a, b) => a - b)[0];
+    const stop = firstUp != null ? firstUp : from + 1;
+    for (let i = from + 1; i < stop; i++) {
+      const f = L[i];
+      if (!f || have.has(f.id) || !/^HVN_AREA_002_/.test(f.areaid)) continue;
+      const ref = 'ARC_AREA_HVN', rare = Math.random() < 0.55 ? 1 : 0;
+      const feat = flmDraw(f.id, f.areaid, ref, rare ? 'PTGENTP_TRBOX_SPXL_RARE' : 'PTGENTP_SPXL');
+      const boxes = [ 0, 1, 2 ].map(() => flmDraw(f.id, f.areaid, ref, 'PTGENTP_TRBOX_L'));
+      if (!feat || boxes.some(b => !b)) continue;
+      s.hvntrinfo.push({ flrid: f.id, areaid: f.areaid, refareaid: ref, rwdtype: 'TBRWD_ITEM', rwdid: feat, is_rare: rare, created: 0, rwds: boxes.map(b => ({ gentype: 'PTGENTP_TRBOX_L', rwdtype: 'TBRWD_ITEM', rwdid: b })) });
+    }
+    // the game keeps the next four boss floors; later ones are added again as you climb
+    s.hvntrinfo.sort((a, b) => L.findIndex(f => f.id === a.flrid) - L.findIndex(f => f.id === b.flrid));
+    if (s.hvntrinfo.length > 4) s.hvntrinfo.length = 4;
+  }
   // where the fighter is: paused on the boss floor's arrival point
   s.flrid = ri.flrid; s.areaid = ri.areaid; s.unitid = 'D0'; s.relief_point = 'D0';
   s.pause = 'HEAVEN_PAUSE';
@@ -4810,7 +4830,7 @@ function rewindHtml() {
   const name = hvnFloorLabel(ri.floor), curNo = ri.cur.no + 'F';
   if (!ri.pos) return `<div class="subDetails" style="padding:10px; margin-bottom:12px;"><div class="eyebrow" style="margin-bottom:6px;">Go back to the last boss floor (experimental)</div><div class="capNote" style="margin-top:0;">The last boss floor of this run is ${escapeHtml(name)}, but the editor doesn't know where the game places a fighter on that map yet, so this isn't offered. End the run instead.</div></div>`;
   return `<div class="subDetails" style="padding:10px; margin-bottom:12px;"><div class="eyebrow" style="margin-bottom:6px;">Go back to the last boss floor (experimental, not tested in game)</div>
-    <div class="capNote" style="margin-top:0;">Keeps the run: the fighter is put back on <b>${escapeHtml(name)}</b>, paused the way the game pauses there, with its boss already beaten. The ${ri.dropped} floor${ri.dropped === 1 ? '' : 's'} after it (up to ${curNo}) are dropped, so you play them again.${ri.skipped ? ` (A later boss floor uses NEO map B, where the editor doesn't know the arrival point yet, so it goes back to this map A floor.)` : ''} The Death Bag, carried Kill Coins and Bloodnium stay. If the game still crashes, use End the run instead.</div>
+    <div class="capNote" style="margin-top:0;">Keeps the run: the fighter is put back on <b>${escapeHtml(name)}</b>, paused the way the game pauses there, with its boss already beaten. The ${ri.dropped} floor${ri.dropped === 1 ? '' : 's'} after it (up to ${curNo}) are dropped, so you play them again.${ri.skipped ? ` (A later boss floor uses NEO map B, where the editor doesn't know the arrival point yet, so it goes back to this map A floor. That map B floor gets its rewards on the map, drawn from its own tables.)` : ''} The Death Bag, carried Kill Coins and Bloodnium stay. If the game still crashes, use End the run instead.</div>
     <label style="cursor:pointer;"><input type="checkbox" id="run-rewind" ${on ? 'checked' : ''} ${ended ? 'disabled' : ''} style="width:auto; margin-right:6px;">Go back to ${escapeHtml(ri.floor.no + 'F')} when I download</label>${ended ? ' <span class="id">(off while End the run is ticked)</span>' : ''}</div>`;
 }
 function wireRewind() {
