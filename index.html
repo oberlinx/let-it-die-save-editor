@@ -1865,9 +1865,10 @@ function startSave(soul) {
     soul.freezer_level = inferred;
   }
   if (SAVE.user && SAVE.user.soul !== undefined) delete SAVE.user.soul;
-  if (!soul.crntcid) soul.crntcid = soul.chrs[0].cid;
+  // The game stores no "current fighter" id: the fighter you play is the one with state USE (the starred tab).
+  if (!soul.crntcid) soul.crntcid = (soul.chrs.find(c => c && c.state === 'USE') || soul.chrs[0]).cid;
   if (!SAVE.playlog.length) SAVE.playlog.push(freshPlaylog());
-  activeCharIdx = 0;
+  activeCharIdx = Math.max(0, soul.chrs.findIndex(c => c && c.cid === soul.crntcid));
   RAW_SAV_ROOT = null;
   RAW_SAV_MAIN_UID = null;
   document.getElementById('app-locked').style.display = 'none';
