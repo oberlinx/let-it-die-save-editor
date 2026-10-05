@@ -4261,7 +4261,8 @@ function flmDraw(flrid, areaid, refareaid, type) {
 // 1 Blue, 2 Green, 3 Black, 4 Red, 5 Purple, 6 Orange, 7 Platinum, 8 44CE). The game's map calls every featured
 // reward (hvntrinfo rwdid, the extra-large box) a "Legendary Chest" (MAP.TXT_LEGEND_TREASURE_INFO); is_rare ones
 // come from the rare table and get a small neutral "rare" tag.
-const RWD_TIER_COLOR = { 1: '#4ea3ef', 2: '#5cc46a', 3: '#a9b0b7', 4: '#e5534b', 5: '#b07cf0', 6: '#f28c28', 7: '#dfe6ee', 8: '#e6b422' };
+// Platinum (7) is shown orange like the Orange tier: the top Legendary Chest rewards in NEO are orange 'Roids and Platinum (user, 2026-10-05)
+const RWD_TIER_COLOR = { 1: '#4ea3ef', 2: '#5cc46a', 3: '#a9b0b7', 4: '#e5534b', 5: '#b07cf0', 6: '#f28c28', 7: '#f28c28', 8: '#e6b422' };
 // by the colour the material is named after (44CE Metal shares rarity 5 with Purple, so the name decides), else rarity
 const RWD_NAME_COLOR = [ [ /\b44CE\b/, 8 ], [ /\bPlatinum\b/i, 7 ], [ /\bOrange\b/i, 6 ], [ /\bPurple\b/i, 5 ], [ /\bRed\b/i, 4 ], [ /\bBlack\b/i, 3 ], [ /\bGreen\b/i, 2 ], [ /\bBlue\b/i, 1 ] ];
 function rwdTierColor(id) {
