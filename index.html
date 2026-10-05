@@ -4272,7 +4272,12 @@ function rwdTierColor(id) {
   return RWD_TIER_COLOR[hit ? hit[1] : Number(r.rarity)] || '';
 }
 function rwdNameHtml(id) { const c = rwdTierColor(id), t = escapeHtml(itemDisplayName(id)); return c ? `<span style="color:${c};">${t}</span>` : t; }
-function legendTag() { return ' <span class="badge" style="font-size:10.5px; padding:1px 7px;" title="Drawn from the rare Legendary Chest table">rare</span>'; }
+// is_rare: the game shows that Legendary Chest's text in yellow on the map (user, 2026-10-05) and fills it from
+// the rare table. The editor never changes an existing entry's is_rare; entries it creates (boss lock on floors the
+// game hasn't planned yet, the go-back rewind's skipped map B floor) get is_rare at HVN_RARE_CHANCE, the share of
+// rare entries in game saves (21 of 38), and their reward from the matching table.
+const HVN_RARE_CHANCE = 0.55;
+function legendTag() { return ' <span class="badge" style="border-color:#f2d33a; color:#f2d33a; font-size:10.5px; padding:1px 7px;" title="Rare Legendary Chest: yellow on the game\'s map, filled from the rare table">rare</span>'; }
 function flmUnplaced(e) {
   const rw = arr(e && e.rwds), out = new Set();
   const kind = blkKind(e && e.refareaid).kind;
@@ -4622,7 +4627,8 @@ function blkPlan() {
     if (old && (!want.length || kinds.includes(blkKind(old.refareaid).kind))) { items.push({ floor: f, old, entry: null, fallback }); continue; }
     if (!old && !BOSS_LOCK.extend) continue;
     const r = blkPick(want.length ? want : rows);
-    items.push({ floor: f, old, entry: r && blkEntry(f, r.refareaid, old ? Number(old.is_rare) === 1 : false), fallback });
+    // a floor the game hasn't planned yet gets a rare (yellow on the map) Legendary Chest as often as the game gives one
+    items.push({ floor: f, old, entry: r && blkEntry(f, r.refareaid, old ? Number(old.is_rare) === 1 : Math.random() < HVN_RARE_CHANCE), fallback });
   }
   return { from, mode: BOSS_LOCK.mode, extend: BOSS_LOCK.extend, items };
 }
@@ -4835,7 +4841,7 @@ function applyRewind(root) {
     for (let i = from + 1; i < stop; i++) {
       const f = L[i];
       if (!f || have.has(f.id) || !/^HVN_AREA_002_/.test(f.areaid)) continue;
-      const ref = 'ARC_AREA_HVN', rare = Math.random() < 0.55 ? 1 : 0;
+      const ref = 'ARC_AREA_HVN', rare = Math.random() < HVN_RARE_CHANCE ? 1 : 0;
       const feat = flmDraw(f.id, f.areaid, ref, rare ? 'PTGENTP_TRBOX_SPXL_RARE' : 'PTGENTP_SPXL');
       const boxes = [ 0, 1, 2 ].map(() => flmDraw(f.id, f.areaid, ref, 'PTGENTP_TRBOX_L'));
       if (!feat || boxes.some(b => !b)) continue;
