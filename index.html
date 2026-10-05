@@ -4252,16 +4252,32 @@ function flmDraw(flrid, areaid, refareaid, type) {
 // whole block is shifted to the new floor and its next three boss floors (same route, same spacing, so
 // maps A/B stay in step). Without this the map shows no upcoming rewards for a while, and boss floors
 // with no entry fall back to Kill Coins in their chests.
-// Which of a boss floor's planned rewards (soul.hvntrinfo rwds) never become chests, as seen in game saves:
-// a Screamer Pit places no large boxes (its TRBOX_L entries are placeholders); a mid-boss or main-boss floor
-// places two large boxes holding the first two TRBOX_L rewards (master_stage_trbox gives the third mid-boss
-// spot a 0 chance), so the third TRBOX_L reward is never placed. Returns the unplaced rwds indexes.
+// Which of a boss floor's planned rewards (soul.hvntrinfo rwds) never become chests (master_stage_trbox, BOSS_GOAL
+// points, and game saves): a Screamer Pit places no large boxes (HVN_TB_TGT_0n_RUSH all 0; its TRBOX_L entries
+// are placeholders); a mid-boss floor places two (_MBOSS 01 and 03 at 100, 02 at 0), holding the first two TRBOX_L
+// rewards, so its third is never placed; a Don floor places all three (_BOSS 01-03 at 100: saves show the first
+// two in 02/03 and the third in 01). Returns the unplaced rwds indexes.
+// Material reward names (metals and Death 'Roids) in the colour they're named after (master_item rarity:
+// 1 Blue, 2 Green, 3 Black, 4 Red, 5 Purple, 6 Orange, 7 Platinum, 8 44CE). The map's legendary (is_rare)
+// featured rewards get a gold Legendary tag.
+const RWD_TIER_COLOR = { 1: '#4ea3ef', 2: '#5cc46a', 3: '#a9b0b7', 4: '#e5534b', 5: '#b07cf0', 6: '#f28c28', 7: '#dfe6ee', 8: '#e6b422' };
+// by the colour the material is named after (44CE Metal shares rarity 5 with Purple, so the name decides), else rarity
+const RWD_NAME_COLOR = [ [ /\b44CE\b/, 8 ], [ /\bPlatinum\b/i, 7 ], [ /\bOrange\b/i, 6 ], [ /\bPurple\b/i, 5 ], [ /\bRed\b/i, 4 ], [ /\bBlack\b/i, 3 ], [ /\bGreen\b/i, 2 ], [ /\bBlue\b/i, 1 ] ];
+function rwdTierColor(id) {
+  const r = ITEM_INDEX[id];
+  if (!r || !/^ITMT_(STONE|STEROID)_/.test(id)) return '';
+  const hit = RWD_NAME_COLOR.find(([ re ]) => re.test(r.name || ''));
+  return RWD_TIER_COLOR[hit ? hit[1] : Number(r.rarity)] || '';
+}
+function rwdNameHtml(id) { const c = rwdTierColor(id), t = escapeHtml(itemDisplayName(id)); return c ? `<span style="color:${c};">${t}</span>` : t; }
+function legendTag() { return ' <span class="badge" style="border-color:#e6b422; color:#e6b422; font-size:10.5px; padding:1px 7px;">Legendary</span>'; }
 function flmUnplaced(e) {
   const rw = arr(e && e.rwds), out = new Set();
-  const pit = rw.some(w => w && w.gentype === 'PTGENTP_TRZAKO');
-  const boss = !pit && (rw.some(w => w && /^PTGENTP_MBOSS/.test(w.gentype)) || blkKind(e && e.refareaid).kind === 'boss');
+  const kind = blkKind(e && e.refareaid).kind;
+  const pit = kind === 'pit' || rw.some(w => w && w.gentype === 'PTGENTP_TRZAKO');
+  const mboss = !pit && kind !== 'boss' && (kind === 'mboss' || rw.some(w => w && /^PTGENTP_MBOSS/.test(w.gentype)));
   let n = 0;
-  rw.forEach((w, i) => { if (w && w.gentype === 'PTGENTP_TRBOX_L' && (pit || (boss && ++n > 2))) out.add(i); });
+  rw.forEach((w, i) => { if (w && w.gentype === 'PTGENTP_TRBOX_L' && (pit || (mboss && ++n > 2))) out.add(i); });
   return out;
 }
 function flmRouteBoss(id) {
@@ -4632,7 +4648,7 @@ function blkRewardText(e, nm) {
   if (!e) return '';
   const unplaced = flmUnplaced(e);
   const rw = arr(e.rwds).map((w, i) => ({ gentype: w.gentype, placeholder: unplaced.has(i), to: w.rwdid }));
-  return `${e.rwdid ? (LOC_SPOIL ? nm(e.rwdid) : 'Featured reward') + (Number(e.is_rare) ? ' (rare)' : '') : '—'} ${flmUpText(rw, nm)}`;
+  return `${e.rwdid ? (LOC_SPOIL ? nm(e.rwdid) : 'Featured reward') + (Number(e.is_rare) ? legendTag() : '') : '—'} ${flmUpText(rw, nm)}`;
 }
 function renderBossLock() {
   const host = document.getElementById('loc-lock');
@@ -4651,7 +4667,7 @@ function renderBossLock() {
     <label style="cursor:pointer; display:block; margin:6px 0;"><input type="checkbox" id="blk-extend" ${BOSS_LOCK.extend ? 'checked' : ''} style="width:auto; margin-right:6px;">Also write every remaining boss floor of the route (${remaining} after ${escapeHtml(cur.no + 'F')}), not only the ones the game has planned so far, so the lock lasts the whole run.</label>`;
   const p = blkPlanFresh();
   if (p) {
-    const nm = id => escapeHtml(itemDisplayName(id));
+    const nm = rwdNameHtml;
     const changed = p.items.filter(it => it.entry);
     h += `<table class="stewTable" style="margin-top:6px;"><thead><tr><th>Floor</th><th>Now</th><th>On download</th><th>${LOC_SPOIL ? 'Featured reward and rewards' : 'Rewards (names hidden)'}</th></tr></thead><tbody>`;
     h += p.items.map(it => {
@@ -4901,7 +4917,7 @@ function renderLocation() {
       <button class="action" id="loc-apply">${FLOOR_MOVE.armed ? 'Click again to confirm' : 'Move to this floor'}</button>${FLOOR_MOVE.target ? '<button class="subtle" id="loc-undo">Undo</button>' : ''}</div>`;
     if (t) {
       h += `<div class="capNote">On download the fighter will be on <b>${escapeHtml(hvnFloorLabel(t))}</b> (from ${escapeHtml(f.no + 'F')}), boss Lv ${t.mbslvlmin}.</div>`;
-      const r = FLOOR_MOVE.rolls, nm = id => escapeHtml(itemDisplayName(id));
+      const r = FLOOR_MOVE.rolls, nm = rwdNameHtml;
       const n = r ? r.boxes.length + (r.boss ? 1 : 0) + (r.featured ? 1 : 0) + arr(r.upcoming).length : 0;
       const up = flmUpcoming(t.id);
       h += `<div class="capNote">The map's upcoming rewards move with you: ${up.length ? up.map(u => u.floor.no + 'F').join(', ') : 'no further boss floors on this route'}.</div>`;
@@ -4916,7 +4932,7 @@ function renderLocation() {
         h += r.boxes.map((b, i) => `<tr><td>${b.gentype === 'PTGENTP_TRZAKO' ? 'Treasure enemy' : b.gentype === 'featured' ? 'Featured box (extra large)' : 'Treasure box ' + (i + 1)}</td><td>${nm(b.from)}</td><td>${nm(b.to)}</td></tr>`).join('');
         if (r.boss) h += `<tr><td>Boss drop</td><td>${nm(r.boss.from)}</td><td>${nm(r.boss.to)}</td></tr>`;
         if (r.featured) h += `<tr><td>Featured reward (map)</td><td>${nm(r.featured.from)}</td><td>${nm(r.featured.to)}</td></tr>`;
-        for (const u of arr(r.upcoming)) h += `<tr><td>Upcoming ${u.no}F${u.rare ? ' (rare)' : ''}${u.refix ? `<br><span class="id">${escapeHtml(blkKind(u.refix.from).label)} → ${escapeHtml(blkKind(u.refix.to).label)}</span>` : ''}</td><td class="id">shown on the map</td><td>${u.featured ? nm(u.featured.to) : '—'} ${flmUpText(u.rwds, nm)}</td></tr>`;
+        for (const u of arr(r.upcoming)) h += `<tr><td>Upcoming ${u.no}F${u.rare ? legendTag() : ''}${u.refix ? `<br><span class="id">${escapeHtml(blkKind(u.refix.from).label)} → ${escapeHtml(blkKind(u.refix.to).label)}</span>` : ''}</td><td class="id">shown on the map</td><td>${u.featured ? nm(u.featured.to) : '—'} ${flmUpText(u.rwds, nm)}</td></tr>`;
         h += `</tbody></table><div class="toolbar" style="margin-top:6px;"><button class="subtle" id="loc-reroll-again">Reroll again</button><span class="capNote" style="margin:0;">Drawn from ${escapeHtml(t.no + 'F')}'s own drop table, the way the game rolls them.</span></div>`;
       } else h += `<div class="capNote">The rewards rolled for ${escapeHtml(f.no + 'F')} are kept.</div>`;
       h += '</div>';
@@ -5944,9 +5960,9 @@ function runData() {
   };
 }
 // a map entry's other rewards as the floor has them (unplaced placeholder boxes left out)
-function runRewardText(e) {
+function runRewardText(e, html) {
   const unp = flmUnplaced(e), rw = arr(e && e.rwds).filter((w, i) => w && !unp.has(i));
-  const nm = w => w.rwdtype === 'TBRWD_MONEY' || !w.rwdid ? 'Kill Coins' : itemDisplayName(w.rwdid);
+  const nm = w => w.rwdtype === 'TBRWD_MONEY' || !w.rwdid ? 'Kill Coins' : html ? rwdNameHtml(w.rwdid) : itemDisplayName(w.rwdid);
   const grp = (re, label) => { const L = rw.filter(w => re.test(w.gentype || '')).map(nm); return L.length ? `${label}: ${L.join(', ')}` : ''; };
   return [ grp(/TRZAKO$/, 'Treasure enemies'), grp(/TRBOX_L$/, 'Large boxes'), grp(/MBOSS/, 'Boss drop') ].filter(Boolean).join(' · ');
 }
@@ -6194,7 +6210,7 @@ function runCsv(d) {
   const lines = [ [ 'Section', 'Field', 'Value' ].join(',') ];
   for (const r of runRows(d)) lines.push(r.map(q).join(','));
   if (d.upcoming.length) {
-    lines.push('', [ 'Map rewards', 'Floor', 'Featured reward', 'Rare', 'Other rewards' ].join(','));
+    lines.push('', [ 'Map rewards', 'Floor', 'Featured reward', 'Legendary', 'Other rewards' ].join(','));
     for (const e of d.upcoming) { const hf = hvnFloor(e.flrid); lines.push([ 'Map rewards', hf ? hf.no + 'F' : e.flrid, e.rwdid ? itemDisplayName(e.rwdid) : '', Number(e.is_rare) ? 'yes' : '', runRewardText(e) ].map(q).join(',')); }
   }
   lines.push('', [ 'Floors visited', '#', 'Floor', 'Boss floor', 'Map used', 'Entered this run', 'Haters', 'First ever cleared' ].join(','));
@@ -6237,7 +6253,7 @@ function renderRun() {
   if (d.upcoming.length) {
     h += `<h3>Map rewards</h3>`;
     if (!LOC_SPOIL) h += `<div class="capNote" style="margin-top:0;">${d.upcoming.length} boss floor${d.upcoming.length === 1 ? '' : 's'} with rewards on the map. Tick "Show rewards (spoilers)" on the Location tab to list them here.</div>`;
-    else h += `<table class="runTable"><thead><tr><th>Floor</th><th>Featured reward</th><th>Other rewards</th></tr></thead><tbody>${d.upcoming.map(e => { const hf = hvnFloor(e.flrid); return `<tr><td>${escapeHtml(hf ? hf.no + 'F' : e.flrid)}${Number(e.is_rare) ? ' <span class="runBadge bad" style="font-size:10.5px; padding:1px 7px;">rare</span>' : ''}</td><td>${escapeHtml(e.rwdid ? itemDisplayName(e.rwdid) : '—')}</td><td class="muted">${escapeHtml(runRewardText(e))}</td></tr>`; }).join('')}</tbody></table>`;
+    else h += `<table class="runTable"><thead><tr><th>Floor</th><th>Featured reward</th><th>Other rewards</th></tr></thead><tbody>${d.upcoming.map(e => { const hf = hvnFloor(e.flrid); return `<tr><td>${escapeHtml(hf ? hf.no + 'F' : e.flrid)}${Number(e.is_rare) ? legendTag() : ''}</td><td>${e.rwdid ? rwdNameHtml(e.rwdid) : '—'}</td><td class="muted">${runRewardText(e, true)}</td></tr>`; }).join('')}</tbody></table>`;
   }
   h += `<details class="subDetails" style="margin-top:16px;"><summary>▸ Floors visited (${d.floors.length})</summary><div class="subDetailsBody"><table class="runTable"><thead><tr><th>#</th><th>Floor</th><th>Map used</th><th>Entered this run</th><th style="text-align:right;">Haters</th><th>First ever cleared</th></tr></thead><tbody>${d.floors.slice().reverse().map(x => `<tr><td class="muted">${x.n}</td><td>${escapeHtml(x.label)}${x.boss ? ' <span class="runBadge ok" style="font-size:10.5px; padding:1px 7px;">boss</span>' : ''}</td><td class="muted">${escapeHtml(x.ref)}</td><td>${x.entered ? escapeHtml(dtFmt(x.entered)) : '<span class="muted">—</span>'}</td><td class="n">${x.haters || '<span class="muted">0</span>'}</td><td class="muted">${x.cleared ? escapeHtml(dtFmt(x.cleared)) : '—'}</td></tr>`).join('')}</tbody></table></div></details>`;
   h += `<div class="capNote" style="margin-top:12px;">Read from the save as loaded. "Run began" is when the game built the run's first floor; "last started or resumed" is when it last picked the run up. "First ever cleared" is the game's record of the first time each floor was cleared, in any run. Changes made on the Location tab (moving or ending the run) apply on download and aren't shown here.</div>`;
