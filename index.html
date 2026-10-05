@@ -4568,8 +4568,17 @@ function applyFloorMove(root) {
 //   'none'  = arena only (rwdid '' and rwds []). Tested in game 2026-10-05 (55F mid-boss): the two large boxes spawned
 //             with rewards and the mid-boss dropped one (the game rolled them), but there was NO Legendary Chest:
 //             the game doesn't roll that one itself.
-let BOSS_LOCK = { root: null, mode: '', extend: true, rewards: 'roll', plan: null };
-function blkSync() { if (BOSS_LOCK.root !== RAW_SAV_ROOT) BOSS_LOCK = { root: RAW_SAV_ROOT, mode: '', extend: true, rewards: 'roll', plan: null }; }
+// which: '' = any boss of the mode's kinds, or one boss: 'boss:1'..'boss:4' (Dons) / 'mboss:1'..'mboss:4' (mid-bosses)
+let BOSS_LOCK = { root: null, mode: '', which: '', extend: true, rewards: 'roll', plan: null };
+function blkSync() { if (BOSS_LOCK.root !== RAW_SAV_ROOT) BOSS_LOCK = { root: RAW_SAV_ROOT, mode: '', which: '', extend: true, rewards: 'roll', plan: null }; }
+// the boss choices a lock mode offers
+function blkWhichOptions(mode) {
+  const m = BLK_MODES[mode];
+  if (!m) return [];
+  const out = [];
+  for (const kind of [ 'boss', 'mboss' ]) if (m.kinds.includes(kind)) for (const n of [ 1, 2, 3, 4 ]) out.push({ v: kind + ':' + n, label: (kind === 'boss' ? 'Don ' : 'Mid-boss ') + BLK_BOSS_NAMES[kind][n] });
+  return out;
+}
 // don: the four main bosses (KIS_BOSS1-4). Regular Heaven offers no Don below 100F, so those floors fall back
 // to a mid-boss (the nearest kind) rather than whatever the game would roll.
 const BLK_MODES = {
@@ -4578,11 +4587,16 @@ const BLK_MODES = {
   pit: { kinds: [ 'pit' ], label: 'Screamer Pit only', noun: 'Screamer Pit' },
   boss: { kinds: [ 'boss', 'mboss' ], label: 'Don or mid-boss (no Screamer Pits)', noun: 'Don or mid-boss' }
 };
+// Who each Heaven boss arena holds: master_stage_mboss puts MBOSS1-4 at the mid-boss points and STAGE_BOSS1-4 (their
+// boss-enhanced versions) at the Don points; master_mboss names them by type (hearing / sight / predation / U10), and
+// the game's quest text names them in that order: "the 3 Shock Terrors COEN, JIN-DIE, and GOTO-9, along with U-10" and
+// "COEN Mk-2, JIN-DIE Mk-2, GOTO-9 Mk-2, and U10 Mk-2".
+const BLK_BOSS_NAMES = { mboss: { 1: 'COEN', 2: 'JIN-DIE', 3: 'GOTO-9', 4: 'U-10' }, boss: { 1: 'COEN Mk-2', 2: 'JIN-DIE Mk-2', 3: 'GOTO-9 Mk-2', 4: 'U10 Mk-2' } };
 function blkKind(refareaid) {
   const k = (arr(AP && AP.hvnBossKis).find(r => r.areaid === refareaid) || {}).kis || '';
   let m;
-  if ((m = /_KIS_MBOSS(\d+)$/.exec(k))) return { kind: 'mboss', n: m[1], label: `Mid-boss (MBOSS${m[1]})` };
-  if ((m = /_KIS_BOSS(\d+)$/.exec(k))) return { kind: 'boss', n: m[1], label: `Don (BOSS${m[1]})` };
+  if ((m = /_KIS_MBOSS(\d+)$/.exec(k))) return { kind: 'mboss', n: m[1], label: `Mid-boss ${BLK_BOSS_NAMES.mboss[m[1]] || ''} (MBOSS${m[1]})`.replace('  ', ' ') };
+  if ((m = /_KIS_BOSS(\d+)$/.exec(k))) return { kind: 'boss', n: m[1], label: `Don ${BLK_BOSS_NAMES.boss[m[1]] || ''} (BOSS${m[1]})`.replace('  ', ' ') };
   if ((m = /_KIS_RUSH(\d+)$/.exec(k))) return { kind: 'pit', n: m[1], label: 'Screamer Pit' };
   return { kind: 'fixed', n: '', label: 'Fixed arena' };
 }
@@ -4638,18 +4652,31 @@ function blkPlan() {
       const fb = rows.filter(r => mode.fallback.includes(blkKind(r.refareaid).kind));
       if (fb.length) { want = fb; kinds = mode.fallback; fallback = true; }
     }
-    if (old && (!want.length || kinds.includes(blkKind(old.refareaid).kind))) { items.push({ floor: f, old, entry: null, fallback }); continue; }
+    // one boss picked: that boss's arena where the floor offers it; otherwise the same boss's other version (a Don
+    // below 100F becomes its mid-boss), otherwise any arena of the mode
+    let one = false;
+    const W = BOSS_LOCK.which && BOSS_LOCK.which.split(':');
+    if (W && BLK_MODES[BOSS_LOCK.mode] && blkWhichOptions(BOSS_LOCK.mode).some(o => o.v === BOSS_LOCK.which)) {
+      const exact = rows.filter(r => { const k = blkKind(r.refareaid); return k.kind === W[0] && k.n === W[1]; });
+      const twin = rows.filter(r => { const k = blkKind(r.refareaid); return k.kind !== W[0] && (k.kind === 'boss' || k.kind === 'mboss') && k.n === W[1]; });
+      if (exact.length) { want = exact; fallback = false; one = true; }
+      else if (twin.length) { want = twin; fallback = true; one = true; }
+      else fallback = true; // this floor never has that boss (NEO routes only have their own): any of the mode
+    }
+    const oldK = old && blkKind(old.refareaid);
+    const keep = old && (!want.length || (one ? want.some(r => r.refareaid === old.refareaid) : kinds.includes(oldK.kind)));
+    if (keep) { items.push({ floor: f, old, entry: null, fallback }); continue; }
     if (!old && !BOSS_LOCK.extend) continue;
     const r = blkPick(want.length ? want : rows);
     // a floor the game hasn't planned yet gets a rare (yellow on the map) Legendary Chest as often as the game gives one
     items.push({ floor: f, old, entry: r && blkEntry(f, r.refareaid, old ? Number(old.is_rare) === 1 : Math.random() < HVN_RARE_CHANCE, BOSS_LOCK.rewards), fallback });
   }
-  return { from, mode: BOSS_LOCK.mode, extend: BOSS_LOCK.extend, rewards: BOSS_LOCK.rewards, items };
+  return { from, mode: BOSS_LOCK.mode, which: BOSS_LOCK.which, extend: BOSS_LOCK.extend, rewards: BOSS_LOCK.rewards, items };
 }
 function blkPlanFresh() {
   const p = BOSS_LOCK.plan;
   if (!BOSS_LOCK.mode) return null;
-  if (!p || p.from !== blkFrom() || p.mode !== BOSS_LOCK.mode || p.extend !== BOSS_LOCK.extend || p.rewards !== BOSS_LOCK.rewards) BOSS_LOCK.plan = blkPlan();
+  if (!p || p.from !== blkFrom() || p.mode !== BOSS_LOCK.mode || p.which !== BOSS_LOCK.which || p.extend !== BOSS_LOCK.extend || p.rewards !== BOSS_LOCK.rewards) BOSS_LOCK.plan = blkPlan();
   return BOSS_LOCK.plan;
 }
 function applyBossLock(root) {
@@ -4687,7 +4714,7 @@ function renderBossLock() {
   if (!cur) { host.innerHTML = h + `<div class="capNote" style="margin-top:0;">The paused floor isn't a known Heaven floor.</div>`; return; }
   const sel = 'background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);';
   const remaining = flmRouteBoss(from).filter(x => x.no > cur.no).length;
-  h += `<div class="toolbar"><select id="blk-mode" style="${sel} min-width:340px;"><option value="">Leave as rolled</option>${Object.entries(BLK_MODES).map(([ k, m ]) => `<option value="${k}" ${BOSS_LOCK.mode === k ? 'selected' : ''}>${escapeHtml(m.label)}</option>`).join('')}</select></div>
+  h += `<div class="toolbar"><select id="blk-mode" style="${sel} min-width:340px;"><option value="">Leave as rolled</option>${Object.entries(BLK_MODES).map(([ k, m ]) => `<option value="${k}" ${BOSS_LOCK.mode === k ? 'selected' : ''}>${escapeHtml(m.label)}</option>`).join('')}</select>${blkWhichOptions(BOSS_LOCK.mode).length ? `<select id="blk-which" style="${sel} min-width:220px;"><option value="">Any ${escapeHtml(BLK_MODES[BOSS_LOCK.mode].noun)}</option>${blkWhichOptions(BOSS_LOCK.mode).map(o => `<option value="${o.v}" ${BOSS_LOCK.which === o.v ? 'selected' : ''}>Only ${escapeHtml(o.label)}</option>`).join('')}</select>` : ''}</div>
     <label style="cursor:pointer; display:block; margin:6px 0;"><input type="checkbox" id="blk-extend" ${BOSS_LOCK.extend ? 'checked' : ''} style="width:auto; margin-right:6px;">Also write every remaining boss floor of the route (${remaining} after ${escapeHtml(cur.no + 'F')}), not only the ones the game has planned so far, so the lock lasts the whole run.</label>
     <div class="toolbar" style="margin:4px 0 6px;"><label style="font-size:12px;">Rewards on the floors it writes <select id="blk-rewards" style="${sel}"><option value="roll" ${BOSS_LOCK.rewards === 'roll' ? 'selected' : ''}>Roll all now: Legendary Chest, large boxes, boss drop (confirmed in game)</option><option value="chest" ${BOSS_LOCK.rewards === 'chest' ? 'selected' : ''}>Legendary Chest now, the rest rolled by the game (confirmed in game)</option><option value="hidden" ${BOSS_LOCK.rewards === 'hidden' ? 'selected' : ''}>Spoiler free: like the above, and the editor never shows the rewards</option><option value="none" ${BOSS_LOCK.rewards === 'none' ? 'selected' : ''}>None: the game rolls the boxes and boss drop, no Legendary Chest (confirmed in game)</option></select></label></div>${BOSS_LOCK.rewards === 'none' ? '<div class="warnNote" style="margin:0 0 8px;"><b>These floors have no Legendary Chest.</b> Tested in game: the large boxes and the boss drop are rolled by the game as usual, but the game doesn\'t make a Legendary Chest for a floor without one, so the map shows it blank and the floor has none.</div>' : BOSS_LOCK.rewards === 'hidden' ? '<div class="capNote" style="margin:0 0 8px;">Spoiler free: each floor it writes gets a Legendary Chest (rare at the game\'s rate) and the game rolls the large boxes and boss drop, the same as the option above, but the editor won\'t show any of it here, whatever "Show rewards" is set to. You find out in game. If you load the downloaded save in the editor again, keep "Show rewards (spoilers)" unticked.</div>' : BOSS_LOCK.rewards === 'chest' ? '<div class="capNote" style="margin:0 0 8px;">Only the Legendary Chest is written; the game rolls the large boxes and boss drop itself when it builds the floor (confirmed in game).</div>' : ''}`;
   const p = blkPlanFresh();
@@ -4697,7 +4724,7 @@ function renderBossLock() {
     h += `<table class="stewTable" style="margin-top:6px;"><thead><tr><th>Floor</th><th>Now</th><th>On download</th><th>${LOC_SPOIL && p.rewards !== 'hidden' ? 'Legendary Chest and other rewards' : 'Rewards (names hidden)'}</th></tr></thead><tbody>`;
     h += p.items.map(it => {
       const was = it.old ? blkKind(it.old.refareaid).label : '<span class="id">not planned yet</span>';
-      const now = (it.entry ? `<b>${escapeHtml(blkKind(it.entry.refareaid).label)}</b>${it.old ? '' : ' <span class="id">(added)</span>'}` : '<span class="id">unchanged</span>') + (it.fallback ? ` <span class="id">(no ${escapeHtml(BLK_MODES[p.mode].noun)} on this floor)</span>` : '');
+      const now = (it.entry ? `<b>${escapeHtml(blkKind(it.entry.refareaid).label)}</b>${it.old ? '' : ' <span class="id">(added)</span>'}` : '<span class="id">unchanged</span>') + (it.fallback ? ` <span class="id">(no ${escapeHtml(p.which ? (blkWhichOptions(p.mode).find(o => o.v === p.which) || {}).label || BLK_MODES[p.mode].noun : BLK_MODES[p.mode].noun)} on this floor)</span>` : '');
       return `<tr><td>${escapeHtml(hvnFloorLabel(it.floor))}</td><td>${it.old ? escapeHtml(was) : was}</td><td>${now}</td><td>${p.rewards === 'hidden' ? '<span class="id">hidden (spoiler free)</span>' : blkRewardText(it.entry || it.old, nm)}</td></tr>`;
     }).join('');
     h += `</tbody></table><div class="toolbar" style="margin-top:6px;"><button class="subtle" id="blk-reroll">Reroll again</button><span class="capNote" style="margin:0;">${changed.length} floor${changed.length === 1 ? '' : 's'} will be written. ${p.rewards === 'none' ? 'No Legendary Chest; the game rolls their large boxes and boss drop.' : p.rewards === 'hidden' ? 'Rewards are rolled but not shown (spoiler free).' : p.rewards === 'chest' ? 'Their Legendary Chest is drawn now; the game rolls the large boxes and boss drop.' : 'Rewards are drawn from each floor\'s own tables for the new arena.'}</span></div>`;
@@ -4705,8 +4732,10 @@ function renderBossLock() {
     if (p.items.some(it => /_KIS_RUSH/.test((arr(AP.hvnBossKis).find(r => r.areaid === (it.entry || it.old || {}).refareaid) || {}).kis || ''))) h += `<div class="capNote">Screamer Pit chests (treasure enemies) can hold any faction's metal, on every route: the game's own pit table mixes all four (a W.E pit can drop D.O.D. ARMS, Candle Wolf or M.I.L.K. metal). The large boxes, featured reward and boss drop stay the route's own faction.</div>`;
   }
   host.innerHTML = h;
+  const wh = document.getElementById('blk-which');
+  if (wh) wh.addEventListener('change', () => { BOSS_LOCK.which = wh.value; BOSS_LOCK.plan = null; renderBossLock(); });
   const ms = document.getElementById('blk-mode');
-  if (ms) ms.addEventListener('change', () => { BOSS_LOCK.mode = ms.value; BOSS_LOCK.plan = null; renderBossLock(); toast(ms.value ? 'Boss floor lock set — download to apply' : 'Boss floors left as rolled'); });
+  if (ms) ms.addEventListener('change', () => { BOSS_LOCK.mode = ms.value; if (!blkWhichOptions(ms.value).some(o => o.v === BOSS_LOCK.which)) BOSS_LOCK.which = ''; BOSS_LOCK.plan = null; renderBossLock(); toast(ms.value ? 'Boss floor lock set — download to apply' : 'Boss floors left as rolled'); });
   const ex = document.getElementById('blk-extend');
   if (ex) ex.addEventListener('change', () => { BOSS_LOCK.extend = ex.checked; BOSS_LOCK.plan = null; renderBossLock(); });
   const rws = document.getElementById('blk-rewards');
@@ -10422,7 +10451,7 @@ function reviewDiff(A, B, rawA, rawB) {
   if (BOSS_LOCK.root === RAW_SAV_ROOT && BOSS_LOCK.mode) {
     // compare with the planned floors as they'd be after any floor move (the paused floor is never locked)
     const bl = sec('Boss floor lock'), hA = blkExisting(rawB.soul && rawB.soul.flrid);
-    bl.lines.push(`Locked to: ${BLK_MODES[BOSS_LOCK.mode].label}`);
+    bl.lines.push(`Locked to: ${BLK_MODES[BOSS_LOCK.mode].label}${BOSS_LOCK.which ? ' · only ' + ((blkWhichOptions(BOSS_LOCK.mode).find(o => o.v === BOSS_LOCK.which) || {}).label || BOSS_LOCK.which) : ''}`);
     for (const e of arr(rawB.soul && rawB.soul.hvntrinfo)) {
       if (e.flrid === rawB.soul.flrid) continue;
       const o = hA.get(e.flrid), f = hvnFloor(e.flrid), lbl = f ? f.no + 'F' : e.flrid;
