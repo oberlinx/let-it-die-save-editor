@@ -2004,6 +2004,9 @@ const TABS = [ {
 }, {
   id: 'compare',
   label: 'Compare'
+}, {
+  id: 'raw',
+  label: 'Raw data'
 } ];
 
 let activeTab = 'account';
@@ -2016,7 +2019,7 @@ function renderAll() {
     if (el.scrollTop > 0) scrollStates[el.id] = el.scrollTop;
   });
   if (TABS.some(t => t.id === activeTab && t.when && !t.when())) activeTab = 'account';
-  app.innerHTML = `\n    ${blockHealth()}\n    <div class="tabbar">\n      ${TABS.filter(t => !t.when || t.when()).map(t => `<button class="tabbtn ${activeTab === t.id ? 'active' : ''}" data-tab-btn="${t.id}">${t.label}</button>`).join('')}\n    </div>\n    <div class="tabpanel" data-tab-panel="account" style="display:${activeTab === 'account' ? 'block' : 'none'}">${blockCurrency()}</div>\n    <div class="tabpanel" data-tab-panel="fighters" style="display:${activeTab === 'fighters' ? 'block' : 'none'}">${blockCharacters()}${blockSkins()}</div>\n    <div class="tabpanel" data-tab-panel="research" style="display:${activeTab === 'research' ? 'block' : 'none'}">${blockBlueprints()}</div>\n    <div class="tabpanel" data-tab-panel="decals" style="display:${activeTab === 'decals' ? 'block' : 'none'}">${blockSkillDecals()}</div>\n    <div class="tabpanel" data-tab-panel="stews" style="display:${activeTab === 'stews' ? 'block' : 'none'}">${blockStews()}</div>\n    <div class="tabpanel" data-tab-panel="bags" style="display:${activeTab === 'bags' ? 'block' : 'none'}">${blockBags()}</div>\n    <div class="tabpanel" data-tab-panel="boxes" style="display:${activeTab === 'boxes' ? 'block' : 'none'}">${blockBoxes()}</div>\n    <div class="tabpanel" data-tab-panel="hub" style="display:${activeTab === 'hub' ? 'block' : 'none'}">${blockHub()}</div>\n    <div class="tabpanel" data-tab-panel="defense" style="display:${activeTab === 'defense' ? 'block' : 'none'}">${blockDefense()}</div>\n    <div class="tabpanel" data-tab-panel="photos" style="display:${activeTab === 'photos' ? 'block' : 'none'}">${blockPhotos()}</div>\n    <div class="tabpanel" data-tab-panel="graves" style="display:${activeTab === 'graves' ? 'block' : 'none'}">${blockGraves()}</div>\n    <div class="tabpanel" data-tab-panel="dates" style="display:${activeTab === 'dates' ? 'block' : 'none'}">${blockDates()}</div>\n    <div class="tabpanel" data-tab-panel="storage" style="display:${activeTab === 'storage' ? 'block' : 'none'}">${blockStorageBox()}</div>\n    <div class="tabpanel" data-tab-panel="rewards" style="display:${activeTab === 'rewards' ? 'block' : 'none'}">${blockRewardBox()}</div>\n    <div class="tabpanel" data-tab-panel="quests" style="display:${activeTab === 'quests' ? 'block' : 'none'}">${blockQuests()}</div>\n    <div class="tabpanel" data-tab-panel="rally" style="display:${activeTab === 'rally' ? 'block' : 'none'}">${blockRally()}</div>\n    <div class="tabpanel" data-tab-panel="location" style="display:${activeTab === 'location' ? 'block' : 'none'}">${blockLocation()}</div>\n    <div class="tabpanel" data-tab-panel="run" style="display:${activeTab === 'run' ? 'block' : 'none'}">${blockRun()}</div>\n    <div class="tabpanel" data-tab-panel="collection" style="display:${activeTab === 'collection' ? 'block' : 'none'}">${blockCollection()}</div>\n    <div class="tabpanel" data-tab-panel="jackals" style="display:${activeTab === 'jackals' ? 'block' : 'none'}">${blockJackals()}</div>\n    <div class="tabpanel" data-tab-panel="layouts" style="display:${activeTab === 'layouts' ? 'block' : 'none'}">${blockLayouts()}</div>\n    <div class="tabpanel" data-tab-panel="stats" style="display:${activeTab === 'stats' ? 'block' : 'none'}">${blockStats()}</div>\n    <div class="tabpanel" data-tab-panel="vip" style="display:${activeTab === 'vip' ? 'block' : 'none'}">${blockVip()}${blockFreeCont()}</div>\n    <div class="tabpanel" data-tab-panel="compare" style="display:${activeTab === 'compare' ? 'block' : 'none'}">${blockCompare()}</div>\n  `;
+  app.innerHTML = `\n    ${blockHealth()}\n    <div class="tabbar">\n      ${TABS.filter(t => !t.when || t.when()).map(t => `<button class="tabbtn ${activeTab === t.id ? 'active' : ''}" data-tab-btn="${t.id}">${t.label}</button>`).join('')}\n    </div>\n    <div class="tabpanel" data-tab-panel="account" style="display:${activeTab === 'account' ? 'block' : 'none'}">${blockCurrency()}</div>\n    <div class="tabpanel" data-tab-panel="fighters" style="display:${activeTab === 'fighters' ? 'block' : 'none'}">${blockCharacters()}${blockSkins()}</div>\n    <div class="tabpanel" data-tab-panel="research" style="display:${activeTab === 'research' ? 'block' : 'none'}">${blockBlueprints()}</div>\n    <div class="tabpanel" data-tab-panel="decals" style="display:${activeTab === 'decals' ? 'block' : 'none'}">${blockSkillDecals()}</div>\n    <div class="tabpanel" data-tab-panel="stews" style="display:${activeTab === 'stews' ? 'block' : 'none'}">${blockStews()}</div>\n    <div class="tabpanel" data-tab-panel="bags" style="display:${activeTab === 'bags' ? 'block' : 'none'}">${blockBags()}</div>\n    <div class="tabpanel" data-tab-panel="boxes" style="display:${activeTab === 'boxes' ? 'block' : 'none'}">${blockBoxes()}</div>\n    <div class="tabpanel" data-tab-panel="hub" style="display:${activeTab === 'hub' ? 'block' : 'none'}">${blockHub()}</div>\n    <div class="tabpanel" data-tab-panel="defense" style="display:${activeTab === 'defense' ? 'block' : 'none'}">${blockDefense()}</div>\n    <div class="tabpanel" data-tab-panel="photos" style="display:${activeTab === 'photos' ? 'block' : 'none'}">${blockPhotos()}</div>\n    <div class="tabpanel" data-tab-panel="graves" style="display:${activeTab === 'graves' ? 'block' : 'none'}">${blockGraves()}</div>\n    <div class="tabpanel" data-tab-panel="dates" style="display:${activeTab === 'dates' ? 'block' : 'none'}">${blockDates()}</div>\n    <div class="tabpanel" data-tab-panel="storage" style="display:${activeTab === 'storage' ? 'block' : 'none'}">${blockStorageBox()}</div>\n    <div class="tabpanel" data-tab-panel="rewards" style="display:${activeTab === 'rewards' ? 'block' : 'none'}">${blockRewardBox()}</div>\n    <div class="tabpanel" data-tab-panel="quests" style="display:${activeTab === 'quests' ? 'block' : 'none'}">${blockQuests()}</div>\n    <div class="tabpanel" data-tab-panel="rally" style="display:${activeTab === 'rally' ? 'block' : 'none'}">${blockRally()}</div>\n    <div class="tabpanel" data-tab-panel="location" style="display:${activeTab === 'location' ? 'block' : 'none'}">${blockLocation()}</div>\n    <div class="tabpanel" data-tab-panel="run" style="display:${activeTab === 'run' ? 'block' : 'none'}">${blockRun()}</div>\n    <div class="tabpanel" data-tab-panel="collection" style="display:${activeTab === 'collection' ? 'block' : 'none'}">${blockCollection()}</div>\n    <div class="tabpanel" data-tab-panel="jackals" style="display:${activeTab === 'jackals' ? 'block' : 'none'}">${blockJackals()}</div>\n    <div class="tabpanel" data-tab-panel="layouts" style="display:${activeTab === 'layouts' ? 'block' : 'none'}">${blockLayouts()}</div>\n    <div class="tabpanel" data-tab-panel="stats" style="display:${activeTab === 'stats' ? 'block' : 'none'}">${blockStats()}</div>\n    <div class="tabpanel" data-tab-panel="vip" style="display:${activeTab === 'vip' ? 'block' : 'none'}">${blockVip()}${blockFreeCont()}</div>\n    <div class="tabpanel" data-tab-panel="compare" style="display:${activeTab === 'compare' ? 'block' : 'none'}">${blockCompare()}</div>\n    <div class="tabpanel" data-tab-panel="raw" style="display:${activeTab === 'raw' ? 'block' : 'none'}">${blockRaw()}</div>\n  `;
   wireHealth();
   wireCurrency();
   wireCharacters();
@@ -2044,6 +2047,7 @@ function renderAll() {
   wireFreeCont();
   wireFsec();
   wireCompare();
+  wireRaw();
   document.querySelectorAll('[data-tab-btn]').forEach(btn => {
     btn.addEventListener('click', () => {
       activeTab = btn.dataset.tabBtn;
@@ -2068,6 +2072,7 @@ function renderAll() {
       if (activeTab === 'photos') renderPhotos();
       if (activeTab === 'graves') renderGraves();
       if (activeTab === 'compare') renderCompare();
+      if (activeTab === 'raw') renderRaw();
       window.scrollTo(0, 0);
     });
   });
@@ -5689,6 +5694,149 @@ function wireLayoutsUi() {
 }
 // ===== end Layouts =====
 
+// ===== Raw data (read only): the whole save as the game stores it, for power users =====
+// A browser over the raw save: breadcrumb + the current object's fields, 200 at a time, with search over keys
+// and values. Nothing can be edited here on purpose: the other tabs check every change against the game's rules.
+// "With your edits" shows the save exactly as Download would write it now (buildDownloadRoot).
+const RAW_PAGE = 200, RAW_HITS = 300;
+let RAW_VIEW = { root: null, src: 'loaded', ed: null, edAt: 0, path: [], page: 0, q: '', hits: null, hitsMore: false, mark: null };
+const RAW_SIZE = new WeakMap();
+function rawReset() { RAW_VIEW = { root: RAW_SAV_ROOT, src: 'loaded', ed: null, edAt: 0, path: [], page: 0, q: '', hits: null, hitsMore: false, mark: null }; }
+function rawData() {
+  if (RAW_VIEW.src !== 'edited') return RAW_SAV_ROOT;
+  if (!RAW_VIEW.ed) { RAW_VIEW.ed = JSON.parse(JSON.stringify(buildDownloadRoot())); RAW_VIEW.edAt = Date.now(); }
+  return RAW_VIEW.ed;
+}
+function rawAt(data, path) {
+  let v = data;
+  for (const k of path) { if (v === null || typeof v !== 'object' || !(k in v)) return undefined; v = v[k]; }
+  return v;
+}
+function rawPathText(path) {
+  return 'save' + path.map(k => typeof k === 'number' ? `[${k}]` : /^[A-Za-z_$][\w$]*$/.test(k) ? '.' + k : `[${JSON.stringify(k)}]`).join('');
+}
+function rawSize(v) {
+  if (v === null || typeof v !== 'object') return JSON.stringify(v === undefined ? null : v).length;
+  let n = RAW_SIZE.get(v);
+  if (n == null) { n = JSON.stringify(v).length; RAW_SIZE.set(v, n); }
+  return n;
+}
+function rawBytes(n) { return n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : n >= 1024 ? (n / 1024).toFixed(1) + ' KB' : n + ' B'; }
+function rawKind(v) { return v === null ? 'null' : Array.isArray(v) ? 'list' : typeof v === 'object' ? 'object' : typeof v; }
+function rawDateHint(k, v) {
+  return typeof v === 'number' && v > 9e8 && v < 2.2e9 && /time|created|modified|expire|date|login|start|end|_at$|limit/i.test(String(k)) ? ` <span class="id">(${escapeHtml(dtFmt(v))})</span>` : '';
+}
+function rawLeafHtml(k, v) {
+  if (typeof v === 'string') {
+    const s = JSON.stringify(v);
+    return `<span style="color:#9fd39f;">${escapeHtml(s.length > 240 ? s.slice(0, 240) + '…"' : s)}</span>${s.length > 240 ? ` <span class="id">(${v.length.toLocaleString()} characters)</span>` : ''}`;
+  }
+  if (v === null) return '<span class="id">null</span>';
+  return `<span style="color:#e6b86a;">${escapeHtml(String(v))}</span>${rawDateHint(k, v)}`;
+}
+function rawSearch(data, q) {
+  const needle = q.toLowerCase(), hits = [];
+  const stack = [ [ data, [] ] ];
+  let more = false;
+  while (stack.length) {
+    const [ v, path ] = stack.pop();
+    const keys = Array.isArray(v) ? v.map((_, i) => i) : Object.keys(v);
+    for (let i = keys.length - 1; i >= 0; i--) {
+      const k = keys[i], c = v[k], p = path.concat([ k ]);
+      const keyHit = typeof k === 'string' && k.toLowerCase().includes(needle);
+      const valHit = (c === null || typeof c !== 'object') && String(c).toLowerCase().includes(needle);
+      if (keyHit || valHit) { if (hits.length >= RAW_HITS) { more = true; stack.length = 0; break; } hits.push(p); }
+      if (c !== null && typeof c === 'object') stack.push([ c, p ]);
+    }
+  }
+  // stack order walks the save top to bottom; keep that order
+  return { hits, more };
+}
+function blockRaw() {
+  return `<section class="block">
+    <div class="block-head"><div><div class="eyebrow">Read only · for power users</div><h2>Raw data</h2></div></div>
+    <div class="block-body"><div id="raw-body"></div></div>
+  </section>`;
+}
+function renderRaw() {
+  const host = document.getElementById('raw-body');
+  if (!host) return;
+  if (!RAW_SAV_ROOT) { host.innerHTML = '<div class="capNote" style="margin-top:0;">Load a .sav to see its raw data.</div>'; return; }
+  if (RAW_VIEW.root !== RAW_SAV_ROOT) rawReset();
+  let data;
+  try { data = rawData(); } catch (err) { host.innerHTML = `<div class="capNote">Couldn't build the save with your edits (${escapeHtml(err.message)}).</div>`; return; }
+  let node = rawAt(data, RAW_VIEW.path);
+  if (node === undefined || node === null || typeof node !== 'object') { RAW_VIEW.path = []; RAW_VIEW.page = 0; node = data; }
+  const P = RAW_VIEW.path, isArr = Array.isArray(node);
+  const keys = isArr ? node.map((_, i) => i) : Object.keys(node);
+  const pages = Math.max(1, Math.ceil(keys.length / RAW_PAGE));
+  if (RAW_VIEW.page >= pages) RAW_VIEW.page = pages - 1;
+  const from = RAW_VIEW.page * RAW_PAGE, shown = keys.slice(from, from + RAW_PAGE);
+  const crumbs = [ `<a href="#" data-raw-go="0" style="color:var(--accent-bright);">save</a>` ].concat(P.map((k, i) => `<a href="#" data-raw-go="${i + 1}" style="color:var(--accent-bright);">${escapeHtml(typeof k === 'number' ? '[' + k + ']' : String(k))}</a>`)).join(' <span class="id">›</span> ');
+  const rows = shown.map(k => {
+    const v = node[k], kind = rawKind(v), box = v !== null && typeof v === 'object';
+    const cnt = box ? (Array.isArray(v) ? v.length : Object.keys(v).length) : 0;
+    const mark = RAW_VIEW.mark != null && RAW_VIEW.mark === k;
+    return `<tr data-raw-row="${escapeHtml(String(k))}" style="${mark ? 'background:rgba(214,57,46,.18);' : ''}">
+      <td style="white-space:nowrap; vertical-align:top;">${box ? `<a href="#" data-raw-into="${escapeHtml(JSON.stringify(k))}" style="color:var(--accent-bright);">${escapeHtml(isArr ? '[' + k + ']' : String(k))}</a>` : `<span>${escapeHtml(isArr ? '[' + k + ']' : String(k))}</span>`}</td>
+      <td style="word-break:break-all;">${box ? `<span class="id">${kind === 'list' ? 'list of ' + cnt.toLocaleString() : cnt.toLocaleString() + ' field' + (cnt === 1 ? '' : 's')}</span>` : rawLeafHtml(k, v)}</td>
+      <td class="id" style="white-space:nowrap; text-align:right; vertical-align:top;">${box ? rawBytes(rawSize(v)) : kind}</td>
+      <td style="white-space:nowrap; vertical-align:top;"><button class="subtle" data-raw-copy="${escapeHtml(JSON.stringify(k))}" title="Copy this value" style="padding:1px 6px; font-size:11px;">copy</button></td>
+    </tr>`;
+  }).join('');
+  const hitsHtml = RAW_VIEW.hits == null ? '' : `<div class="subDetails" style="padding:8px; margin:8px 0;">
+      <div style="font-size:12px; margin-bottom:4px;"><b>${RAW_VIEW.hits.length}${RAW_VIEW.hitsMore ? '+' : ''}</b> match${RAW_VIEW.hits.length === 1 ? '' : 'es'} for <b>${escapeHtml(RAW_VIEW.q)}</b>${RAW_VIEW.hitsMore ? ` (showing the first ${RAW_HITS}; search for something longer to narrow it)` : ''} <a href="#" id="raw-hits-close" class="id" style="margin-left:8px;">close</a></div>
+      <div style="max-height:220px; overflow:auto; font-family:ui-monospace, Consolas, monospace; font-size:11.5px; line-height:1.6;">${RAW_VIEW.hits.map((p, i) => { const v = rawAt(data, p); const box = v !== null && typeof v === 'object'; return `<div><a href="#" data-raw-hit="${i}" style="color:var(--accent-bright);">${escapeHtml(rawPathText(p))}</a>${box ? '' : ' = ' + escapeHtml((s => s.length > 100 ? s.slice(0, 100) + '…' : s)(JSON.stringify(v)))}</div>`; }).join('') || '<span class="id">No matches.</span>'}</div>
+    </div>`;
+  host.innerHTML = `<div class="capNote" style="margin-top:0;">The whole save as the game stores it, read only. Nothing can be changed here on purpose: the other tabs check every change against the game's rules. Click a name to open it; numbers that look like dates show the date. <b>Copy</b> copies a value as JSON.</div>
+    <div class="toolbar" style="flex-wrap:wrap; gap:6px; align-items:center;">
+      <label style="font-size:12px;">Show <select id="raw-src" style="width:auto; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:6px 8px; font-family:var(--mono); font-size:12px;"><option value="loaded" ${RAW_VIEW.src === 'loaded' ? 'selected' : ''}>the save as loaded</option><option value="edited" ${RAW_VIEW.src === 'edited' ? 'selected' : ''}>with your edits (as Download would write it)</option></select></label>
+      ${RAW_VIEW.src === 'edited' ? `<button class="subtle" id="raw-refresh" title="Rebuild after more edits">Refresh</button><span class="id">built ${escapeHtml(new Date(RAW_VIEW.edAt).toLocaleTimeString())}</span>` : ''}
+      <input type="search" id="raw-q" placeholder="Search keys and values (e.g. Dms4dustin, free_money, HVN_FLR_0330)" value="${escapeHtml(RAW_VIEW.q)}" style="flex:1; min-width:220px; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:6px 8px; font-family:var(--mono); font-size:12px;">
+      <button class="subtle" id="raw-find">Search</button>
+    </div>
+    ${hitsHtml}
+    <div style="margin:8px 0 4px; font-size:13px; word-break:break-all;">${crumbs}</div>
+    <div class="id" style="margin-bottom:6px;">${escapeHtml(rawPathText(P))} · ${isArr ? 'list of ' + keys.length.toLocaleString() : keys.length.toLocaleString() + ' fields'} · ${rawBytes(rawSize(node))}
+      <button class="subtle" id="raw-copy-path" style="padding:1px 6px; font-size:11px; margin-left:6px;">Copy path</button>
+      <button class="subtle" id="raw-dl" style="padding:1px 6px; font-size:11px;">Download this as .json</button></div>
+    ${pages > 1 ? `<div class="toolbar" style="margin:4px 0;"><button class="subtle" id="raw-prev" ${RAW_VIEW.page ? '' : 'disabled'}>‹ Previous</button><span class="id">${(from + 1).toLocaleString()}–${Math.min(from + RAW_PAGE, keys.length).toLocaleString()} of ${keys.length.toLocaleString()}</span><button class="subtle" id="raw-next" ${RAW_VIEW.page < pages - 1 ? '' : 'disabled'}>Next ›</button></div>` : ''}
+    <div style="overflow:auto;"><table class="stewTable" style="width:100%; font-family:ui-monospace, Consolas, monospace; font-size:12px;"><tbody>${rows || '<tr><td class="id">(empty)</td></tr>'}</tbody></table></div>`;
+  wireRawUi(data, node, keys);
+  if (RAW_VIEW.mark != null) { const r = host.querySelector(`[data-raw-row="${CSS.escape(String(RAW_VIEW.mark))}"]`); if (r) r.scrollIntoView({ block: 'center' }); }
+}
+function rawCopy(text, what) {
+  const done = () => toast(`Copied ${what}`);
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, () => toast('Copy failed', true));
+  else toast('Copy is not available in this browser', true);
+}
+function wireRawUi(data, node, keys) {
+  const $ = id => document.getElementById(id);
+  const go = (path, mark) => { RAW_VIEW.path = path; RAW_VIEW.mark = mark == null ? null : mark; RAW_VIEW.page = 0; if (mark != null) { const n = rawAt(data, path); const ks = Array.isArray(n) ? n.map((_, i) => i) : Object.keys(n || {}); RAW_VIEW.page = Math.max(0, Math.floor(ks.indexOf(mark) / RAW_PAGE)); } renderRaw(); };
+  document.querySelectorAll('[data-raw-go]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); go(RAW_VIEW.path.slice(0, Number(a.dataset.rawGo))); }));
+  document.querySelectorAll('[data-raw-into]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); go(RAW_VIEW.path.concat([ JSON.parse(a.dataset.rawInto) ])); }));
+  document.querySelectorAll('[data-raw-copy]').forEach(b => b.addEventListener('click', () => { const k = JSON.parse(b.dataset.rawCopy); rawCopy(JSON.stringify(node[k], null, 2), rawPathText(RAW_VIEW.path.concat([ k ]))); }));
+  document.querySelectorAll('[data-raw-hit]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); const p = RAW_VIEW.hits[Number(a.dataset.rawHit)]; go(p.slice(0, -1), p[p.length - 1]); }));
+  $('raw-copy-path').addEventListener('click', () => rawCopy(rawPathText(RAW_VIEW.path), 'the path'));
+  $('raw-dl').addEventListener('click', () => {
+    const name = 'raw_' + (RAW_VIEW.path.length ? RAW_VIEW.path.map(String).join('_').replace(/[^\w.-]+/g, '-').slice(0, 80) : 'save') + '.json';
+    triggerDownload(JSON.stringify(node, null, 2), name, 'application/json');
+  });
+  if ($('raw-prev')) $('raw-prev').addEventListener('click', () => { RAW_VIEW.page--; RAW_VIEW.mark = null; renderRaw(); });
+  if ($('raw-next')) $('raw-next').addEventListener('click', () => { RAW_VIEW.page++; RAW_VIEW.mark = null; renderRaw(); });
+  $('raw-src').addEventListener('change', e => { RAW_VIEW.src = e.target.value; RAW_VIEW.ed = null; RAW_VIEW.hits = null; RAW_VIEW.mark = null; renderRaw(); });
+  if ($('raw-refresh')) $('raw-refresh').addEventListener('click', () => { RAW_VIEW.ed = null; RAW_VIEW.hits = null; renderRaw(); });
+  const find = () => {
+    const q = $('raw-q').value.trim();
+    RAW_VIEW.q = q;
+    if (q.length < 2) { RAW_VIEW.hits = null; toast('Type at least 2 characters to search', true); renderRaw(); return; }
+    const r = rawSearch(data, q); RAW_VIEW.hits = r.hits; RAW_VIEW.hitsMore = r.more; renderRaw();
+  };
+  $('raw-find').addEventListener('click', find);
+  $('raw-q').addEventListener('keydown', e => { if (e.key === 'Enter') find(); });
+  if ($('raw-hits-close')) $('raw-hits-close').addEventListener('click', e => { e.preventDefault(); RAW_VIEW.hits = null; renderRaw(); });
+}
+function wireRaw() { if (activeTab === 'raw') renderRaw(); }
 function blockStats() {
   return `<section class="block">
     <div class="block-head"><div><div class="eyebrow">Read only</div><h2>Stats</h2></div></div>
