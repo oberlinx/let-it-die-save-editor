@@ -4559,8 +4559,12 @@ function applyFloorMove(root) {
 // every remaining boss floor of the route, which the game keeps for the whole run.
 // hvntrinfo is emptied between runs, so this only works on a save paused mid-run.
 // ---------------------------------------------------------------------------
-let BOSS_LOCK = { root: null, mode: '', extend: true, plan: null };
-function blkSync() { if (BOSS_LOCK.root !== RAW_SAV_ROOT) BOSS_LOCK = { root: RAW_SAV_ROOT, mode: '', extend: true, plan: null }; }
+// rewards: 'roll' = the floors it writes get rewards drawn now from the game's tables (confirmed in game);
+// 'none' = they're written with the arena only (no Legendary Chest, no box or boss rewards) to see whether the game
+// fills them in itself when it builds the floor (EXPERIMENTAL, untested; boss floors with no entry have been seen
+// falling back to Kill Coins in their chests)
+let BOSS_LOCK = { root: null, mode: '', extend: true, rewards: 'roll', plan: null };
+function blkSync() { if (BOSS_LOCK.root !== RAW_SAV_ROOT) BOSS_LOCK = { root: RAW_SAV_ROOT, mode: '', extend: true, rewards: 'roll', plan: null }; }
 // don: the four main bosses (KIS_BOSS1-4). Regular Heaven offers no Don below 100F, so those floors fall back
 // to a mid-boss (the nearest kind) rather than whatever the game would roll.
 const BLK_MODES = {
@@ -4590,7 +4594,8 @@ function blkDraw(floor, refareaid, type) {
   const own = arr(AP && AP.hvnBossDrops).some(r => r.flrid === floor.id && r.areaid === floor.areaid && r.type === type && r.refareaid === refareaid);
   return own ? flmDraw(floor.id, floor.areaid, refareaid, type) : flmDraw(floor.id, floor.areaid, '-', type);
 }
-function blkEntry(floor, refareaid, isRare) {
+function blkEntry(floor, refareaid, isRare, empty) {
+  if (empty) return { flrid: floor.id, areaid: floor.areaid, refareaid, rwdtype: 'TBRWD_ITEM', rwdid: '', is_rare: isRare ? 1 : 0, created: 0, rwds: [] };
   const k = blkKind(refareaid), rw = (gentype, ref) => ({ gentype, rwdtype: 'TBRWD_ITEM', rwdid: blkDraw(floor, ref, gentype) });
   const rwds = [];
   if (k.kind === 'mboss') rwds.push(rw('PTGENTP_MBOSS' + k.n, '-'));
@@ -4628,14 +4633,14 @@ function blkPlan() {
     if (!old && !BOSS_LOCK.extend) continue;
     const r = blkPick(want.length ? want : rows);
     // a floor the game hasn't planned yet gets a rare (yellow on the map) Legendary Chest as often as the game gives one
-    items.push({ floor: f, old, entry: r && blkEntry(f, r.refareaid, old ? Number(old.is_rare) === 1 : Math.random() < HVN_RARE_CHANCE), fallback });
+    items.push({ floor: f, old, entry: r && blkEntry(f, r.refareaid, old ? Number(old.is_rare) === 1 : Math.random() < HVN_RARE_CHANCE, BOSS_LOCK.rewards === 'none'), fallback });
   }
-  return { from, mode: BOSS_LOCK.mode, extend: BOSS_LOCK.extend, items };
+  return { from, mode: BOSS_LOCK.mode, extend: BOSS_LOCK.extend, rewards: BOSS_LOCK.rewards, items };
 }
 function blkPlanFresh() {
   const p = BOSS_LOCK.plan;
   if (!BOSS_LOCK.mode) return null;
-  if (!p || p.from !== blkFrom() || p.mode !== BOSS_LOCK.mode || p.extend !== BOSS_LOCK.extend) BOSS_LOCK.plan = blkPlan();
+  if (!p || p.from !== blkFrom() || p.mode !== BOSS_LOCK.mode || p.extend !== BOSS_LOCK.extend || p.rewards !== BOSS_LOCK.rewards) BOSS_LOCK.plan = blkPlan();
   return BOSS_LOCK.plan;
 }
 function applyBossLock(root) {
@@ -4654,6 +4659,7 @@ function applyBossLock(root) {
 }
 function blkRewardText(e, nm) {
   if (!e) return '';
+  if (!e.rwdid && !arr(e.rwds).length) return '<span class="id">none written: left for the game (experimental)</span>';
   const unplaced = flmUnplaced(e);
   const rw = arr(e.rwds).map((w, i) => ({ gentype: w.gentype, placeholder: unplaced.has(i), to: w.rwdid }));
   return `${e.rwdid ? (LOC_SPOIL ? 'Legendary Chest: ' + nm(e.rwdid) : 'Legendary Chest') + (Number(e.is_rare) ? legendTag() : '') : '—'} ${flmUpText(rw, nm)}`;
@@ -4672,7 +4678,8 @@ function renderBossLock() {
   const sel = 'background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);';
   const remaining = flmRouteBoss(from).filter(x => x.no > cur.no).length;
   h += `<div class="toolbar"><select id="blk-mode" style="${sel} min-width:340px;"><option value="">Leave as rolled</option>${Object.entries(BLK_MODES).map(([ k, m ]) => `<option value="${k}" ${BOSS_LOCK.mode === k ? 'selected' : ''}>${escapeHtml(m.label)}</option>`).join('')}</select></div>
-    <label style="cursor:pointer; display:block; margin:6px 0;"><input type="checkbox" id="blk-extend" ${BOSS_LOCK.extend ? 'checked' : ''} style="width:auto; margin-right:6px;">Also write every remaining boss floor of the route (${remaining} after ${escapeHtml(cur.no + 'F')}), not only the ones the game has planned so far, so the lock lasts the whole run.</label>`;
+    <label style="cursor:pointer; display:block; margin:6px 0;"><input type="checkbox" id="blk-extend" ${BOSS_LOCK.extend ? 'checked' : ''} style="width:auto; margin-right:6px;">Also write every remaining boss floor of the route (${remaining} after ${escapeHtml(cur.no + 'F')}), not only the ones the game has planned so far, so the lock lasts the whole run.</label>
+    <div class="toolbar" style="margin:4px 0 6px;"><label style="font-size:12px;">Rewards on the floors it writes <select id="blk-rewards" style="${sel}"><option value="roll" ${BOSS_LOCK.rewards === 'roll' ? 'selected' : ''}>Roll them now from the game's tables (confirmed in game)</option><option value="none" ${BOSS_LOCK.rewards === 'none' ? 'selected' : ''}>None: leave them for the game (experimental, not tested)</option></select></label></div>${BOSS_LOCK.rewards === 'none' ? '<div class="warnNote" style="margin:0 0 8px;"><b>Experimental — test on a backup.</b> The floors it writes get only their arena, with no Legendary Chest or chest rewards. We don\'t know yet whether the game fills them in when it builds the floor, or leaves the map blank and fills the chests with Kill Coins (seen on boss floors with no plan). Floors the game already planned that are already the right kind keep their rewards.</div>' : ''}`;
   const p = blkPlanFresh();
   if (p) {
     const nm = rwdNameHtml;
@@ -4683,7 +4690,7 @@ function renderBossLock() {
       const now = (it.entry ? `<b>${escapeHtml(blkKind(it.entry.refareaid).label)}</b>${it.old ? '' : ' <span class="id">(added)</span>'}` : '<span class="id">unchanged</span>') + (it.fallback ? ` <span class="id">(no ${escapeHtml(BLK_MODES[p.mode].noun)} on this floor)</span>` : '');
       return `<tr><td>${escapeHtml(hvnFloorLabel(it.floor))}</td><td>${it.old ? escapeHtml(was) : was}</td><td>${now}</td><td>${blkRewardText(it.entry || it.old, nm)}</td></tr>`;
     }).join('');
-    h += `</tbody></table><div class="toolbar" style="margin-top:6px;"><button class="subtle" id="blk-reroll">Reroll again</button><span class="capNote" style="margin:0;">${changed.length} floor${changed.length === 1 ? '' : 's'} will be written. Rewards are drawn from each floor's own tables for the new arena.</span></div>`;
+    h += `</tbody></table><div class="toolbar" style="margin-top:6px;"><button class="subtle" id="blk-reroll">Reroll again</button><span class="capNote" style="margin:0;">${changed.length} floor${changed.length === 1 ? '' : 's'} will be written. ${p.rewards === 'none' ? 'They get no rewards (left for the game).' : 'Rewards are drawn from each floor\'s own tables for the new arena.'}</span></div>`;
     h += `<div class="capNote">Not changed: the floor you're on (already built), NEO map B floors (one fixed arena), and planned floors that are already ${escapeHtml(BLK_MODES[p.mode].noun)} floors.${p.mode === 'don' ? ' Regular Heaven has no Dons below 100F (the game only offers a mid-boss or a Screamer Pit there), so those floors become mid-boss floors.' : ''}${p.mode === 'don' || p.mode === 'boss' ? ' Dons have no boss drop: their floors get the featured reward and two large chests, as the game writes them.' : ''}${from !== s.flrid ? ' Applied after the floor move above, so it replaces the moved floors\' rerolled rewards.' : ''} New floors get a normal (not rare) featured reward.</div>`;
     if (p.items.some(it => /_KIS_RUSH/.test((arr(AP.hvnBossKis).find(r => r.areaid === (it.entry || it.old || {}).refareaid) || {}).kis || ''))) h += `<div class="capNote">Screamer Pit chests (treasure enemies) can hold any faction's metal, on every route: the game's own pit table mixes all four (a W.E pit can drop D.O.D. ARMS, Candle Wolf or M.I.L.K. metal). The large boxes, featured reward and boss drop stay the route's own faction.</div>`;
   }
@@ -4692,6 +4699,8 @@ function renderBossLock() {
   if (ms) ms.addEventListener('change', () => { BOSS_LOCK.mode = ms.value; BOSS_LOCK.plan = null; renderBossLock(); toast(ms.value ? 'Boss floor lock set — download to apply' : 'Boss floors left as rolled'); });
   const ex = document.getElementById('blk-extend');
   if (ex) ex.addEventListener('change', () => { BOSS_LOCK.extend = ex.checked; BOSS_LOCK.plan = null; renderBossLock(); });
+  const rws = document.getElementById('blk-rewards');
+  if (rws) rws.addEventListener('change', () => { BOSS_LOCK.rewards = rws.value; BOSS_LOCK.plan = null; renderBossLock(); });
   const rr = document.getElementById('blk-reroll');
   if (rr) rr.addEventListener('click', () => { BOSS_LOCK.plan = null; renderBossLock(); });
 }
