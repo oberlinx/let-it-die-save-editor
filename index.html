@@ -5542,8 +5542,58 @@ function layDownload(name, text) {
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
+// Exported files are laid out for people: one gear piece per line with its in-game name, empty slots
+// spelled out, and "_" notes explaining each part. The import only reads id, name, notes, weapons
+// (ptid + lvl), held, armor and decals, so the extra fields and notes are ignored and older editors
+// still read these files. Windows line endings so Notepad shows the lines.
+function layWeaponLabel(i) { return (i < 3 ? 'Right hand ' : 'Left hand ') + (i % 3 + 1); }
+function layExportDoc(list) {
+  const named = !!(AP && AP.pts && AP.pts.length);
+  const piece = (slot, e) => {
+    if (!e) return { slot, empty: true };
+    const rec = named && PT_INDEX[e.ptid];
+    return rec ? { slot, part: `${rec.name} +${layClampLvl(rec, e.lvl)}`, ptid: e.ptid, lvl: e.lvl } : { slot, ptid: e.ptid, lvl: e.lvl };
+  };
+  const now = new Date();
+  return {
+    format: 'lid-layouts',
+    version: 1,
+    _read_me: [
+      'LET IT DIE Offline Editor: fighter layouts (' + list.length + ' layout' + (list.length === 1 ? '' : 's') + ')',
+      'Exported ' + now.toLocaleString() + '. Import it on the Layouts tab of the editor.',
+      'Fields starting with _ are notes for people, and "slot" / "part" / "empty" are labels: the import ignores them.',
+      'Each gear piece is ptid (the part id) + lvl (the in-game +number). Names follow the masters.db loaded when exporting.',
+      'weapons: the 6 quick slots in order, Right hand 1-3 then Left hand 1-3. held: which of its 3 slots each hand holds (0 = first).',
+      'armor: Head (EQSITE_HEAD), Body (EQSITE_BODY), Legs (EQSITE_LEGS). decals: decal ids, with their names in _decals.'
+    ],
+    layouts: list.map((l, n) => ({
+      _layout: `Layout ${n + 1} of ${list.length}: ${laySummary(l)}`,
+      id: l.id,
+      name: l.name,
+      notes: l.notes,
+      weapons: LAY_WEAPON_SLOTS.map(i => piece(layWeaponLabel(i), l.weapons[i])),
+      _held: `Right hand holds Right hand ${(l.held[0] || 0) + 1}; left hand holds Left hand ${(l.held[1] || 0) + 1}`,
+      held: l.held,
+      armor: Object.fromEntries(LAY_ARMOR_SITES.map(s => [ s, piece(LAY_ARMOR_LABEL[s], l.armor[s]) ])),
+      _decals: l.decals.map(id => { const r = SKL_INDEX && SKL_INDEX[id]; return r ? r.name + (Number(r.premium) ? ' (Premium)' : '') : id; }),
+      decals: l.decals
+    }))
+  };
+}
+// JSON with small objects and short lists kept on one line, everything else indented.
+function layPretty(v, ind) {
+  ind = ind || '';
+  const flat = JSON.stringify(v);
+  if (v === null || typeof v !== 'object') return flat;
+  const kids = Array.isArray(v) ? v : Object.values(v);
+  const simple = kids.every(x => x === null || typeof x !== 'object');
+  if (!kids.length || (simple && flat.length <= 110 && !(Array.isArray(v) && kids.length > 3 && kids.some(x => typeof x === 'string')))) return Array.isArray(v) ? '[' + v.map(x => JSON.stringify(x)).join(', ') + ']' : !kids.length ? '{}' : '{ ' + Object.keys(v).map(k => JSON.stringify(k) + ': ' + JSON.stringify(v[k])).join(', ') + ' }';
+  const next = ind + '  ';
+  if (Array.isArray(v)) return '[\r\n' + v.map(x => next + layPretty(x, next)).join(',\r\n') + '\r\n' + ind + ']';
+  return '{\r\n' + Object.keys(v).map(k => next + JSON.stringify(k) + ': ' + layPretty(v[k], next)).join(',\r\n') + '\r\n' + ind + '}';
+}
 function layExport(list, file) {
-  layDownload(file, JSON.stringify({ format: 'lid-layouts', version: 1, layouts: list }, null, 2));
+  layDownload(file, layPretty(layExportDoc(list)) + '\r\n');
 }
 function layImportText(text) {
   let j;
