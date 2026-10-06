@@ -1600,35 +1600,12 @@ async function loadSaveFiles(files) {
     SAVE.cl.msrs = arr(SAVE.cl.msrs);
     SAVE.cl.bsts = arr(SAVE.cl.bsts);
     SAVE.cl.items = arr(SAVE.cl.items);
-    let repaired = 0;
-    for (const c of arr(SAVE.soul.chrs)) {
-      if (!c.bodylvl) continue;
-      const R = fighterRanges(c.type || 'BAL', c.grade != null ? c.grade : 1, c.limit_break || 0);
-      const lim = {
-        skill: R.skillCap - R.skillBase,
-        bag: R.bagCap - R.bagBase
-      };
-      let changed = false;
-      for (const k of [ 'skill', 'bag' ]) if ((c.bodylvl[k] || 0) > lim[k]) {
-        c.bodylvl[k] = lim[k];
-        changed = true;
-      }
-      if ((c.rage || 0) > R.rageCap - R.rageBase) {
-        c.rage = R.rageCap - R.rageBase;
-        changed = true;
-      }
-      if (changed) {
-        recomputeLevel(c);
-        repaired++;
-      }
-    }
     try { RESEARCH_GAME_SKIP = researchGameSkips(SAVE.user_research); } catch (err) { RESEARCH_GAME_SKIP = new Map(); }
     RESEARCH_KNOWN = researchKnownSnapshot(SAVE.user_research);
-    HEALTH_LOAD = { repairedChars: repairedChars, repairedFighters: repaired };
+    HEALTH_LOAD = { repairedChars: repairedChars };
     HEALTH.open = null;
     try { runSaveCheck(); } catch (err) { console.warn('Save check failed:', err); }
     renderAll();
-    if (repaired) setTimeout(() => toast(`Fixed decal/bag/rage values on ${repaired} fighter(s) left over from an older editor version`), 2700);
     markChip('chip-save', true);
     toast(`Loaded ${soulSource}`);
   } catch (err) {
@@ -9041,7 +9018,33 @@ function wirePhotos() { if (activeTab === 'photos') renderPhotos(); }
 // ---------------------------------------------------------------------------
 
 let HEALTH = { items: [], ranAt: 0, open: null };
-let HEALTH_LOAD = { repairedChars: 0, repairedFighters: 0 };
+let HEALTH_LOAD = { repairedChars: 0 };
+// Fighters whose extra decal slots, Death Bag or rage (bodyuser skill / bag / rage, stored above the type's base)
+// are more than their type, grade and limit break allow (master_body_detail). The game never writes these (every
+// game-made fighter in the test saves is within its caps); they come from other editors or old editor versions,
+// e.g. a Grade 6 Limit Break 0 Brawler saved with +9 slots, +4 bag, +9 rage. Reported, and fixed only when asked.
+function fightersOverCap() {
+  const out = [];
+  for (const c of arr(SAVE && SAVE.soul && SAVE.soul.chrs)) {
+    if (!c || !c.bodylvl || c.state === 'ENEMY' || c.state === 'DUMMY') continue;
+    const R = fighterRanges(c.type || 'BAL', c.grade != null ? c.grade : 1, c.limit_break || 0);
+    const lim = { skill: R.skillCap - R.skillBase, bag: R.bagCap - R.bagBase, rage: R.rageCap - R.rageBase };
+    const has = { skill: Number(c.bodylvl.skill) || 0, bag: Number(c.bodylvl.bag) || 0, rage: Number(c.rage) || 0 };
+    const over = Object.keys(lim).filter(k => has[k] > lim[k]);
+    if (over.length) out.push({ c, R, lim, has, over });
+  }
+  return out;
+}
+function fixFightersOverCap() {
+  const list = fightersOverCap();
+  for (const o of list) {
+    if (o.has.skill > o.lim.skill) o.c.bodylvl.skill = o.lim.skill;
+    if (o.has.bag > o.lim.bag) o.c.bodylvl.bag = o.lim.bag;
+    if (o.has.rage > o.lim.rage) o.c.rage = o.lim.rage;
+    recomputeLevel(o.c);
+  }
+  return list.length;
+}
 
 function runSaveCheck() {
   const out = [];
@@ -9053,7 +9056,18 @@ function runSaveCheck() {
 
   // load-time repairs
   if (HEALTH_LOAD.repairedChars) add('note', `${HEALTH_LOAD.repairedChars} broken character${HEALTH_LOAD.repairedChars === 1 ? '' : 's'} in text fields were repaired while loading. The rest of the save loaded normally.`);
-  if (HEALTH_LOAD.repairedFighters) add('note', `Decal slots, bag or rage were over the limit on ${HEALTH_LOAD.repairedFighters} fighter${HEALTH_LOAD.repairedFighters === 1 ? '' : 's'} and were brought back within range.`, 'fighters');
+
+  // fighters with more decal slots, Death Bag or rage than their type, grade and limit break allow
+  safe('fighter limits', () => {
+    const over = fightersOverCap();
+    if (!over.length) return;
+    const nm = { skill: 'decal slots', bag: 'Death Bag', rage: 'rage' };
+    const tot = (o, k) => k === 'skill' ? [ o.R.skillBase + o.has.skill, o.R.skillCap ] : k === 'bag' ? [ o.R.bagBase + o.has.bag, o.R.bagCap ] : [ o.R.rageBase + o.has.rage, o.R.rageCap ];
+    const lbl = o => `${escapeHtml(o.c.name || 'a fighter')} (${escapeHtml(o.c.type || '?')} Grade ${o.c.grade} Limit Break ${o.c.limit_break || 0}: ${o.over.map(k => { const [ h, m ] = tot(o, k); return `${nm[k]} ${h}, max ${m}`; }).join(', ')})`;
+    add('warning', `${over.length} fighter${over.length === 1 ? ' has' : 's have'} more decal slots, Death Bag or rage than ${over.length === 1 ? 'its' : 'their'} type, grade and limit break allow: ${over.slice(0, 4).map(lbl).join('; ')}${over.length > 4 ? '; …' : ''}. The game never makes these values (only Skill Masters gain rage, up to 8 at Limit Break 4); they come from another editor or an old editor version. The editor shows these fighters at their limits and leaves the save as it is unless you fix it.`, 'fighters', {
+      label: 'Bring them back within the limits', run: () => { const n = fixFightersOverCap(); return `${n} fighter${n === 1 ? '' : 's'} set back within the limits for their limit break.`; }
+    });
+  });
 
   // dates
   safe('dates', () => {

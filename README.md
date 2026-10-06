@@ -63,6 +63,7 @@ When you load a save, a **Save check** panel above the tabs lists anything the e
   - weapon mastery level that doesn't match its points (fix: sync);
   - weapons or armor above their part's highest level (fix: cap);
   - gear a fighter couldn't wear (fix: unequip);
+  - fighters with more decal slots, Death Bag or rage than their type, grade and limit break allow (`master_body_detail`; only Skill Masters gain rage, up to 8 at Limit Break 4). The game never writes these; they come from other editors or old editor versions. The save is left as it is unless you use the fix (bring them back within the limits);
   - fighters over their Death Bag size (a note with **Renew the Express Pass** when it only fits with a pass that ran out);
   - items in two places at once;
   - fighters added by an older editor without a freezer slot (fix included);
