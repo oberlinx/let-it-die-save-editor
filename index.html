@@ -155,6 +155,9 @@
   .toolbar .count { color: var(--text-faint); font-size: 11px; margin-left: auto; }
 
   .badge { display: inline-block; padding: 1px 6px; font-size: 10px; border: 1px solid var(--panel-border-bright); color: var(--text-dim); }
+  /* blueprint rewards in the Location / Current Run reward lists: boxed so they stand out from materials */
+  .rwdBp { display: inline-block; padding: 1px 7px 1px 4px; margin: 1px 0; border: 1px solid #35c6d8; border-radius: 3px; background: rgba(53, 198, 216, .14); color: #bff3fa; font-weight: 600; white-space: nowrap; }
+  .rwdBp::before { content: 'BLUEPRINT'; display: inline-block; margin-right: 6px; padding: 0 4px; font-size: 9px; letter-spacing: .06em; font-weight: 700; background: #35c6d8; color: #071316; border-radius: 2px; vertical-align: 1px; }
   .badge.lb { border-color: var(--warn); color: var(--warn); }
   .badge.current { border-color: var(--good); color: var(--good-bright); }
 
@@ -4249,7 +4252,12 @@ function rwdTierColor(id) {
   const hit = RWD_NAME_COLOR.find(([ re ]) => re.test(r.name || ''));
   return RWD_TIER_COLOR[hit ? hit[1] : Number(r.rarity)] || '';
 }
-function rwdNameHtml(id) { const c = rwdTierColor(id), t = escapeHtml(itemDisplayName(id)); return c ? `<span style="color:${c};">${t}</span>` : t; }
+function rwdIsBlueprint(id) { const r = ITEM_INDEX[id]; return !!r && r.itemtype === 'ITTP_RMAP'; }
+function rwdNameHtml(id) {
+  const c = rwdTierColor(id), t = escapeHtml(itemDisplayName(id));
+  if (rwdIsBlueprint(id)) return `<span class="rwdBp" title="${t}">${t.replace(/^Blueprint - /, '')}</span>`;
+  return c ? `<span style="color:${c};">${t}</span>` : t;
+}
 // is_rare: the game shows that Legendary Chest's text in yellow on the map (user, 2026-10-05) and fills it from
 // the rare table. The editor never changes an existing entry's is_rare; entries it creates (boss lock on floors the
 // game hasn't planned yet, the go-back rewind's skipped map B floor) get is_rare at HVN_RARE_CHANCE, the share of
