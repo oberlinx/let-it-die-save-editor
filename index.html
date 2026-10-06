@@ -10265,7 +10265,8 @@ function restoreEmptyShapes(built, raw) {
 // At load the save is kept as text (ORIG_SAVE). Download builds the new save,
 // runs both through the same adapter the editor uses and lists what differs,
 // so a slip (wrong fighter, wrong field) shows up before the file is written.
-// Files are named brggame_YYYY-MM-DD_HHMM so older downloads are never replaced.
+// Files are named brggame_YYYY-MM-DD_HHMMSS so older downloads are never replaced (seconds, so two downloads in
+// the same minute get different names).
 // ---------------------------------------------------------------------------
 
 let ORIG_SAVE = { root: null, text: '', file: null, name: '' };
@@ -10279,7 +10280,7 @@ function reviewAdapt(raw) {
 function reviewStamp(d) {
   d = d || new Date();
   const p = n => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}`;
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
 }
 function reviewFileName(ext, stamp) { return `brggame_${stamp || reviewStamp()}.${ext}`; }
 
