@@ -4917,7 +4917,10 @@ function applyRewind(root) {
       if (REWIND.extra.root !== RAW_SAV_ROOT) REWIND.extra = { root: RAW_SAV_ROOT, by: {} };
       let ent = REWIND.extra.by[f.id];
       if (!ent) {
-        const ref = 'ARC_AREA_HVN', rare = Math.random() < HVN_RARE_CHANCE ? 1 : 0;
+        // the map B floor's one fixed arena, which differs by route (D.O.D. MET, W.E ARC, C.W AMS, M.I.L.K. RFT)
+        const ar = blkPick(arr(AP && AP.hvnBossAreas).filter(r => r.flrid === f.id));
+        if (!ar) continue;
+        const ref = ar.refareaid, rare = Math.random() < HVN_RARE_CHANCE ? 1 : 0;
         const feat = flmDraw(f.id, f.areaid, ref, rare ? 'PTGENTP_TRBOX_SPXL_RARE' : 'PTGENTP_SPXL');
         const boxes = [ 0, 1, 2 ].map(() => flmDraw(f.id, f.areaid, ref, 'PTGENTP_TRBOX_L'));
         if (!feat || boxes.some(b => !b)) continue;
