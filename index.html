@@ -4636,7 +4636,19 @@ function blkFrom() {
 function blkExisting(from) {
   const s = RAW_SAV_ROOT && RAW_SAV_ROOT.soul;
   if (!s) return new Map();
-  if (from !== s.flrid) { const fx = (FLOOR_MOVE.rolls && FLOOR_MOVE.rolls.refix) || {}; return new Map(flmUpcoming(from).map(u => [ u.id, fx[u.id] ? fx[u.id].entry : u.entry ])); }
+  if (from !== s.flrid) {
+    // the planned floors as the move writes them: shifted, re-picked (refix) or with their rerolled rewards
+    const r = FLOOR_MOVE.rolls || {}, fx = r.refix || {};
+    return new Map(flmUpcoming(from).map(u => {
+      if (fx[u.id]) return [ u.id, fx[u.id].entry ];
+      const ru = FLOOR_MOVE.reroll && arr(r.upcoming).find(x => x.id === u.id);
+      if (!ru) return [ u.id, u.entry ];
+      const e = JSON.parse(JSON.stringify(u.entry));
+      if (ru.featured && e.rwdid === ru.featured.from) e.rwdid = ru.featured.to;
+      arr(e.rwds).forEach((w, i) => { const n = ru.rwds[i]; if (n && w && w.rwdid === n.from && w.gentype === n.gentype) w.rwdid = n.to; });
+      return [ u.id, e ];
+    }));
+  }
   return new Map(arr(s.hvntrinfo).filter(e => e && e.flrid).map(e => [ e.flrid, e ]));
 }
 function blkPlan() {
@@ -4676,7 +4688,10 @@ function blkPlan() {
 function blkPlanFresh() {
   const p = BOSS_LOCK.plan;
   if (!BOSS_LOCK.mode) return null;
-  if (!p || p.from !== blkFrom() || p.mode !== BOSS_LOCK.mode || p.which !== BOSS_LOCK.which || p.extend !== BOSS_LOCK.extend || p.rewards !== BOSS_LOCK.rewards) BOSS_LOCK.plan = blkPlan();
+  const mv = blkFrom() !== (RAW_SAV_ROOT && RAW_SAV_ROOT.soul && RAW_SAV_ROOT.soul.flrid);
+  // a floor move's rolls (its re-picked floors and rerolled rewards) are what the lock starts from, so a new roll means a new plan
+  const rolls = mv ? FLOOR_MOVE.rolls : null, reroll = mv ? FLOOR_MOVE.reroll : null;
+  if (!p || p.from !== blkFrom() || p.mode !== BOSS_LOCK.mode || p.which !== BOSS_LOCK.which || p.extend !== BOSS_LOCK.extend || p.rewards !== BOSS_LOCK.rewards || p.rolls !== rolls || p.reroll !== reroll) { const np = blkPlan(); BOSS_LOCK.plan = np && Object.assign(np, { rolls, reroll }); }
   return BOSS_LOCK.plan;
 }
 function applyBossLock(root) {
@@ -5006,7 +5021,7 @@ function renderLocation() {
         if (r.featured) h += `<tr><td>Legendary Chest (map)</td><td>${nm(r.featured.from)}</td><td>${nm(r.featured.to)}</td></tr>`;
         const lockP = BOSS_LOCK.root === RAW_SAV_ROOT && BOSS_LOCK.mode ? blkPlanFresh() : null;
         const lockWrites = id => !!(lockP && lockP.items.some(it => it.floor.id === id && it.entry));
-        for (const u of arr(r.upcoming)) h += `<tr${lockWrites(u.id) ? ' style="opacity:.55;"' : ''}><td>Upcoming ${u.no}F${u.rare ? legendTag() : ''}${u.refix ? `<br><span class="id">${escapeHtml(blkKind(u.refix.from).label)} → ${escapeHtml(blkKind(u.refix.to).label)}</span>` : ''}</td><td class="id">${lockWrites(u.id) ? 'replaced by Lock boss floors below' : 'shown on the map'}</td><td>${u.featured ? 'Legendary Chest: ' + nm(u.featured.to) : '—'} ${flmUpText(u.rwds, nm)}</td></tr>`;
+        for (const u of arr(r.upcoming)) h += `<tr${lockWrites(u.id) ? ' style="opacity:.55;"' : ''}><td>Upcoming ${u.no}F${u.rare && !lockWrites(u.id) ? legendTag() : ''}${u.refix ? `<br><span class="id">${escapeHtml(blkKind(u.refix.from).label)} → ${escapeHtml(blkKind(u.refix.to).label)}</span>` : ''}</td><td class="id">${lockWrites(u.id) ? 'replaced by Lock boss floors below' : 'shown on the map'}</td><td>${lockWrites(u.id) ? '<span class="id">—</span>' : `${u.featured ? 'Legendary Chest: ' + nm(u.featured.to) : '—'} ${flmUpText(u.rwds, nm)}`}</td></tr>`;
         h += `</tbody></table><div class="toolbar" style="margin-top:6px;"><button class="subtle" id="loc-reroll-again">Reroll again</button><span class="capNote" style="margin:0;">Drawn from ${escapeHtml(t.no + 'F')}'s own drop table, the way the game rolls them.</span></div>`;
       } else h += `<div class="capNote">The rewards rolled for ${escapeHtml(f.no + 'F')} are kept.</div>`;
       h += '</div>';
@@ -6283,7 +6298,9 @@ function runCsv(d) {
   const q = v => { const s = String(v == null ? '' : v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
   const lines = [ [ 'Section', 'Field', 'Value' ].join(',') ];
   for (const r of runRows(d)) lines.push(r.map(q).join(','));
-  if (d.upcoming.length) {
+  // reward names only with "Show rewards (spoilers)" ticked, like the tab
+  if (d.upcoming.length && !LOC_SPOIL) lines.push('', [ 'Map rewards', `${d.upcoming.length} boss floors with rewards on the map (hidden: tick "Show rewards (spoilers)" on the Location tab to export them)` ].map(q).join(','));
+  else if (d.upcoming.length) {
     lines.push('', [ 'Map rewards', 'Floor', 'Legendary Chest', 'Rare', 'Other rewards' ].join(','));
     for (const e of d.upcoming) { const hf = hvnFloor(e.flrid); lines.push([ 'Map rewards', hf ? hf.no + 'F' : e.flrid, e.rwdid ? itemDisplayName(e.rwdid) : '', Number(e.is_rare) ? 'yes' : '', runRewardText(e) ].map(q).join(',')); }
   }
@@ -10466,12 +10483,15 @@ function reviewDiff(A, B, rawA, rawB) {
   const fa = rawA.soul && rawA.soul.flrid, fb = rawB.soul && rawB.soul.flrid;
   const locLbl = id => !id ? 'none' : hvnFloor(id) ? hvnFloorLabel(hvnFloor(id)) : id;
   if (fa !== fb) lc.lines.push(`Paused floor: ${locLbl(fa)} → ${locLbl(fb)}`);
-  if (BOSS_LOCK.root === RAW_SAV_ROOT && BOSS_LOCK.mode) {
-    // compare with the planned floors as they'd be after any floor move (the paused floor is never locked)
-    const bl = sec('Boss floor lock'), hA = blkExisting(rawB.soul && rawB.soul.flrid);
+  if (BOSS_LOCK.root === RAW_SAV_ROOT && BOSS_LOCK.mode && !(RUN_END.root === RAW_SAV_ROOT && RUN_END.on)) {
+    // compare with the planned floors as they'd be after any floor move (the paused floor is never locked); the lock
+    // starts from the floor before a go-back to the last boss floor, so that's what it's compared with
+    const bl = sec('Boss floor lock'), hA = blkExisting(blkFrom());
     bl.lines.push(`Locked to: ${BLK_MODES[BOSS_LOCK.mode].label}${BOSS_LOCK.which ? ' · only ' + ((blkWhichOptions(BOSS_LOCK.mode).find(o => o.v === BOSS_LOCK.which) || {}).label || BOSS_LOCK.which) : ''}`);
+    // only the floors the lock writes (a go-back can add a skipped map B floor of its own)
+    const lp = blkPlanFresh(), wrote = new Set(arr(lp && lp.items).filter(it => it.entry).map(it => it.floor.id));
     for (const e of arr(rawB.soul && rawB.soul.hvntrinfo)) {
-      if (e.flrid === rawB.soul.flrid) continue;
+      if (e.flrid === rawB.soul.flrid || !wrote.has(e.flrid)) continue;
       const o = hA.get(e.flrid), f = hvnFloor(e.flrid), lbl = f ? f.no + 'F' : e.flrid;
       if (!o) bl.lines.push(`${lbl}: added as ${blkKind(e.refareaid).label}`);
       else if (o.refareaid !== e.refareaid) bl.lines.push(`${lbl}: ${blkKind(o.refareaid).label} → ${blkKind(e.refareaid).label}`);
