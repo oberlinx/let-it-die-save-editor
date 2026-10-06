@@ -9026,7 +9026,9 @@ let HEALTH_LOAD = { repairedChars: 0 };
 function fightersOverCap() {
   const out = [];
   for (const c of arr(SAVE && SAVE.soul && SAVE.soul.chrs)) {
-    if (!c || !c.bodylvl || c.state === 'ENEMY' || c.state === 'DUMMY') continue;
+    // CONCILIATE fighters (taken from other players) keep the stats and upgrades of their own limit break while the
+    // game stores them at Limit Break 0 (seen in game saves: 30-45 stats, +3 slots / +9 bag), so they're not checked
+    if (!c || !c.bodylvl || c.state === 'ENEMY' || c.state === 'DUMMY' || c.state === 'CONCILIATE') continue;
     const R = fighterRanges(c.type || 'BAL', c.grade != null ? c.grade : 1, c.limit_break || 0);
     const lim = { skill: R.skillCap - R.skillBase, bag: R.bagCap - R.bagBase, rage: R.rageCap - R.rageBase };
     const has = { skill: Number(c.bodylvl.skill) || 0, bag: Number(c.bodylvl.bag) || 0, rage: Number(c.rage) || 0 };
