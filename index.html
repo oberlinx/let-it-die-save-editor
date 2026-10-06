@@ -507,15 +507,21 @@ function teamName(tid) {
   return entry && (entry.name || entry.team && entry.team.name) || null;
 }
 
-function bankMaxLevel() {
-  const rows = AP && AP.spirittank || [];
+// The Kill Coin Bank (safe_level) has its own table, master_safe_level; the SPLithium tank (spirit_tank_level) uses
+// master_spirit_tank_level. The stock tables hold the same limits, but a modded masters.db can change either one.
+function bankRowsFor(levelField) {
+  const safe = AP && arr(AP.safelevel), tank = AP && arr(AP.spirittank);
+  return (levelField || 'safe_level') === 'safe_level' && safe && safe.length ? safe : tank || [];
+}
+function bankMaxLevel(levelField) {
+  const rows = bankRowsFor(levelField);
   return rows.length ? Math.max(...rows.map(r => r.level)) : 50;
 }
 
-function bankCapacityForLevel(level) {
-  const rows = AP && AP.spirittank || [];
+function bankCapacityForLevel(level, levelField) {
+  const rows = bankRowsFor(levelField);
   if (!rows.length) return 0;
-  const l = Math.min(Math.max(level, 1), bankMaxLevel());
+  const l = Math.min(Math.max(level, 1), bankMaxLevel(levelField));
   const row = rows.find(r => r.level === l);
   return row ? row.limit : 0;
 }
@@ -1419,6 +1425,7 @@ async function loadMastersBuffer(buf) {
       quests: all('SELECT * FROM master_quest'),
       teams: all('SELECT * FROM master_team'),
       spirittank: all('SELECT * FROM master_spirit_tank_level'),
+      safelevel: all('SELECT * FROM master_safe_level'),
       bodylvlexp: all('SELECT * FROM master_bodylvl_exp'),
       constInt: all('SELECT * FROM master_const_int'),
       constFloat: all('SELECT * FROM master_const_float'),
@@ -2065,8 +2072,8 @@ function renderAll() {
 
 function bankRow(soul, kind, label, levelField, valueField) {
   const level = soul[levelField] != null ? soul[levelField] : 1;
-  const maxLvl = bankMaxLevel();
-  const cap = bankCapacityForLevel(level);
+  const maxLvl = bankMaxLevel(levelField);
+  const cap = bankCapacityForLevel(level, levelField);
   const val = soul[valueField] != null ? soul[valueField] : 0;
   const over = val > cap;
   return `<div class="bankRow">\n    <div class="bankLabel">${label}</div>\n    <div class="field"><label>Bank Level</label><select data-bank-level="${levelField}" data-bank-cap-target="${valueField}" style="width:100%; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);">${fighterOpts(1, maxLvl, Number(level), v => 'Level ' + v)}</select></div>\n    <div class="field"><label>Held Amount</label><input type="text" inputmode="numeric" data-currency="${valueField}" value="${val.toLocaleString()}"></div>\n    <div class="bankCap ${over ? 'over' : ''}" data-bank-cap-display="${valueField}">cap: ${cap.toLocaleString()}${over ? ' -- OVER CAP' : ''}</div>\n    <div style="display:flex; gap:6px; white-space:nowrap;"><button class="subtle" data-bank-fill="${valueField}" data-bank-fill-level="${levelField}" title="Fill to this bank level's cap without changing the level">Fill to cap</button>\n    <button class="subtle" data-bank-max="${levelField}" data-bank-max-value="${valueField}" title="Max the bank level and fill it">Max level + fill</button></div>\n  </div>`;
@@ -2106,20 +2113,20 @@ function wireCurrency() {
   });
   document.querySelectorAll('[data-bank-level]').forEach(inp => {
     inp.addEventListener('change', () => {
-      const maxLvl = bankMaxLevel();
+      const maxLvl = bankMaxLevel(inp.dataset.bankLevel);
       let lvl = parseInt(inp.value, 10) || 1;
       if (lvl < 1) lvl = 1;
       if (lvl > maxLvl) lvl = maxLvl;
       inp.value = lvl;
       SAVE.soul[inp.dataset.bankLevel] = lvl;
       // the game stores only the level; a *_limit field is written only if the save already has one
-      { const lk = inp.dataset.bankLevel.replace('_level', '_limit'); if (lk in SAVE.soul) SAVE.soul[lk] = bankCapacityForLevel(lvl); }
+      { const lk = inp.dataset.bankLevel.replace('_level', '_limit'); if (lk in SAVE.soul) SAVE.soul[lk] = bankCapacityForLevel(lvl, inp.dataset.bankLevel); }
       updateBankCapDisplay(inp.dataset.bankCapTarget);
     });
   });
   document.querySelectorAll('[data-bank-fill]').forEach(btn => {
     btn.addEventListener('click', () => {
-      const cap = bankCapacityForLevel(SAVE.soul[btn.dataset.bankFillLevel] || 1);
+      const cap = bankCapacityForLevel(SAVE.soul[btn.dataset.bankFillLevel] || 1, btn.dataset.bankFillLevel);
       SAVE.soul[btn.dataset.bankFill] = cap;
       renderAll();
       toast(`Filled to ${cap.toLocaleString()} (cap at bank level ${SAVE.soul[btn.dataset.bankFillLevel] || 1})`);
@@ -2127,10 +2134,10 @@ function wireCurrency() {
   });
   document.querySelectorAll('[data-bank-max]').forEach(btn => {
     btn.addEventListener('click', () => {
-      const maxLvl = bankMaxLevel();
+      const maxLvl = bankMaxLevel(btn.dataset.bankMax);
       SAVE.soul[btn.dataset.bankMax] = maxLvl;
-      { const lk = btn.dataset.bankMax.replace('_level', '_limit'); if (lk in SAVE.soul) SAVE.soul[lk] = bankCapacityForLevel(maxLvl); }
-      SAVE.soul[btn.dataset.bankMaxValue] = bankCapacityForLevel(maxLvl);
+      { const lk = btn.dataset.bankMax.replace('_level', '_limit'); if (lk in SAVE.soul) SAVE.soul[lk] = bankCapacityForLevel(maxLvl, btn.dataset.bankMax); }
+      SAVE.soul[btn.dataset.bankMaxValue] = bankCapacityForLevel(maxLvl, btn.dataset.bankMax);
       renderAll();
       toast(`Bank maxed to level ${maxLvl}`);
     });
@@ -2141,7 +2148,7 @@ function wireCurrency() {
 function updateBankCapDisplay(valueField) {
   const levelField = valueField === 'free_money' ? 'safe_level' : 'spirit_tank_level';
   const level = SAVE.soul[levelField] || 1;
-  const cap = bankCapacityForLevel(level);
+  const cap = bankCapacityForLevel(level, levelField);
   const val = SAVE.soul[valueField] || 0;
   const display = document.querySelector(`[data-bank-cap-display="${valueField}"]`);
   if (display) {
@@ -9168,6 +9175,70 @@ function fixDanglingSlots() {
   for (const x of d.storage) x.sl[x.k] = '-1';
   return d.hangers.length + d.storage.length;
 }
+// defense lineup (fortzmbsetting) in step with the fighters: every entry a GUARD fighter that exists, every GUARD
+// fighter in the lineup, one per place (2 waves of 5 places, 9 at most: checked separately), one alarm carrier.
+// All 7 game saves with a lineup follow these.
+function defenseProblems() {
+  const list = arr(SAVE && SAVE.fortsetting), out = { bad: [], stray: [], alarms: 0 };
+  const seenPos = new Set(), seenCid = new Set();
+  for (const e of list) {
+    const c = arr(SAVE.soul.chrs).find(x => x && x.cid === e.cid), pos = e.wave + ':' + e.order;
+    const why = !c ? 'not in the save' : c.state !== 'GUARD' ? `not a defender (${c.state})` : !(e.wave >= 0 && e.wave < DEF_WAVES && e.order >= 0 && e.order < DEF_SLOTS) ? 'not a real place' : seenPos.has(pos) ? 'two defenders in one place' : seenCid.has(e.cid) ? 'in two places' : '';
+    if (why) out.bad.push({ e, c, why });
+    else { seenPos.add(pos); seenCid.add(e.cid); }
+  }
+  for (const c of arr(SAVE && SAVE.soul && SAVE.soul.chrs)) if (c && c.state === 'GUARD' && !list.some(e => e.cid === c.cid)) out.stray.push(c);
+  out.alarms = list.filter(e => e.is_equip_whistle).length;
+  return out;
+}
+function fixDefenseProblems() {
+  const d = defenseProblems(), list = defLineup();
+  for (const b of d.bad) { const i = list.indexOf(b.e); if (i >= 0) list.splice(i, 1); }
+  // the game puts a defender taken off the lineup back in the freezer (including one whose place was removed above)
+  for (const c of arr(SAVE.soul.chrs)) if (c && c.state === 'GUARD' && !list.some(e => e.cid === c.cid)) c.state = 'FREE';
+  let kept = false;
+  for (const e of list) { if (e.is_equip_whistle && kept) e.is_equip_whistle = 0; else if (e.is_equip_whistle) kept = true; }
+  list.sort((a, b) => a.wave - b.wave || a.order - b.order);
+  return d.bad.length + d.stray.length + Math.max(0, d.alarms - 1);
+}
+// exactly one fighter in use (state USE): every game save has one, in a run or not
+function inUseProblem() {
+  const chrs = arr(SAVE && SAVE.soul && SAVE.soul.chrs), use = chrs.filter(c => c && c.state === 'USE');
+  return use.length === 1 ? null : { use, chrs };
+}
+function fixInUse() {
+  const p = inUseProblem();
+  if (!p) return '';
+  let keep;
+  if (p.use.length > 1) {
+    // the fighter the run belongs to, else the current fighter, else the first
+    keep = p.use.find(c => c.pause) || p.use.find(c => c.cid === SAVE.soul.crntcid) || p.use[0];
+    for (const c of p.use) if (c !== keep) c.state = 'FREE';
+  } else {
+    keep = p.chrs.find(c => c && c.cid === SAVE.soul.crntcid && c.state === 'FREE' && !c.abid) || p.chrs.find(c => c && c.state === 'FREE' && !c.abid);
+    if (!keep) return 'No fighter in the freezer could be picked.';
+    keep.state = 'USE';
+  }
+  SAVE.soul.crntcid = keep.cid;
+  return `${keep.name || 'A fighter'} is the fighter in use.`;
+}
+// the alarm bought (soul.whistle_id) must be one master_fort_whistle knows
+function alarmUnknown() {
+  const id = SAVE && SAVE.soul && SAVE.soul.whistle_id;
+  return id && arr(AP && AP.fortWhistle).length && !defAlarmRow(id) ? id : '';
+}
+// a Bank / SPLithium tank limit the save stores must be the limit for its level (master_safe_level /
+// master_spirit_tank_level); the game stores only the level, so most saves have no *_limit field at all
+function bankLimitMismatches() {
+  const soul = (SAVE && SAVE.soul) || {}, out = [];
+  for (const [ lf, label ] of [ [ 'safe_level', 'Bank' ], [ 'spirit_tank_level', 'SPLithium tank' ] ]) {
+    const kf = lf.replace('_level', '_limit');
+    if (!(kf in soul) || soul[kf] == null || soul[kf] === '') continue;
+    const want = bankCapacityForLevel(soul[lf] != null ? soul[lf] : 1, lf);
+    if (want && Number(soul[kf]) !== want) out.push({ kf, lf, label, have: Number(soul[kf]), want });
+  }
+  return out;
+}
 
 function runSaveCheck() {
   const out = [];
@@ -9239,6 +9310,46 @@ function runSaveCheck() {
     const parts = [ d.hangers.length && `${d.hangers.length} freezer hanger${d.hangers.length === 1 ? ' names a fighter' : 's name fighters'} that ${d.hangers.length === 1 ? "isn't" : "aren't"} in the save (or one already in another hanger)`, d.storage.length && `${d.storage.length} Storage Box slot${d.storage.length === 1 ? ' names an item' : 's name items'} that ${d.storage.length === 1 ? "isn't" : "aren't"} stored` ].filter(Boolean);
     add('problem', `${parts.join('; ')}. The game expects every hanger and slot to point at something real.`, d.hangers.length ? 'fighters' : 'storage', {
       label: 'Empty them', run: () => { const k = fixDanglingSlots(); return `Emptied ${k} hanger${k === 1 ? '' : 's'}/slot${k === 1 ? '' : 's'}.`; }
+    });
+  });
+
+  // exactly one fighter in use
+  safe('fighter in use', () => {
+    const p = inUseProblem();
+    if (!p) return;
+    add('problem', p.use.length ? `${p.use.length} fighters are set as the fighter in use (${escapeHtml(p.use.map(c => c.name || '?').join(', '))}). The game always has exactly one.` : `No fighter is set as the fighter in use. The game always has exactly one.`, 'fighters', {
+      label: p.use.length ? 'Keep one in use' : 'Pick one', run: fixInUse
+    });
+  });
+
+  // defense lineup in step with the defenders
+  safe('defense lineup', () => {
+    const d = defenseProblems();
+    if (!d.bad.length && !d.stray.length && d.alarms <= 1) return;
+    const parts = [];
+    if (d.bad.length) parts.push(`${d.bad.length} lineup place${d.bad.length === 1 ? '' : 's'} can't be used (${escapeHtml(d.bad.slice(0, 3).map(b => `${(b.c && b.c.name) || 'a missing fighter'}: ${b.why}`).join('; '))})`);
+    if (d.stray.length) parts.push(`${d.stray.length} fighter${d.stray.length === 1 ? ' is' : 's are'} set to defend but not in the lineup (${escapeHtml(d.stray.slice(0, 3).map(c => c.name || '?').join(', '))})`);
+    if (d.alarms > 1) parts.push(`${d.alarms} defenders carry the alarm (only one can)`);
+    add('problem', `Defense lineup: ${parts.join('; ')}.`, 'defense', {
+      label: 'Fix the lineup', run: () => { const k = fixDefenseProblems(); return `Fixed ${k} lineup problem${k === 1 ? '' : 's'} (defenders not in the lineup went back to the freezer).`; }
+    });
+  });
+
+  // the defense alarm must be one this masters.db knows
+  safe('defense alarm', () => {
+    const id = alarmUnknown();
+    if (!id) return;
+    add('warning', `The defense alarm (${escapeHtml(id)}) isn't in this masters.db, so the game can't use it.`, 'defense', {
+      label: 'Remove the alarm', run: () => { SAVE.soul.whistle_id = ''; for (const e of defLineup()) e.is_equip_whistle = 0; return 'Alarm removed.'; }
+    });
+  });
+
+  // stored Bank / tank limits must match the level
+  safe('bank limits', () => {
+    const bad = bankLimitMismatches();
+    if (!bad.length) return;
+    add('warning', `${bad.map(b => `${b.label} limit is saved as ${b.have.toLocaleString()} but level ${SAVE.soul[b.lf]} holds ${b.want.toLocaleString()}`).join('; ')}.`, 'account', {
+      label: 'Set the limit for the level', run: () => { for (const b of bankLimitMismatches()) SAVE.soul[b.kf] = b.want; return 'Limits set to match the levels.'; }
     });
   });
 
@@ -9467,7 +9578,7 @@ function runSaveCheck() {
   safe('bank', () => {
     const rows = [ [ 'free_money', 'safe_level', 'Kill Coins' ], [ 'spirit', 'spirit_tank_level', 'SPLithium' ] ];
     for (const [v, l, label] of rows) {
-      const cap = bankCapacityForLevel(soul[l] != null ? soul[l] : 1);
+      const cap = bankCapacityForLevel(soul[l] != null ? soul[l] : 1, l);
       if (cap && (soul[v] || 0) > cap) add('warning', `${label} (${Number(soul[v]).toLocaleString()}) is over the bank limit for its level (${cap.toLocaleString()}).`, 'account');
     }
   });

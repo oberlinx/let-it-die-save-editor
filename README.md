@@ -72,12 +72,15 @@ When you load a save, a **Save check** panel above the tabs lists anything the e
   - items in two places at once;
   - freezer hangers naming a fighter that isn't in the save (or one already in another hanger) and Storage Box slots naming an item that isn't stored (fix: empty them);
   - fighters added by an older editor without a freezer slot (fix included);
-  - more than 9 defenders (fix: keep the first 9).
+  - more than 9 defenders (fix: keep the first 9);
+  - a defense lineup out of step with the defenders: a place naming a fighter who isn't in the save or isn't a defender, two defenders in one place, a defender who isn't in the lineup, or more than one alarm carrier (fix: drop the bad places, send stray defenders back to the freezer, keep one carrier);
+  - a defense alarm this masters.db doesn't know (fix: remove it);
+  - no fighter, or more than one, set as the fighter in use (fix: keep one, or pick one).
 - **Runs:**
   - a fighter whose run was closed or crashed without pausing 3 or more times. The game cuts that run's Bloodnium, and much harder from 10. Fix: reset the count.
   - a save in a run that ended without pausing. The game tries to resume it on load, and saves like this can crash, most likely when it stopped on a normal floor. Fix: **End the run**, or **Go back to the last boss floor** on the Location tab to keep the run (both confirmed in game).
 - **Account and items:**
-  - Kill Coins or SPLithium over the Bank or Tank limit;
+  - Kill Coins or SPLithium over the Bank or Tank limit (the Bank's limits come from `master_safe_level`, the SPLithium tank's from `master_spirit_tank_level`, so a modified masters.db is followed), and a saved Bank or tank limit that doesn't match its level (fix included);
   - decal counts negative or over the cap;
   - Reward Box items in a format the game can't read (fix included), weapons or armor that would arrive with 0 durability (fix included), and items the game can't hand over (fix: remove);
   - death boxes in an old format (fix included);
