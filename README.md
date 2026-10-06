@@ -48,6 +48,7 @@ You can also download `index.html` and open it straight from your PC.
 | **Compare** | Load a second save, see what differs, and copy ticked parts into the save you're editing (account values, fighters with their gear, research, decal stock, Waiting Room decorations, Reward Box and Storage items). You can also choose which account the downloaded save belongs to, to move progress onto another account, or **clone the whole second save onto the account you're editing**: everything comes from the other save, but the account ID, name and Steam/PSN IDs stay yours, so the game loads it as your save. Cloning a PlayStation save onto a PC account warns you first and lists any PS-only content |
 | **Defense** | Tokyo Death Metro defense: set the lineup (up to 9 defenders: one wave 5, the other 4) from your freezer fighters, choose the defense alarm and which defender carries it, max the alarm time (5 days) and kidnap protection (12 hours). Only alarms unlocked at your deepest floor can be picked, and the tab stays locked until Tokyo Death Metro is open |
 | **Raw data** | Read only, for power users: browse the whole save as the game stores it, field by field (click a name to open it, a breadcrumb to go back; big lists 200 at a time). Search keys and values, copy a value or its path, or download any part as `.json`. Numbers that look like dates show the date. **Show with your edits** shows the save exactly as Download would write it. Nothing can be changed here on purpose; the other tabs check every change against the game's rules |
+| **JSON compare (advanced)** | For advanced users, read only. Compares two saves field by field the way the game stores them: this save (as loaded, or with your edits as Download would write it) against a second save, the save loaded on the Compare tab, or the other version of this save. Lists of records are matched by their id, so a reordered list isn't reported as changed. Each changed object is shown side by side, a line per field, with changed lines highlighted and unchanged ones folded; filter by section, by kind (changed, only on the left, only on the right) or by path, open any object to browse it side by side, and download the differences as text. **Search** finds keys and values in both saves. Comparing "as loaded" with "with your edits" shows exactly what your edits change. A warning reminds you that editing a save's JSON by hand can corrupt it |
 
 ### Save check
 
@@ -72,12 +73,15 @@ When you load a save, a **Save check** panel above the tabs lists anything the e
   - items in two places at once;
   - freezer hangers naming a fighter that isn't in the save (or one already in another hanger) and Storage Box slots naming an item that isn't stored (fix: empty them);
   - fighters added by an older editor without a freezer slot (fix included);
-  - more than 9 defenders (fix: keep the first 9).
+  - more than 9 defenders (fix: keep the first 9);
+  - a defense lineup out of step with the defenders: a place naming a fighter who isn't in the save or isn't a defender, two defenders in one place, a defender who isn't in the lineup, or more than one alarm carrier (fix: drop the bad places, send stray defenders back to the freezer, keep one carrier);
+  - a defense alarm this masters.db doesn't know (fix: remove it);
+  - no fighter, or more than one, set as the fighter in use (fix: keep one, or pick one).
 - **Runs:**
   - a fighter whose run was closed or crashed without pausing 3 or more times. The game cuts that run's Bloodnium, and much harder from 10. Fix: reset the count.
   - a save in a run that ended without pausing. The game tries to resume it on load, and saves like this can crash, most likely when it stopped on a normal floor. Fix: **End the run**, or **Go back to the last boss floor** on the Location tab to keep the run (both confirmed in game).
 - **Account and items:**
-  - Kill Coins or SPLithium over the Bank or Tank limit;
+  - Kill Coins or SPLithium over the Bank or Tank limit (the Bank's limits come from `master_safe_level`, the SPLithium tank's from `master_spirit_tank_level`, so a modified masters.db is followed), and a saved Bank or tank limit that doesn't match its level (fix included);
   - decal counts negative or over the cap;
   - Reward Box items in a format the game can't read (fix included), weapons or armor that would arrive with 0 durability (fix included), and items the game can't hand over (fix: remove);
   - death boxes in an old format (fix included);

@@ -171,6 +171,18 @@
   .subTab { padding: 5px 12px; border: 1px solid var(--panel-border); background: var(--bg); color: var(--text-dim); cursor: pointer; font-size: 11.5px; }
   .subTab.active { border-color: var(--accent); color: var(--accent-bright); background: rgba(168,41,31,0.1); }
 
+  .jdTable { width: 100%; border-collapse: collapse; table-layout: fixed; font-family: var(--mono); font-size: 11.5px; }
+  .jdTable td { padding: 1px 6px; vertical-align: top; border-bottom: 1px solid rgba(255,255,255,.04); overflow-wrap: anywhere; white-space: pre-wrap; }
+  .jdTable td.jdNo { width: 36px; color: var(--text-faint); text-align: right; user-select: none; }
+  .jdTable tr.jdChg td.jdA, .jdTable tr.jdChg td.jdB { background: rgba(230, 180, 80, .13); }
+  .jdTable tr.jdDel td.jdA { background: rgba(230, 80, 70, .18); }
+  .jdTable tr.jdAdd td.jdB { background: rgba(90, 200, 110, .16); }
+  .jdTable tr.jdCtx td { color: var(--text-dim); }
+  .jdTable tr.jdMark td { outline: 1px solid #35c6d8; }
+  .jdTable tr.jdGap td { color: var(--text-faint); text-align: center; font-style: italic; }
+  .jdGroup { border: 1px solid var(--panel-border); margin: 0 0 10px; }
+  .jdGroupHead { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 5px 8px; background: var(--bg-raised); border-bottom: 1px solid var(--panel-border); font-family: var(--mono); font-size: 11.5px; }
+  .jdLink { cursor: pointer; text-decoration: underline dotted; }
   .warnNote { font-size: 11px; padding: 8px 10px; border: 1px solid var(--warn); color: var(--warn); margin-bottom: 10px; }
   .capNote { font-size: 10.5px; color: var(--text-faint); margin: 4px 0 12px; }
   summary { list-style: none; }
@@ -507,15 +519,21 @@ function teamName(tid) {
   return entry && (entry.name || entry.team && entry.team.name) || null;
 }
 
-function bankMaxLevel() {
-  const rows = AP && AP.spirittank || [];
+// The Kill Coin Bank (safe_level) has its own table, master_safe_level; the SPLithium tank (spirit_tank_level) uses
+// master_spirit_tank_level. The stock tables hold the same limits, but a modded masters.db can change either one.
+function bankRowsFor(levelField) {
+  const safe = AP && arr(AP.safelevel), tank = AP && arr(AP.spirittank);
+  return (levelField || 'safe_level') === 'safe_level' && safe && safe.length ? safe : tank || [];
+}
+function bankMaxLevel(levelField) {
+  const rows = bankRowsFor(levelField);
   return rows.length ? Math.max(...rows.map(r => r.level)) : 50;
 }
 
-function bankCapacityForLevel(level) {
-  const rows = AP && AP.spirittank || [];
+function bankCapacityForLevel(level, levelField) {
+  const rows = bankRowsFor(levelField);
   if (!rows.length) return 0;
-  const l = Math.min(Math.max(level, 1), bankMaxLevel());
+  const l = Math.min(Math.max(level, 1), bankMaxLevel(levelField));
   const row = rows.find(r => r.level === l);
   return row ? row.limit : 0;
 }
@@ -1419,6 +1437,7 @@ async function loadMastersBuffer(buf) {
       quests: all('SELECT * FROM master_quest'),
       teams: all('SELECT * FROM master_team'),
       spirittank: all('SELECT * FROM master_spirit_tank_level'),
+      safelevel: all('SELECT * FROM master_safe_level'),
       bodylvlexp: all('SELECT * FROM master_bodylvl_exp'),
       constInt: all('SELECT * FROM master_const_int'),
       constFloat: all('SELECT * FROM master_const_float'),
@@ -1987,6 +2006,9 @@ const TABS = [ {
 }, {
   id: 'raw',
   label: 'Raw data'
+}, {
+  id: 'jdiff',
+  label: 'JSON compare (advanced)'
 } ];
 
 let activeTab = 'account';
@@ -1999,7 +2021,7 @@ function renderAll() {
     if (el.scrollTop > 0) scrollStates[el.id] = el.scrollTop;
   });
   if (TABS.some(t => t.id === activeTab && t.when && !t.when())) activeTab = 'account';
-  app.innerHTML = `\n    ${blockHealth()}\n    <div class="tabbar">\n      ${TABS.filter(t => !t.when || t.when()).map(t => `<button class="tabbtn ${activeTab === t.id ? 'active' : ''}" data-tab-btn="${t.id}">${t.label}</button>`).join('')}\n    </div>\n    <div class="tabpanel" data-tab-panel="account" style="display:${activeTab === 'account' ? 'block' : 'none'}">${blockCurrency()}</div>\n    <div class="tabpanel" data-tab-panel="fighters" style="display:${activeTab === 'fighters' ? 'block' : 'none'}">${blockCharacters()}${blockSkins()}</div>\n    <div class="tabpanel" data-tab-panel="research" style="display:${activeTab === 'research' ? 'block' : 'none'}">${blockBlueprints()}</div>\n    <div class="tabpanel" data-tab-panel="decals" style="display:${activeTab === 'decals' ? 'block' : 'none'}">${blockSkillDecals()}</div>\n    <div class="tabpanel" data-tab-panel="stews" style="display:${activeTab === 'stews' ? 'block' : 'none'}">${blockStews()}</div>\n    <div class="tabpanel" data-tab-panel="bags" style="display:${activeTab === 'bags' ? 'block' : 'none'}">${blockBags()}</div>\n    <div class="tabpanel" data-tab-panel="boxes" style="display:${activeTab === 'boxes' ? 'block' : 'none'}">${blockBoxes()}</div>\n    <div class="tabpanel" data-tab-panel="hub" style="display:${activeTab === 'hub' ? 'block' : 'none'}">${blockHub()}</div>\n    <div class="tabpanel" data-tab-panel="defense" style="display:${activeTab === 'defense' ? 'block' : 'none'}">${blockDefense()}</div>\n    <div class="tabpanel" data-tab-panel="photos" style="display:${activeTab === 'photos' ? 'block' : 'none'}">${blockPhotos()}</div>\n    <div class="tabpanel" data-tab-panel="graves" style="display:${activeTab === 'graves' ? 'block' : 'none'}">${blockGraves()}</div>\n    <div class="tabpanel" data-tab-panel="dates" style="display:${activeTab === 'dates' ? 'block' : 'none'}">${blockDates()}</div>\n    <div class="tabpanel" data-tab-panel="storage" style="display:${activeTab === 'storage' ? 'block' : 'none'}">${blockStorageBox()}</div>\n    <div class="tabpanel" data-tab-panel="rewards" style="display:${activeTab === 'rewards' ? 'block' : 'none'}">${blockRewardBox()}</div>\n    <div class="tabpanel" data-tab-panel="quests" style="display:${activeTab === 'quests' ? 'block' : 'none'}">${blockQuests()}</div>\n    <div class="tabpanel" data-tab-panel="rally" style="display:${activeTab === 'rally' ? 'block' : 'none'}">${blockRally()}</div>\n    <div class="tabpanel" data-tab-panel="location" style="display:${activeTab === 'location' ? 'block' : 'none'}">${blockLocation()}</div>\n    <div class="tabpanel" data-tab-panel="run" style="display:${activeTab === 'run' ? 'block' : 'none'}">${blockRun()}</div>\n    <div class="tabpanel" data-tab-panel="collection" style="display:${activeTab === 'collection' ? 'block' : 'none'}">${blockCollection()}</div>\n    <div class="tabpanel" data-tab-panel="jackals" style="display:${activeTab === 'jackals' ? 'block' : 'none'}">${blockJackals()}</div>\n    <div class="tabpanel" data-tab-panel="layouts" style="display:${activeTab === 'layouts' ? 'block' : 'none'}">${blockLayouts()}</div>\n    <div class="tabpanel" data-tab-panel="stats" style="display:${activeTab === 'stats' ? 'block' : 'none'}">${blockStats()}</div>\n    <div class="tabpanel" data-tab-panel="vip" style="display:${activeTab === 'vip' ? 'block' : 'none'}">${blockVip()}${blockFreeCont()}</div>\n    <div class="tabpanel" data-tab-panel="compare" style="display:${activeTab === 'compare' ? 'block' : 'none'}">${blockCompare()}</div>\n    <div class="tabpanel" data-tab-panel="raw" style="display:${activeTab === 'raw' ? 'block' : 'none'}">${blockRaw()}</div>\n  `;
+  app.innerHTML = `\n    ${blockHealth()}\n    <div class="tabbar">\n      ${TABS.filter(t => !t.when || t.when()).map(t => `<button class="tabbtn ${activeTab === t.id ? 'active' : ''}" data-tab-btn="${t.id}">${t.label}</button>`).join('')}\n    </div>\n    <div class="tabpanel" data-tab-panel="account" style="display:${activeTab === 'account' ? 'block' : 'none'}">${blockCurrency()}</div>\n    <div class="tabpanel" data-tab-panel="fighters" style="display:${activeTab === 'fighters' ? 'block' : 'none'}">${blockCharacters()}${blockSkins()}</div>\n    <div class="tabpanel" data-tab-panel="research" style="display:${activeTab === 'research' ? 'block' : 'none'}">${blockBlueprints()}</div>\n    <div class="tabpanel" data-tab-panel="decals" style="display:${activeTab === 'decals' ? 'block' : 'none'}">${blockSkillDecals()}</div>\n    <div class="tabpanel" data-tab-panel="stews" style="display:${activeTab === 'stews' ? 'block' : 'none'}">${blockStews()}</div>\n    <div class="tabpanel" data-tab-panel="bags" style="display:${activeTab === 'bags' ? 'block' : 'none'}">${blockBags()}</div>\n    <div class="tabpanel" data-tab-panel="boxes" style="display:${activeTab === 'boxes' ? 'block' : 'none'}">${blockBoxes()}</div>\n    <div class="tabpanel" data-tab-panel="hub" style="display:${activeTab === 'hub' ? 'block' : 'none'}">${blockHub()}</div>\n    <div class="tabpanel" data-tab-panel="defense" style="display:${activeTab === 'defense' ? 'block' : 'none'}">${blockDefense()}</div>\n    <div class="tabpanel" data-tab-panel="photos" style="display:${activeTab === 'photos' ? 'block' : 'none'}">${blockPhotos()}</div>\n    <div class="tabpanel" data-tab-panel="graves" style="display:${activeTab === 'graves' ? 'block' : 'none'}">${blockGraves()}</div>\n    <div class="tabpanel" data-tab-panel="dates" style="display:${activeTab === 'dates' ? 'block' : 'none'}">${blockDates()}</div>\n    <div class="tabpanel" data-tab-panel="storage" style="display:${activeTab === 'storage' ? 'block' : 'none'}">${blockStorageBox()}</div>\n    <div class="tabpanel" data-tab-panel="rewards" style="display:${activeTab === 'rewards' ? 'block' : 'none'}">${blockRewardBox()}</div>\n    <div class="tabpanel" data-tab-panel="quests" style="display:${activeTab === 'quests' ? 'block' : 'none'}">${blockQuests()}</div>\n    <div class="tabpanel" data-tab-panel="rally" style="display:${activeTab === 'rally' ? 'block' : 'none'}">${blockRally()}</div>\n    <div class="tabpanel" data-tab-panel="location" style="display:${activeTab === 'location' ? 'block' : 'none'}">${blockLocation()}</div>\n    <div class="tabpanel" data-tab-panel="run" style="display:${activeTab === 'run' ? 'block' : 'none'}">${blockRun()}</div>\n    <div class="tabpanel" data-tab-panel="collection" style="display:${activeTab === 'collection' ? 'block' : 'none'}">${blockCollection()}</div>\n    <div class="tabpanel" data-tab-panel="jackals" style="display:${activeTab === 'jackals' ? 'block' : 'none'}">${blockJackals()}</div>\n    <div class="tabpanel" data-tab-panel="layouts" style="display:${activeTab === 'layouts' ? 'block' : 'none'}">${blockLayouts()}</div>\n    <div class="tabpanel" data-tab-panel="stats" style="display:${activeTab === 'stats' ? 'block' : 'none'}">${blockStats()}</div>\n    <div class="tabpanel" data-tab-panel="vip" style="display:${activeTab === 'vip' ? 'block' : 'none'}">${blockVip()}${blockFreeCont()}</div>\n    <div class="tabpanel" data-tab-panel="compare" style="display:${activeTab === 'compare' ? 'block' : 'none'}">${blockCompare()}</div>\n    <div class="tabpanel" data-tab-panel="raw" style="display:${activeTab === 'raw' ? 'block' : 'none'}">${blockRaw()}</div>\n    <div class="tabpanel" data-tab-panel="jdiff" style="display:${activeTab === 'jdiff' ? 'block' : 'none'}">${blockJd()}</div>\n  `;
   wireHealth();
   wireCurrency();
   wireCharacters();
@@ -2028,6 +2050,7 @@ function renderAll() {
   wireFsec();
   wireCompare();
   wireRaw();
+  wireJd();
   document.querySelectorAll('[data-tab-btn]').forEach(btn => {
     btn.addEventListener('click', () => {
       activeTab = btn.dataset.tabBtn;
@@ -2053,6 +2076,7 @@ function renderAll() {
       if (activeTab === 'graves') renderGraves();
       if (activeTab === 'compare') renderCompare();
       if (activeTab === 'raw') renderRaw();
+      if (activeTab === 'jdiff') renderJd();
       window.scrollTo(0, 0);
     });
   });
@@ -2065,8 +2089,8 @@ function renderAll() {
 
 function bankRow(soul, kind, label, levelField, valueField) {
   const level = soul[levelField] != null ? soul[levelField] : 1;
-  const maxLvl = bankMaxLevel();
-  const cap = bankCapacityForLevel(level);
+  const maxLvl = bankMaxLevel(levelField);
+  const cap = bankCapacityForLevel(level, levelField);
   const val = soul[valueField] != null ? soul[valueField] : 0;
   const over = val > cap;
   return `<div class="bankRow">\n    <div class="bankLabel">${label}</div>\n    <div class="field"><label>Bank Level</label><select data-bank-level="${levelField}" data-bank-cap-target="${valueField}" style="width:100%; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);">${fighterOpts(1, maxLvl, Number(level), v => 'Level ' + v)}</select></div>\n    <div class="field"><label>Held Amount</label><input type="text" inputmode="numeric" data-currency="${valueField}" value="${val.toLocaleString()}"></div>\n    <div class="bankCap ${over ? 'over' : ''}" data-bank-cap-display="${valueField}">cap: ${cap.toLocaleString()}${over ? ' -- OVER CAP' : ''}</div>\n    <div style="display:flex; gap:6px; white-space:nowrap;"><button class="subtle" data-bank-fill="${valueField}" data-bank-fill-level="${levelField}" title="Fill to this bank level's cap without changing the level">Fill to cap</button>\n    <button class="subtle" data-bank-max="${levelField}" data-bank-max-value="${valueField}" title="Max the bank level and fill it">Max level + fill</button></div>\n  </div>`;
@@ -2106,20 +2130,20 @@ function wireCurrency() {
   });
   document.querySelectorAll('[data-bank-level]').forEach(inp => {
     inp.addEventListener('change', () => {
-      const maxLvl = bankMaxLevel();
+      const maxLvl = bankMaxLevel(inp.dataset.bankLevel);
       let lvl = parseInt(inp.value, 10) || 1;
       if (lvl < 1) lvl = 1;
       if (lvl > maxLvl) lvl = maxLvl;
       inp.value = lvl;
       SAVE.soul[inp.dataset.bankLevel] = lvl;
       // the game stores only the level; a *_limit field is written only if the save already has one
-      { const lk = inp.dataset.bankLevel.replace('_level', '_limit'); if (lk in SAVE.soul) SAVE.soul[lk] = bankCapacityForLevel(lvl); }
+      { const lk = inp.dataset.bankLevel.replace('_level', '_limit'); if (lk in SAVE.soul) SAVE.soul[lk] = bankCapacityForLevel(lvl, inp.dataset.bankLevel); }
       updateBankCapDisplay(inp.dataset.bankCapTarget);
     });
   });
   document.querySelectorAll('[data-bank-fill]').forEach(btn => {
     btn.addEventListener('click', () => {
-      const cap = bankCapacityForLevel(SAVE.soul[btn.dataset.bankFillLevel] || 1);
+      const cap = bankCapacityForLevel(SAVE.soul[btn.dataset.bankFillLevel] || 1, btn.dataset.bankFillLevel);
       SAVE.soul[btn.dataset.bankFill] = cap;
       renderAll();
       toast(`Filled to ${cap.toLocaleString()} (cap at bank level ${SAVE.soul[btn.dataset.bankFillLevel] || 1})`);
@@ -2127,10 +2151,10 @@ function wireCurrency() {
   });
   document.querySelectorAll('[data-bank-max]').forEach(btn => {
     btn.addEventListener('click', () => {
-      const maxLvl = bankMaxLevel();
+      const maxLvl = bankMaxLevel(btn.dataset.bankMax);
       SAVE.soul[btn.dataset.bankMax] = maxLvl;
-      { const lk = btn.dataset.bankMax.replace('_level', '_limit'); if (lk in SAVE.soul) SAVE.soul[lk] = bankCapacityForLevel(maxLvl); }
-      SAVE.soul[btn.dataset.bankMaxValue] = bankCapacityForLevel(maxLvl);
+      { const lk = btn.dataset.bankMax.replace('_level', '_limit'); if (lk in SAVE.soul) SAVE.soul[lk] = bankCapacityForLevel(maxLvl, btn.dataset.bankMax); }
+      SAVE.soul[btn.dataset.bankMaxValue] = bankCapacityForLevel(maxLvl, btn.dataset.bankMax);
       renderAll();
       toast(`Bank maxed to level ${maxLvl}`);
     });
@@ -2141,7 +2165,7 @@ function wireCurrency() {
 function updateBankCapDisplay(valueField) {
   const levelField = valueField === 'free_money' ? 'safe_level' : 'spirit_tank_level';
   const level = SAVE.soul[levelField] || 1;
-  const cap = bankCapacityForLevel(level);
+  const cap = bankCapacityForLevel(level, levelField);
   const val = SAVE.soul[valueField] || 0;
   const display = document.querySelector(`[data-bank-cap-display="${valueField}"]`);
   if (display) {
@@ -5931,6 +5955,282 @@ function wireRawUi(data, node, keys) {
   if ($('raw-hits-close')) $('raw-hits-close').addEventListener('click', e => { e.preventDefault(); RAW_VIEW.hits = null; renderRaw(); });
 }
 function wireRaw() { if (activeTab === 'raw') renderRaw(); }
+
+// ===== JSON compare (advanced, read only): two saves side by side, line by line, with search =====
+// Compares the saves by their JSON structure, not as text (a save is 0.5-1.1 million lines when laid out one value
+// per line): objects key by key, lists of records matched by their id (eid, cid, ...) so a list the game reordered
+// isn't reported as changed. Changes are grouped by the object they're in and shown side by side, a line per field,
+// changed lines highlighted and unchanged ones folded. Search runs over both saves. Nothing here changes the save.
+const JD_IDS = [ 'eid', 'cid', 'eptid', 'emsrid', 'ebstid', 'eitemid', 'pid', 'qid', 'sklid', 'cstmid', 'id', 'flrid', 'ptid', 'itemId', 'slot' ];
+const JD_MAX = 20000, JD_PAGE = 60, JD_VIEW_PAGE = 200;
+let JD = { root: null, aSrc: 'loaded', bSrc: 'file', fileRoot: null, fileName: '', edA: null, res: null, busy: false, msg: '', sec: '', kind: 'all', filter: '', page: 0, view: null, q: '', hits: null };
+function jdSync() { if (JD.root !== RAW_SAV_ROOT) Object.assign(JD, { root: RAW_SAV_ROOT, edA: null, res: null, view: null, hits: null, page: 0, msg: '' }); }
+// "with your edits" is the save exactly as Download would write it now (built once per Compare)
+function jdEdited() { if (!JD.edA) JD.edA = JSON.parse(JSON.stringify(buildDownloadRoot())); return JD.edA; }
+function jdSide(which) {
+  const src = which === 'A' ? JD.aSrc : JD.bSrc;
+  return src === 'edited' ? jdEdited() : src === 'loaded' ? RAW_SAV_ROOT : src === 'compare' ? CMP.rootB : JD.fileRoot;
+}
+function jdSideName(which) {
+  const src = which === 'A' ? JD.aSrc : JD.bSrc;
+  return src === 'edited' ? 'This save, with your edits' : src === 'loaded' ? 'This save, as loaded' : src === 'compare' ? (CMP.file || 'Compare tab save') : (JD.fileName || 'Second save');
+}
+async function jdLoadFile(file) {
+  const bytes = new Uint8Array(await readFileAsArrayBuffer(file));
+  const root = isBrgSav(bytes) ? await parseBrgSav(bytes) : parseSaveJsonText(new TextDecoder('utf-8').decode(bytes));
+  if (!looksLikeFullDump(root)) throw new Error('not a LET IT DIE save');
+  JD.fileRoot = root; JD.fileName = file.name; JD.bSrc = 'file'; JD.res = null; JD.view = null; JD.hits = null;
+}
+const jdIsObj = v => v !== null && typeof v === 'object' && !Array.isArray(v);
+// the field that identifies each record of two lists, when every record has a unique one
+function jdIdKey(a, b) {
+  if (!a.length && !b.length) return null;
+  if (!a.every(jdIsObj) || !b.every(jdIsObj)) return null;
+  for (const k of JD_IDS) {
+    const ok = x => x[k] !== undefined && x[k] !== '' && x[k] !== null && (typeof x[k] === 'string' || typeof x[k] === 'number');
+    if (!a.every(ok) || !b.every(ok)) continue;
+    if (new Set(a.map(x => x[k])).size === a.length && new Set(b.map(x => x[k])).size === b.length) return k;
+  }
+  return null;
+}
+function jdPathText(path) { return path.map((k, i) => typeof k === 'number' ? `[${k}]` : /^[A-Za-z_$][\w$]*$/.test(k) ? (i ? '.' : '') + k : `[${JSON.stringify(k)}]`).join('') || '(whole save)'; }
+// groups: parent path -> { pa, pb, pathA, pathB, rows: [{ka, kb, kind}], arr, idKey }
+function jdDiff(A, B) {
+  const groups = new Map(), out = { groups, n: 0, more: false, counts: { changed: 0, added: 0, removed: 0 } };
+  const group = (pathA, pathB, pa, pb, idKey) => {
+    const key = jdPathText(pathB || pathA);
+    let g = groups.get(key);
+    if (!g) groups.set(key, g = { key, pathA, pathB, pa, pb, arr: Array.isArray(pa || pb), idKey, rows: [] });
+    return g;
+  };
+  const note = (g, ka, kb, kind) => { if (out.n >= JD_MAX) { out.more = true; return; } out.n++; out.counts[kind]++; g.rows.push({ ka, kb, kind }); };
+  const walk = (a, b, pathA, pathB) => {
+    if (out.more) return;
+    if (Array.isArray(a) && Array.isArray(b)) {
+      const idKey = jdIdKey(a, b);
+      let g = null; const G = () => g || (g = group(pathA, pathB, a, b, idKey));
+      if (idKey) {
+        const ib = new Map(b.map((x, i) => [ x[idKey], i ])), ia = new Map(a.map((x, i) => [ x[idKey], i ]));
+        a.forEach((x, i) => { const j = ib.get(x[idKey]); if (j == null) note(G(), i, null, 'removed'); else walk(x, b[j], pathA.concat([ i ]), pathB.concat([ j ])); });
+        b.forEach((x, j) => { if (!ia.has(x[idKey])) note(G(), null, j, 'added'); });
+      } else {
+        const n = Math.max(a.length, b.length);
+        for (let i = 0; i < n && !out.more; i++) {
+          if (i >= b.length) note(G(), i, null, 'removed');
+          else if (i >= a.length) note(G(), null, i, 'added');
+          else if (jdLeafDiff(a[i], b[i])) note(G(), i, i, 'changed');
+          else walk(a[i], b[i], pathA.concat([ i ]), pathB.concat([ i ]));
+        }
+      }
+      return;
+    }
+    if (jdIsObj(a) && jdIsObj(b)) {
+      let g = null; const G = () => g || (g = group(pathA, pathB, a, b, null));
+      for (const k of Object.keys(a)) {
+        if (out.more) return;
+        if (!(k in b)) note(G(), k, null, 'removed');
+        else if (jdLeafDiff(a[k], b[k])) note(G(), k, k, 'changed');
+        else walk(a[k], b[k], pathA.concat([ k ]), pathB.concat([ k ]));
+      }
+      for (const k of Object.keys(b)) if (!(k in a)) note(G(), null, k, 'added');
+    }
+  };
+  walk(A, B, [], []);
+  return out;
+}
+// a difference to report on this line itself (rather than inside it): different primitives, or different kinds
+function jdLeafDiff(x, y) {
+  const ox = x !== null && typeof x === 'object', oy = y !== null && typeof y === 'object';
+  if (ox && oy) return Array.isArray(x) !== Array.isArray(y);
+  if (ox !== oy) return true;
+  return !(x === y || (typeof x === 'number' && typeof y === 'number' && Number.isNaN(x) && Number.isNaN(y)));
+}
+function jdVal(v) {
+  if (v === undefined) return '';
+  if (Array.isArray(v)) return `[…] ${v.length.toLocaleString()} item${v.length === 1 ? '' : 's'}`;
+  if (jdIsObj(v)) { const n = Object.keys(v).length; return `{…} ${n} field${n === 1 ? '' : 's'}`; }
+  const t = JSON.stringify(v);
+  return t.length > 200 ? t.slice(0, 200) + '…' + (typeof v === 'string' ? `" (${v.length.toLocaleString()} characters)` : '') : t;
+}
+function jdKeyLabel(k, rec, idKey) {
+  if (k == null) return '';
+  if (typeof k === 'number') return `[${k}]${idKey && rec && rec[idKey] != null ? ` ${idKey}=${String(rec[idKey]).slice(0, 40)}` : ''}: `;
+  return JSON.stringify(k) + ': ';
+}
+function jdLineHtml(cls, ka, kb, pa, pb, idKey, mark, nested) {
+  const va = ka != null && pa ? pa[ka] : undefined, vb = kb != null && pb ? pb[kb] : undefined;
+  const cell = (k, v, side, path) => {
+    if (k == null) return '';
+    const isObj = v !== null && typeof v === 'object';
+    const label = escapeHtml(jdKeyLabel(k, v, idKey)), val = escapeHtml(jdVal(v)) + (typeof v === 'number' ? rawDateHint(k, v) : '');
+    return isObj && nested ? `${label}<span class="jdLink" data-jd-open="${escapeHtml(JSON.stringify([ side, path.concat([ k ]) ]))}">${val}</span>` : label + val;
+  };
+  return `<tr class="${cls}${mark ? ' jdMark' : ''}"><td class="jdA">${cell(ka, va, 'A', nested ? nested.pathA : [])}</td><td class="jdB">${cell(kb, vb, 'B', nested ? nested.pathB : [])}</td></tr>`;
+}
+// one changed object: its changed lines, with two unchanged lines of context around them (objects only)
+function jdGroupHtml(g) {
+  const kindCls = { changed: 'jdChg', added: 'jdAdd', removed: 'jdDel' };
+  const nested = { pathA: g.pathA || [], pathB: g.pathB || [] };
+  let rows = g.rows.filter(r => JD.kind === 'all' || r.kind === JD.kind);
+  if (!rows.length) return '';
+  let body = '';
+  if (g.arr) {
+    body = rows.slice(0, 200).map(r => jdLineHtml(kindCls[r.kind], r.ka, r.kb, g.pa, g.pb, g.idKey, false, nested)).join('');
+    if (rows.length > 200) body += `<tr class="jdGap"><td colspan="2">… ${rows.length - 200} more in this list</td></tr>`;
+  } else {
+    const keys = [ ...new Set(Object.keys(g.pa || {}).concat(Object.keys(g.pb || {}))) ];
+    const hit = new Map(rows.map(r => [ r.ka != null ? r.ka : r.kb, r ]));
+    const show = new Set();
+    keys.forEach((k, i) => { if (hit.has(k)) for (let d = -2; d <= 2; d++) if (keys[i + d] != null) show.add(i + d); });
+    let last = -1;
+    keys.forEach((k, i) => {
+      if (!show.has(i)) return;
+      if (i > last + 1) body += `<tr class="jdGap"><td colspan="2">⋯ ${i - last - 1} unchanged line${i - last - 1 === 1 ? '' : 's'}</td></tr>`;
+      const r = hit.get(k);
+      body += r ? jdLineHtml(kindCls[r.kind], r.ka, r.kb, g.pa, g.pb, null, false, nested) : jdLineHtml('jdCtx', k in (g.pa || {}) ? k : null, k in (g.pb || {}) ? k : null, g.pa, g.pb, null, false, nested);
+      last = i;
+    });
+    if (last < keys.length - 1) body += `<tr class="jdGap"><td colspan="2">⋯ ${keys.length - 1 - last} unchanged line${keys.length - 1 - last === 1 ? '' : 's'}</td></tr>`;
+  }
+  const n = { changed: 0, added: 0, removed: 0 }; for (const r of rows) n[r.kind]++;
+  return `<div class="jdGroup"><div class="jdGroupHead"><span class="jdLink" data-jd-open="${escapeHtml(JSON.stringify([ 'A', g.pathA || g.pathB ]))}" title="Show the whole object side by side">${escapeHtml(g.key)}</span><span class="id">${[ n.changed && n.changed + ' changed', n.removed && n.removed + ' only on the left', n.added && n.added + ' only on the right' ].filter(Boolean).join(' · ')}${g.idKey ? ` · matched by ${escapeHtml(g.idKey)}` : ''}</span></div><table class="jdTable"><colgroup><col style="width:50%"><col style="width:50%"></colgroup>${body}</table></div>`;
+}
+function jdSection(key) { const m = /^([A-Za-z_$][\w$]*)(\.[A-Za-z_$][\w$]*)?/.exec(key); return m ? m[1] + (m[2] || '') : key; }
+function jdGroupsShown() {
+  const f = JD.filter.trim().toLowerCase();
+  return [ ...JD.res.groups.values() ].filter(g => (!JD.sec || jdSection(g.key) === JD.sec) && (!f || g.key.toLowerCase().includes(f)) && g.rows.some(r => JD.kind === 'all' || r.kind === JD.kind));
+}
+// the whole object at a path, both sides, a line per field (paged), for browsing and search hits
+function jdViewHtml() {
+  const v = JD.view, A = jdSide('A'), B = jdSide('B');
+  const pa = rawAt(A, v.path), pb = B ? rawAt(B, v.path) : undefined;
+  const isC = x => x !== null && typeof x === 'object';
+  const crumbs = [ `<span class="jdLink" data-jd-go="[]">save</span>` ].concat(v.path.map((k, i) => `<span class="jdLink" data-jd-go="${escapeHtml(JSON.stringify(v.path.slice(0, i + 1)))}">${escapeHtml(typeof k === 'number' ? `[${k}]` : k)}</span>`)).join(' › ');
+  let h = `<div class="toolbar" style="margin:0 0 6px;"><button class="subtle" id="jd-view-close">← Back to the differences</button><span style="font-family:var(--mono); font-size:12px;">${crumbs}</span></div>`;
+  if (!isC(pa) && !isC(pb)) return h + `<div class="capNote">Nothing at this path on either side.</div>`;
+  const arrMode = Array.isArray(pa) || Array.isArray(pb);
+  const keys = arrMode ? Array.from({ length: Math.max(isC(pa) ? pa.length : 0, isC(pb) ? pb.length : 0) }, (_, i) => i) : [ ...new Set(Object.keys(isC(pa) ? pa : {}).concat(Object.keys(isC(pb) ? pb : {}))) ];
+  const pages = Math.max(1, Math.ceil(keys.length / JD_VIEW_PAGE));
+  if (v.mark != null) { const at = keys.indexOf(v.mark); if (at >= 0) v.page = Math.floor(at / JD_VIEW_PAGE); }
+  v.page = Math.min(Math.max(0, v.page || 0), pages - 1);
+  const nested = { pathA: v.path, pathB: v.path };
+  const lines = keys.slice(v.page * JD_VIEW_PAGE, (v.page + 1) * JD_VIEW_PAGE).map(k => {
+    const inA = isC(pa) && k in pa, inB = isC(pb) && k in pb;
+    const cls = !inA ? 'jdAdd' : !inB ? 'jdDel' : JSON.stringify(pa[k]) === JSON.stringify(pb[k]) ? 'jdCtx' : 'jdChg';
+    return jdLineHtml(cls, inA ? k : null, inB ? k : null, pa, pb, null, k === v.mark, nested);
+  }).join('');
+  h += `<div class="capNote" style="margin:0 0 6px;">Same path on both sides${arrMode ? ' (lists are shown by position here; the differences list matches records by id)' : ''}. Highlighted lines differ; click a {…} or […] to open it.</div>`;
+  h += `<table class="jdTable"><colgroup><col style="width:50%"><col style="width:50%"></colgroup><tr><td class="jdA"><b>${escapeHtml(jdSideName('A'))}</b></td><td class="jdB"><b>${escapeHtml(jdSideName('B'))}</b></td></tr>${lines}</table>`;
+  if (pages > 1) h += `<div class="toolbar" style="margin-top:6px;"><button class="subtle" id="jd-vprev" ${v.page ? '' : 'disabled'}>← Previous</button><span class="id">lines ${(v.page * JD_VIEW_PAGE + 1).toLocaleString()}-${Math.min(keys.length, (v.page + 1) * JD_VIEW_PAGE).toLocaleString()} of ${keys.length.toLocaleString()}</span><button class="subtle" id="jd-vnext" ${v.page < pages - 1 ? '' : 'disabled'}>Next →</button></div>`;
+  return h;
+}
+function blockJd() {
+  return `<section class="block">
+    <div class="block-head"><div><div class="eyebrow" style="color:var(--warn);">Advanced users · read only</div><h2>JSON compare</h2></div></div>
+    <div class="block-body"><div id="jd-body"></div></div>
+  </section>`;
+}
+function renderJd() {
+  const host = document.getElementById('jd-body');
+  if (!host) return;
+  jdSync();
+  const sel = 'background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:6px 8px; font-family:var(--mono);';
+  let h = `<div class="warnNote" style="font-size:12px;"><b>For advanced users.</b> This compares two saves the way the game stores them, field by field, and searches them. It's read only: nothing here changes your save. <b>Editing a save's JSON by hand can corrupt it</b>, crash the game or lose progress (a wrong id, a missing field or a value the game doesn't expect is enough). Only do it if you know the save format, and always keep a backup.</div>`;
+  if (!RAW_SAV_ROOT) { host.innerHTML = h + '<div class="capNote">Load a .sav first.</div>'; return; }
+  h += `<div class="grid" style="grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:10px; margin-bottom:8px;">
+    <div class="field"><label>Left</label><select id="jd-a" style="${sel} width:100%;"><option value="loaded" ${JD.aSrc === 'loaded' ? 'selected' : ''}>This save, as loaded</option><option value="edited" ${JD.aSrc === 'edited' ? 'selected' : ''}>This save, with your edits (as Download would write it)</option></select></div>
+    <div class="field"><label>Right</label><select id="jd-b" style="${sel} width:100%;"><option value="file" ${JD.bSrc === 'file' ? 'selected' : ''}>${JD.fileRoot ? 'Second save: ' + escapeHtml(JD.fileName) : 'A second save (load it below)'}</option>${CMP.rootB ? `<option value="compare" ${JD.bSrc === 'compare' ? 'selected' : ''}>The save loaded on the Compare tab (${escapeHtml(CMP.file || '')})</option>` : ''}<option value="loaded" ${JD.bSrc === 'loaded' ? 'selected' : ''}>This save, as loaded</option><option value="edited" ${JD.bSrc === 'edited' ? 'selected' : ''}>This save, with your edits (as Download would write it)</option></select></div>
+  </div>
+  <div class="toolbar"><label class="subtle" style="cursor:pointer; padding:6px 10px; border:1px solid var(--panel-border);">Load a second save (.sav or .json)<input type="file" id="jd-file" accept=".sav,.json" style="display:none;"></label><button class="action" id="jd-run" ${JD.busy ? 'disabled' : ''}>${JD.busy ? 'Comparing…' : 'Compare'}</button><span class="capNote" style="margin:0;">Tip: left "as loaded" and right "with your edits" shows exactly what your edits change.</span></div>`;
+  if (JD.msg) h += `<div class="capNote">${escapeHtml(JD.msg)}</div>`;
+  // search
+  h += `<div class="toolbar" style="margin-top:8px;"><input id="jd-q" type="text" placeholder="Search keys and values in both saves" value="${escapeHtml(JD.q)}" style="${sel} flex:1; min-width:200px;"><button class="subtle" id="jd-search">Search</button>${JD.hits ? '<button class="subtle" id="jd-search-clear">Clear</button>' : ''}</div>`;
+  if (JD.hits) {
+    const all = JD.hits.A.hits.map(p => [ 'A', p ]).concat(JD.hits.B ? JD.hits.B.hits.map(p => [ 'B', p ]) : []);
+    h += `<div class="capNote" style="margin:4px 0;">${JD.hits.A.hits.length}${JD.hits.A.more ? '+' : ''} match${JD.hits.A.hits.length === 1 ? '' : 'es'} on the left, ${JD.hits.B ? JD.hits.B.hits.length + (JD.hits.B.more ? '+' : '') : 0} on the right${(JD.hits.A.more || (JD.hits.B && JD.hits.B.more)) ? ` (first ${RAW_HITS} per side; search for something more specific)` : ''}.</div>`;
+    if (all.length) h += `<div style="max-height:240px; overflow:auto; border:1px solid var(--panel-border); margin-bottom:8px;"><table class="jdTable">${all.map(([ side, p ]) => { const v = rawAt(jdSide(side), p); return `<tr><td class="jdNo" style="width:52px;">${side === 'A' ? 'left' : 'right'}</td><td><span class="jdLink" data-jd-open="${escapeHtml(JSON.stringify([ side, p ]))}">${escapeHtml(jdPathText(p))}</span> <span class="id">${escapeHtml(jdVal(v))}</span></td></tr>`; }).join('')}</table></div>`;
+  }
+  if (JD.view) { host.innerHTML = h + jdViewHtml(); wireJdUi(); return; }
+  if (JD.res) {
+    const r = JD.res;
+    if (!r.n) h += `<div class="capNote">No differences: the two sides are the same.</div>`;
+    else {
+      const secs = new Map(); for (const g of r.groups.values()) { const k = jdSection(g.key); secs.set(k, (secs.get(k) || 0) + g.rows.length); }
+      const shown = jdGroupsShown(), pages = Math.max(1, Math.ceil(shown.length / JD_PAGE));
+      JD.page = Math.min(JD.page, pages - 1);
+      h += `<div class="capNote" style="margin:8px 0 4px;"><b>${r.n.toLocaleString()}${r.more ? '+' : ''}</b> difference${r.n === 1 ? '' : 's'} in ${r.groups.size.toLocaleString()} object${r.groups.size === 1 ? '' : 's'}: ${r.counts.changed.toLocaleString()} changed, ${r.counts.removed.toLocaleString()} only on the left, ${r.counts.added.toLocaleString()} only on the right.${r.more ? ` Stopped at ${JD_MAX.toLocaleString()}; pick a section to narrow it down.` : ''}</div>`;
+      h += `<div class="toolbar"><select id="jd-sec" style="${sel}"><option value="">All sections</option>${[ ...secs.entries() ].sort((x, y) => y[1] - x[1]).map(([ k, n ]) => `<option value="${escapeHtml(k)}" ${JD.sec === k ? 'selected' : ''}>${escapeHtml(k)} (${n.toLocaleString()})</option>`).join('')}</select><select id="jd-kind" style="${sel}"><option value="all" ${JD.kind === 'all' ? 'selected' : ''}>All differences</option><option value="changed" ${JD.kind === 'changed' ? 'selected' : ''}>Changed</option><option value="removed" ${JD.kind === 'removed' ? 'selected' : ''}>Only on the left</option><option value="added" ${JD.kind === 'added' ? 'selected' : ''}>Only on the right</option></select><input id="jd-filter" type="text" placeholder="Filter by path" value="${escapeHtml(JD.filter)}" style="${sel} min-width:180px;"><button class="subtle" id="jd-txt">Download the differences (.txt)</button></div>`;
+      h += `<table class="jdTable" style="margin:6px 0 4px;"><colgroup><col style="width:50%"><col style="width:50%"></colgroup><tr><td class="jdA"><b>Left: ${escapeHtml(jdSideName('A'))}</b></td><td class="jdB"><b>Right: ${escapeHtml(jdSideName('B'))}</b></td></tr></table>`;
+      h += shown.slice(JD.page * JD_PAGE, (JD.page + 1) * JD_PAGE).map(jdGroupHtml).join('') || '<div class="capNote">Nothing matches these filters.</div>';
+      if (pages > 1) h += `<div class="toolbar"><button class="subtle" id="jd-prev" ${JD.page ? '' : 'disabled'}>← Previous</button><span class="id">objects ${(JD.page * JD_PAGE + 1).toLocaleString()}-${Math.min(shown.length, (JD.page + 1) * JD_PAGE).toLocaleString()} of ${shown.length.toLocaleString()}</span><button class="subtle" id="jd-next" ${JD.page < pages - 1 ? '' : 'disabled'}>Next →</button></div>`;
+    }
+  }
+  host.innerHTML = h;
+  wireJdUi();
+}
+function jdDiffText() {
+  const lines = [ `JSON compare: left = ${jdSideName('A')}, right = ${jdSideName('B')}`, '' ];
+  for (const g of jdGroupsShown()) for (const r of g.rows) {
+    if (JD.kind !== 'all' && r.kind !== JD.kind) continue;
+    const p = jdPathText((g.pathB || g.pathA).concat([ r.kb != null ? r.kb : r.ka ]));
+    const a = r.ka != null && g.pa ? g.pa[r.ka] : undefined, b = r.kb != null && g.pb ? g.pb[r.kb] : undefined;
+    lines.push(r.kind === 'changed' ? `${p}: ${jdVal(a)} -> ${jdVal(b)}` : r.kind === 'added' ? `${p}: only on the right: ${jdVal(b)}` : `${p}: only on the left: ${jdVal(a)}`);
+  }
+  return lines.join('\r\n') + '\r\n';
+}
+function wireJdUi() {
+  const $ = id => document.getElementById(id);
+  const again = () => { JD.res = null; JD.view = null; JD.hits = null; JD.page = 0; renderJd(); };
+  if ($('jd-a')) $('jd-a').addEventListener('change', e => { JD.aSrc = e.target.value; JD.edA = null; again(); });
+  if ($('jd-b')) $('jd-b').addEventListener('change', e => { JD.bSrc = e.target.value; JD.edA = null; again(); });
+  if ($('jd-file')) $('jd-file').addEventListener('change', async e => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    try { await jdLoadFile(f); JD.msg = ''; toast(`Loaded ${f.name} for comparing (your save is unchanged)`); } catch (err) { JD.msg = `Couldn't read ${f.name}: ${err.message}`; }
+    renderJd();
+  });
+  if ($('jd-run')) $('jd-run').addEventListener('click', () => {
+    const B = jdSide('B');
+    if (!B) { JD.msg = 'Load a second save first, or pick one of this save\'s versions on the right.'; renderJd(); return; }
+    JD.busy = true; JD.msg = ''; renderJd();
+    setTimeout(() => {
+      try { JD.edA = null; const t = Date.now(); JD.res = jdDiff(jdSide('A'), jdSide('B')); JD.msg = `Compared in ${((Date.now() - t) / 1000).toFixed(1)} s.`; }
+      catch (err) { JD.res = null; JD.msg = 'The comparison failed: ' + err.message; }
+      JD.busy = false; JD.view = null; JD.page = 0; renderJd();
+    }, 30);
+  });
+  const doSearch = () => {
+    const q = ($('jd-q').value || '').trim();
+    JD.q = q;
+    if (q.length < 2) { toast('Type at least 2 characters', true); return; }
+    const B = jdSide('B');
+    JD.hits = { A: rawSearch(jdSide('A'), q), B: B ? rawSearch(B, q) : null };
+    renderJd();
+  };
+  if ($('jd-search')) $('jd-search').addEventListener('click', doSearch);
+  if ($('jd-q')) $('jd-q').addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+  if ($('jd-search-clear')) $('jd-search-clear').addEventListener('click', () => { JD.hits = null; JD.q = ''; renderJd(); });
+  if ($('jd-sec')) $('jd-sec').addEventListener('change', e => { JD.sec = e.target.value; JD.page = 0; renderJd(); });
+  if ($('jd-kind')) $('jd-kind').addEventListener('change', e => { JD.kind = e.target.value; JD.page = 0; renderJd(); });
+  if ($('jd-filter')) $('jd-filter').addEventListener('change', e => { JD.filter = e.target.value; JD.page = 0; renderJd(); });
+  if ($('jd-prev')) $('jd-prev').addEventListener('click', () => { JD.page--; renderJd(); });
+  if ($('jd-next')) $('jd-next').addEventListener('click', () => { JD.page++; renderJd(); });
+  if ($('jd-txt')) $('jd-txt').addEventListener('click', () => triggerDownload(jdDiffText(), `json_compare_${reviewStamp()}.txt`, 'text/plain'));
+  if ($('jd-view-close')) $('jd-view-close').addEventListener('click', () => { JD.view = null; renderJd(); });
+  if ($('jd-vprev')) $('jd-vprev').addEventListener('click', () => { JD.view.page--; JD.view.mark = null; renderJd(); });
+  if ($('jd-vnext')) $('jd-vnext').addEventListener('click', () => { JD.view.page++; JD.view.mark = null; renderJd(); });
+  document.querySelectorAll('[data-jd-open]').forEach(el => el.addEventListener('click', () => {
+    const [ side, p ] = JSON.parse(el.dataset.jdOpen);
+    const v = rawAt(jdSide(side), p);
+    // a container opens itself; a single value opens its parent with that line marked
+    if (v !== null && typeof v === 'object') JD.view = { path: p, page: 0, mark: null };
+    else JD.view = { path: p.slice(0, -1), page: 0, mark: p[p.length - 1] };
+    renderJd();
+    window.scrollTo(0, 0);
+  }));
+  document.querySelectorAll('[data-jd-go]').forEach(el => el.addEventListener('click', () => { JD.view = { path: JSON.parse(el.dataset.jdGo), page: 0, mark: null }; renderJd(); }));
+}
+function wireJd() { if (activeTab === 'jdiff') renderJd(); }
 function blockStats() {
   return `<section class="block">
     <div class="block-head"><div><div class="eyebrow">Read only</div><h2>Stats</h2></div></div>
@@ -9168,6 +9468,70 @@ function fixDanglingSlots() {
   for (const x of d.storage) x.sl[x.k] = '-1';
   return d.hangers.length + d.storage.length;
 }
+// defense lineup (fortzmbsetting) in step with the fighters: every entry a GUARD fighter that exists, every GUARD
+// fighter in the lineup, one per place (2 waves of 5 places, 9 at most: checked separately), one alarm carrier.
+// All 7 game saves with a lineup follow these.
+function defenseProblems() {
+  const list = arr(SAVE && SAVE.fortsetting), out = { bad: [], stray: [], alarms: 0 };
+  const seenPos = new Set(), seenCid = new Set();
+  for (const e of list) {
+    const c = arr(SAVE.soul.chrs).find(x => x && x.cid === e.cid), pos = e.wave + ':' + e.order;
+    const why = !c ? 'not in the save' : c.state !== 'GUARD' ? `not a defender (${c.state})` : !(e.wave >= 0 && e.wave < DEF_WAVES && e.order >= 0 && e.order < DEF_SLOTS) ? 'not a real place' : seenPos.has(pos) ? 'two defenders in one place' : seenCid.has(e.cid) ? 'in two places' : '';
+    if (why) out.bad.push({ e, c, why });
+    else { seenPos.add(pos); seenCid.add(e.cid); }
+  }
+  for (const c of arr(SAVE && SAVE.soul && SAVE.soul.chrs)) if (c && c.state === 'GUARD' && !list.some(e => e.cid === c.cid)) out.stray.push(c);
+  out.alarms = list.filter(e => e.is_equip_whistle).length;
+  return out;
+}
+function fixDefenseProblems() {
+  const d = defenseProblems(), list = defLineup();
+  for (const b of d.bad) { const i = list.indexOf(b.e); if (i >= 0) list.splice(i, 1); }
+  // the game puts a defender taken off the lineup back in the freezer (including one whose place was removed above)
+  for (const c of arr(SAVE.soul.chrs)) if (c && c.state === 'GUARD' && !list.some(e => e.cid === c.cid)) c.state = 'FREE';
+  let kept = false;
+  for (const e of list) { if (e.is_equip_whistle && kept) e.is_equip_whistle = 0; else if (e.is_equip_whistle) kept = true; }
+  list.sort((a, b) => a.wave - b.wave || a.order - b.order);
+  return d.bad.length + d.stray.length + Math.max(0, d.alarms - 1);
+}
+// exactly one fighter in use (state USE): every game save has one, in a run or not
+function inUseProblem() {
+  const chrs = arr(SAVE && SAVE.soul && SAVE.soul.chrs), use = chrs.filter(c => c && c.state === 'USE');
+  return use.length === 1 ? null : { use, chrs };
+}
+function fixInUse() {
+  const p = inUseProblem();
+  if (!p) return '';
+  let keep;
+  if (p.use.length > 1) {
+    // the fighter the run belongs to, else the current fighter, else the first
+    keep = p.use.find(c => c.pause) || p.use.find(c => c.cid === SAVE.soul.crntcid) || p.use[0];
+    for (const c of p.use) if (c !== keep) c.state = 'FREE';
+  } else {
+    keep = p.chrs.find(c => c && c.cid === SAVE.soul.crntcid && c.state === 'FREE' && !c.abid) || p.chrs.find(c => c && c.state === 'FREE' && !c.abid);
+    if (!keep) return 'No fighter in the freezer could be picked.';
+    keep.state = 'USE';
+  }
+  SAVE.soul.crntcid = keep.cid;
+  return `${keep.name || 'A fighter'} is the fighter in use.`;
+}
+// the alarm bought (soul.whistle_id) must be one master_fort_whistle knows
+function alarmUnknown() {
+  const id = SAVE && SAVE.soul && SAVE.soul.whistle_id;
+  return id && arr(AP && AP.fortWhistle).length && !defAlarmRow(id) ? id : '';
+}
+// a Bank / SPLithium tank limit the save stores must be the limit for its level (master_safe_level /
+// master_spirit_tank_level); the game stores only the level, so most saves have no *_limit field at all
+function bankLimitMismatches() {
+  const soul = (SAVE && SAVE.soul) || {}, out = [];
+  for (const [ lf, label ] of [ [ 'safe_level', 'Bank' ], [ 'spirit_tank_level', 'SPLithium tank' ] ]) {
+    const kf = lf.replace('_level', '_limit');
+    if (!(kf in soul) || soul[kf] == null || soul[kf] === '') continue;
+    const want = bankCapacityForLevel(soul[lf] != null ? soul[lf] : 1, lf);
+    if (want && Number(soul[kf]) !== want) out.push({ kf, lf, label, have: Number(soul[kf]), want });
+  }
+  return out;
+}
 
 function runSaveCheck() {
   const out = [];
@@ -9239,6 +9603,46 @@ function runSaveCheck() {
     const parts = [ d.hangers.length && `${d.hangers.length} freezer hanger${d.hangers.length === 1 ? ' names a fighter' : 's name fighters'} that ${d.hangers.length === 1 ? "isn't" : "aren't"} in the save (or one already in another hanger)`, d.storage.length && `${d.storage.length} Storage Box slot${d.storage.length === 1 ? ' names an item' : 's name items'} that ${d.storage.length === 1 ? "isn't" : "aren't"} stored` ].filter(Boolean);
     add('problem', `${parts.join('; ')}. The game expects every hanger and slot to point at something real.`, d.hangers.length ? 'fighters' : 'storage', {
       label: 'Empty them', run: () => { const k = fixDanglingSlots(); return `Emptied ${k} hanger${k === 1 ? '' : 's'}/slot${k === 1 ? '' : 's'}.`; }
+    });
+  });
+
+  // exactly one fighter in use
+  safe('fighter in use', () => {
+    const p = inUseProblem();
+    if (!p) return;
+    add('problem', p.use.length ? `${p.use.length} fighters are set as the fighter in use (${escapeHtml(p.use.map(c => c.name || '?').join(', '))}). The game always has exactly one.` : `No fighter is set as the fighter in use. The game always has exactly one.`, 'fighters', {
+      label: p.use.length ? 'Keep one in use' : 'Pick one', run: fixInUse
+    });
+  });
+
+  // defense lineup in step with the defenders
+  safe('defense lineup', () => {
+    const d = defenseProblems();
+    if (!d.bad.length && !d.stray.length && d.alarms <= 1) return;
+    const parts = [];
+    if (d.bad.length) parts.push(`${d.bad.length} lineup place${d.bad.length === 1 ? '' : 's'} can't be used (${escapeHtml(d.bad.slice(0, 3).map(b => `${(b.c && b.c.name) || 'a missing fighter'}: ${b.why}`).join('; '))})`);
+    if (d.stray.length) parts.push(`${d.stray.length} fighter${d.stray.length === 1 ? ' is' : 's are'} set to defend but not in the lineup (${escapeHtml(d.stray.slice(0, 3).map(c => c.name || '?').join(', '))})`);
+    if (d.alarms > 1) parts.push(`${d.alarms} defenders carry the alarm (only one can)`);
+    add('problem', `Defense lineup: ${parts.join('; ')}.`, 'defense', {
+      label: 'Fix the lineup', run: () => { const k = fixDefenseProblems(); return `Fixed ${k} lineup problem${k === 1 ? '' : 's'} (defenders not in the lineup went back to the freezer).`; }
+    });
+  });
+
+  // the defense alarm must be one this masters.db knows
+  safe('defense alarm', () => {
+    const id = alarmUnknown();
+    if (!id) return;
+    add('warning', `The defense alarm (${escapeHtml(id)}) isn't in this masters.db, so the game can't use it.`, 'defense', {
+      label: 'Remove the alarm', run: () => { SAVE.soul.whistle_id = ''; for (const e of defLineup()) e.is_equip_whistle = 0; return 'Alarm removed.'; }
+    });
+  });
+
+  // stored Bank / tank limits must match the level
+  safe('bank limits', () => {
+    const bad = bankLimitMismatches();
+    if (!bad.length) return;
+    add('warning', `${bad.map(b => `${b.label} limit is saved as ${b.have.toLocaleString()} but level ${SAVE.soul[b.lf]} holds ${b.want.toLocaleString()}`).join('; ')}.`, 'account', {
+      label: 'Set the limit for the level', run: () => { for (const b of bankLimitMismatches()) SAVE.soul[b.kf] = b.want; return 'Limits set to match the levels.'; }
     });
   });
 
@@ -9467,7 +9871,7 @@ function runSaveCheck() {
   safe('bank', () => {
     const rows = [ [ 'free_money', 'safe_level', 'Kill Coins' ], [ 'spirit', 'spirit_tank_level', 'SPLithium' ] ];
     for (const [v, l, label] of rows) {
-      const cap = bankCapacityForLevel(soul[l] != null ? soul[l] : 1);
+      const cap = bankCapacityForLevel(soul[l] != null ? soul[l] : 1, l);
       if (cap && (soul[v] || 0) > cap) add('warning', `${label} (${Number(soul[v]).toLocaleString()}) is over the bank limit for its level (${cap.toLocaleString()}).`, 'account');
     }
   });
