@@ -1600,35 +1600,12 @@ async function loadSaveFiles(files) {
     SAVE.cl.msrs = arr(SAVE.cl.msrs);
     SAVE.cl.bsts = arr(SAVE.cl.bsts);
     SAVE.cl.items = arr(SAVE.cl.items);
-    let repaired = 0;
-    for (const c of arr(SAVE.soul.chrs)) {
-      if (!c.bodylvl) continue;
-      const R = fighterRanges(c.type || 'BAL', c.grade != null ? c.grade : 1, c.limit_break || 0);
-      const lim = {
-        skill: R.skillCap - R.skillBase,
-        bag: R.bagCap - R.bagBase
-      };
-      let changed = false;
-      for (const k of [ 'skill', 'bag' ]) if ((c.bodylvl[k] || 0) > lim[k]) {
-        c.bodylvl[k] = lim[k];
-        changed = true;
-      }
-      if ((c.rage || 0) > R.rageCap - R.rageBase) {
-        c.rage = R.rageCap - R.rageBase;
-        changed = true;
-      }
-      if (changed) {
-        recomputeLevel(c);
-        repaired++;
-      }
-    }
     try { RESEARCH_GAME_SKIP = researchGameSkips(SAVE.user_research); } catch (err) { RESEARCH_GAME_SKIP = new Map(); }
     RESEARCH_KNOWN = researchKnownSnapshot(SAVE.user_research);
-    HEALTH_LOAD = { repairedChars: repairedChars, repairedFighters: repaired };
+    HEALTH_LOAD = { repairedChars: repairedChars };
     HEALTH.open = null;
     try { runSaveCheck(); } catch (err) { console.warn('Save check failed:', err); }
     renderAll();
-    if (repaired) setTimeout(() => toast(`Fixed decal/bag/rage values on ${repaired} fighter(s) left over from an older editor version`), 2700);
     markChip('chip-save', true);
     toast(`Loaded ${soulSource}`);
   } catch (err) {
@@ -2906,7 +2883,8 @@ function gearDiscountPct(chr, stat) {
   return Math.max(0, 100 - off);
 }
 function gearProblem(chr, p, site) {
-  const rec = p && PT_INDEX[p.ptid];
+  if (!p) return "the item isn't in the fighter's Death Bag";
+  const rec = PT_INDEX[p.ptid];
   if (!rec) return "unknown part (not in this masters.db)";
   if (!(GEAR_SITE_TYPES[site] || []).includes(rec.type)) return "wrong slot for this part";
   if (GEAR_NEVER.test(rec.id) || Number(rec.is_consume) === 1) return "not equippable";
@@ -4636,7 +4614,19 @@ function blkFrom() {
 function blkExisting(from) {
   const s = RAW_SAV_ROOT && RAW_SAV_ROOT.soul;
   if (!s) return new Map();
-  if (from !== s.flrid) { const fx = (FLOOR_MOVE.rolls && FLOOR_MOVE.rolls.refix) || {}; return new Map(flmUpcoming(from).map(u => [ u.id, fx[u.id] ? fx[u.id].entry : u.entry ])); }
+  if (from !== s.flrid) {
+    // the planned floors as the move writes them: shifted, re-picked (refix) or with their rerolled rewards
+    const r = FLOOR_MOVE.rolls || {}, fx = r.refix || {};
+    return new Map(flmUpcoming(from).map(u => {
+      if (fx[u.id]) return [ u.id, fx[u.id].entry ];
+      const ru = FLOOR_MOVE.reroll && arr(r.upcoming).find(x => x.id === u.id);
+      if (!ru) return [ u.id, u.entry ];
+      const e = JSON.parse(JSON.stringify(u.entry));
+      if (ru.featured && e.rwdid === ru.featured.from) e.rwdid = ru.featured.to;
+      arr(e.rwds).forEach((w, i) => { const n = ru.rwds[i]; if (n && w && w.rwdid === n.from && w.gentype === n.gentype) w.rwdid = n.to; });
+      return [ u.id, e ];
+    }));
+  }
   return new Map(arr(s.hvntrinfo).filter(e => e && e.flrid).map(e => [ e.flrid, e ]));
 }
 function blkPlan() {
@@ -4676,7 +4666,10 @@ function blkPlan() {
 function blkPlanFresh() {
   const p = BOSS_LOCK.plan;
   if (!BOSS_LOCK.mode) return null;
-  if (!p || p.from !== blkFrom() || p.mode !== BOSS_LOCK.mode || p.which !== BOSS_LOCK.which || p.extend !== BOSS_LOCK.extend || p.rewards !== BOSS_LOCK.rewards) BOSS_LOCK.plan = blkPlan();
+  const mv = blkFrom() !== (RAW_SAV_ROOT && RAW_SAV_ROOT.soul && RAW_SAV_ROOT.soul.flrid);
+  // a floor move's rolls (its re-picked floors and rerolled rewards) are what the lock starts from, so a new roll means a new plan
+  const rolls = mv ? FLOOR_MOVE.rolls : null, reroll = mv ? FLOOR_MOVE.reroll : null;
+  if (!p || p.from !== blkFrom() || p.mode !== BOSS_LOCK.mode || p.which !== BOSS_LOCK.which || p.extend !== BOSS_LOCK.extend || p.rewards !== BOSS_LOCK.rewards || p.rolls !== rolls || p.reroll !== reroll) { const np = blkPlan(); BOSS_LOCK.plan = np && Object.assign(np, { rolls, reroll }); }
   return BOSS_LOCK.plan;
 }
 function applyBossLock(root) {
@@ -4902,7 +4895,10 @@ function applyRewind(root) {
       if (REWIND.extra.root !== RAW_SAV_ROOT) REWIND.extra = { root: RAW_SAV_ROOT, by: {} };
       let ent = REWIND.extra.by[f.id];
       if (!ent) {
-        const ref = 'ARC_AREA_HVN', rare = Math.random() < HVN_RARE_CHANCE ? 1 : 0;
+        // the map B floor's one fixed arena, which differs by route (D.O.D. MET, W.E ARC, C.W AMS, M.I.L.K. RFT)
+        const ar = blkPick(arr(AP && AP.hvnBossAreas).filter(r => r.flrid === f.id));
+        if (!ar) continue;
+        const ref = ar.refareaid, rare = Math.random() < HVN_RARE_CHANCE ? 1 : 0;
         const feat = flmDraw(f.id, f.areaid, ref, rare ? 'PTGENTP_TRBOX_SPXL_RARE' : 'PTGENTP_SPXL');
         const boxes = [ 0, 1, 2 ].map(() => flmDraw(f.id, f.areaid, ref, 'PTGENTP_TRBOX_L'));
         if (!feat || boxes.some(b => !b)) continue;
@@ -5006,7 +5002,7 @@ function renderLocation() {
         if (r.featured) h += `<tr><td>Legendary Chest (map)</td><td>${nm(r.featured.from)}</td><td>${nm(r.featured.to)}</td></tr>`;
         const lockP = BOSS_LOCK.root === RAW_SAV_ROOT && BOSS_LOCK.mode ? blkPlanFresh() : null;
         const lockWrites = id => !!(lockP && lockP.items.some(it => it.floor.id === id && it.entry));
-        for (const u of arr(r.upcoming)) h += `<tr${lockWrites(u.id) ? ' style="opacity:.55;"' : ''}><td>Upcoming ${u.no}F${u.rare ? legendTag() : ''}${u.refix ? `<br><span class="id">${escapeHtml(blkKind(u.refix.from).label)} → ${escapeHtml(blkKind(u.refix.to).label)}</span>` : ''}</td><td class="id">${lockWrites(u.id) ? 'replaced by Lock boss floors below' : 'shown on the map'}</td><td>${u.featured ? 'Legendary Chest: ' + nm(u.featured.to) : '—'} ${flmUpText(u.rwds, nm)}</td></tr>`;
+        for (const u of arr(r.upcoming)) h += `<tr${lockWrites(u.id) ? ' style="opacity:.55;"' : ''}><td>Upcoming ${u.no}F${u.rare && !lockWrites(u.id) ? legendTag() : ''}${u.refix ? `<br><span class="id">${escapeHtml(blkKind(u.refix.from).label)} → ${escapeHtml(blkKind(u.refix.to).label)}</span>` : ''}</td><td class="id">${lockWrites(u.id) ? 'replaced by Lock boss floors below' : 'shown on the map'}</td><td>${lockWrites(u.id) ? '<span class="id">—</span>' : `${u.featured ? 'Legendary Chest: ' + nm(u.featured.to) : '—'} ${flmUpText(u.rwds, nm)}`}</td></tr>`;
         h += `</tbody></table><div class="toolbar" style="margin-top:6px;"><button class="subtle" id="loc-reroll-again">Reroll again</button><span class="capNote" style="margin:0;">Drawn from ${escapeHtml(t.no + 'F')}'s own drop table, the way the game rolls them.</span></div>`;
       } else h += `<div class="capNote">The rewards rolled for ${escapeHtml(f.no + 'F')} are kept.</div>`;
       h += '</div>';
@@ -6283,7 +6279,9 @@ function runCsv(d) {
   const q = v => { const s = String(v == null ? '' : v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
   const lines = [ [ 'Section', 'Field', 'Value' ].join(',') ];
   for (const r of runRows(d)) lines.push(r.map(q).join(','));
-  if (d.upcoming.length) {
+  // reward names only with "Show rewards (spoilers)" ticked, like the tab
+  if (d.upcoming.length && !LOC_SPOIL) lines.push('', [ 'Map rewards', `${d.upcoming.length} boss floors with rewards on the map (hidden: tick "Show rewards (spoilers)" on the Location tab to export them)` ].map(q).join(','));
+  else if (d.upcoming.length) {
     lines.push('', [ 'Map rewards', 'Floor', 'Legendary Chest', 'Rare', 'Other rewards' ].join(','));
     for (const e of d.upcoming) { const hf = hvnFloor(e.flrid); lines.push([ 'Map rewards', hf ? hf.no + 'F' : e.flrid, e.rwdid ? itemDisplayName(e.rwdid) : '', Number(e.is_rare) ? 'yes' : '', runRewardText(e) ].map(q).join(',')); }
   }
@@ -9021,7 +9019,147 @@ function wirePhotos() { if (activeTab === 'photos') renderPhotos(); }
 // ---------------------------------------------------------------------------
 
 let HEALTH = { items: [], ranAt: 0, open: null };
-let HEALTH_LOAD = { repairedChars: 0, repairedFighters: 0 };
+let HEALTH_LOAD = { repairedChars: 0 };
+// Fighters whose extra decal slots, Death Bag or rage (bodyuser skill / bag / rage, stored above the type's base)
+// are more than their type, grade and limit break allow (master_body_detail). The game never writes these (every
+// game-made fighter in the test saves is within its caps); they come from other editors or old editor versions,
+// e.g. a Grade 6 Limit Break 0 Brawler saved with +9 slots, +4 bag, +9 rage. Reported, and fixed only when asked.
+function fightersOverCap() {
+  const out = [];
+  for (const c of arr(SAVE && SAVE.soul && SAVE.soul.chrs)) {
+    // CONCILIATE fighters (taken from other players) keep the stats and upgrades of their own limit break while the
+    // game stores them at Limit Break 0 (seen in game saves: 30-45 stats, +3 slots / +9 bag), so they're not checked
+    if (!c || !c.bodylvl || c.state === 'ENEMY' || c.state === 'DUMMY' || c.state === 'CONCILIATE') continue;
+    const R = fighterRanges(c.type || 'BAL', c.grade != null ? c.grade : 1, c.limit_break || 0);
+    const lim = { skill: R.skillCap - R.skillBase, bag: R.bagCap - R.bagBase, rage: R.rageCap - R.rageBase };
+    const has = { skill: Number(c.bodylvl.skill) || 0, bag: Number(c.bodylvl.bag) || 0, rage: Number(c.rage) || 0 };
+    const over = Object.keys(lim).filter(k => has[k] > lim[k]);
+    if (over.length) out.push({ c, R, lim, has, over });
+  }
+  return out;
+}
+function fixFightersOverCap() {
+  const list = fightersOverCap();
+  for (const o of list) {
+    if (o.has.skill > o.lim.skill) o.c.bodylvl.skill = o.lim.skill;
+    if (o.has.bag > o.lim.bag) o.c.bodylvl.bag = o.lim.bag;
+    if (o.has.rage > o.lim.rage) o.c.rage = o.lim.rage;
+    recomputeLevel(o.c);
+  }
+  return list.length;
+}
+// More safety checks, each verified against masters.db and the game-made records of 16 real saves (none of them
+// fires on a game-made record): fighters the game plays with (not ENEMY, DUMMY or CONCILIATE, which keep other
+// rules), every rule from master_body_detail / master_part.
+function safetyFighter(c) { return !!c && c.state !== 'ENEMY' && c.state !== 'DUMMY' && c.state !== 'CONCILIATE'; }
+function decalSlotsOf(c) {
+  const R = fighterRanges(c.type || 'BAL', c.grade != null ? c.grade : 1, c.limit_break || 0);
+  return Math.min(R.skillBase + (Number(c.bodylvl && c.bodylvl.skill) || 0), R.skillCap);
+}
+// decals equipped beyond the fighter's slots (skill_slots + slots bought): the ones past the last slot
+function decalsOverSlots() {
+  const out = [];
+  for (const c of arr(SAVE && SAVE.soul && SAVE.soul.chrs)) {
+    if (!safetyFighter(c) || !arr(c.eqskls).length) continue;
+    const slots = decalSlotsOf(c), list = arr(c.eqskls).slice().sort((a, b) => (Number(a.slot) || 0) - (Number(b.slot) || 0));
+    const keep = list.filter(e => (Number(e.slot) || 0) < slots).slice(0, slots), extra = list.filter(e => !keep.includes(e));
+    if (extra.length) out.push({ c, slots, extra });
+  }
+  return out;
+}
+function fixDecalsOverSlots() {
+  let n = 0;
+  SAVE.soul.psskls = arr(SAVE.soul.psskls);
+  for (const o of decalsOverSlots()) {
+    o.c.eqskls = arr(o.c.eqskls).filter(e => !o.extra.includes(e));
+    for (const e of o.extra) {
+      n++;
+      // like taking it off in game: a premium decal goes back to the stock, a normal one is lost
+      const id = e.id || e.sklid;
+      if (!(SKL_INDEX[id] && Number(SKL_INDEX[id].premium) === 1)) continue;
+      let st = SAVE.soul.psskls.find(x => x.id === id);
+      if (!st) SAVE.soul.psskls.push(st = { id, lvl: 1, cnt: 0, is_checked: 1 });
+      st.cnt = Math.min((st.cnt || 0) + 1, DECAL_CAP);
+    }
+  }
+  return n;
+}
+// weapons / armor with more durability, ammo or spare ammo than master_part allows (dur x dur_c^(lvl-1), capacity, spare)
+function partsOverMax() {
+  const out = [];
+  const look = (inst, where) => {
+    const rec = inst && PT_INDEX[inst.ptid];
+    if (!rec) return;
+    const md = partMaxDur(rec, inst.lvl), why = [];
+    if (md > 0 && Number(inst.dur) > md) why.push('dur');
+    // parts with no magazine / no spare store 0 (all 11,852 game-made parts in the test saves)
+    if (Number(inst.rest) > (Number(rec.capacity) || 0)) why.push('rest');
+    if (Number(inst.spare) > (Number(rec.spare) || 0)) why.push('spare');
+    if (why.length) out.push({ inst, rec, md, why, where });
+  };
+  for (const c of arr(SAVE && SAVE.soul && SAVE.soul.chrs)) if (c && c.state !== 'ENEMY') for (const p of arr(c.pspts)) look(p, `${c.name || 'a fighter'}'s Death Bag`);
+  for (const p of arr(SAVE && SAVE.cl && SAVE.cl.pts)) look(p, 'Storage Box');
+  return out;
+}
+function fixPartsOverMax() {
+  const list = partsOverMax();
+  for (const o of list) {
+    if (o.why.includes('dur')) o.inst.dur = o.md;
+    if (o.why.includes('rest')) o.inst.rest = Number(o.rec.capacity) || 0;
+    if (o.why.includes('spare')) o.inst.spare = Number(o.rec.spare) || 0;
+  }
+  return list.length;
+}
+// stat levels above the cap for the type, grade and limit break (param_lv_max); the save stores each stat with its
+// bonus added, so the cap applies to the stat minus its bonus
+const SAFETY_STATS = [ 'hp', 'str', 'dex', 'vit', 'stm', 'luk' ];
+function statsOverCap() {
+  const out = [];
+  for (const c of arr(SAVE && SAVE.soul && SAVE.soul.chrs)) {
+    if (!safetyFighter(c) || !c.bodylvl) continue;
+    const R = fighterRanges(c.type || 'BAL', c.grade != null ? c.grade : 1, c.limit_break || 0), bb = c.bodybonus || {};
+    const over = SAFETY_STATS.filter(k => (Number(c.bodylvl[k]) || 0) - (Number(bb[k + '_bonus']) || 0) > R.statCap);
+    if (over.length) out.push({ c, R, over });
+  }
+  return out;
+}
+function fixStatsOverCap() {
+  const list = statsOverCap();
+  for (const o of list) {
+    for (const k of o.over) o.c.bodylvl[k] = o.R.statCap + (Number((o.c.bodybonus || {})[k + '_bonus']) || 0);
+    recomputeLevel(o.c);
+  }
+  return list.length;
+}
+// the level the game shows is the six stats (with bonuses) - 5 + the slots, bag and rage bought (true for every one
+// of 509 game-made fighters checked); fighters over their limits are left to that check, whose fix sets the level
+function levelMismatches() {
+  const skip = new Set(fightersOverCap().concat(statsOverCap()).map(o => o.c));
+  return arr(SAVE && SAVE.soul && SAVE.soul.chrs).filter(c => c && c.bodylvl && c.state !== 'ENEMY' && !skip.has(c) && Number(c.lvl) !== computedLevel(c));
+}
+function fixLevelMismatches() { const list = levelMismatches(); for (const c of list) recomputeLevel(c); return list.length; }
+// freezer hangers naming a fighter that isn't in the save, or the same fighter twice; Storage Box slots naming an
+// item that isn't stored
+const SAFETY_CL = [ [ 'eptid', 'pts' ], [ 'emsrid', 'msrs' ], [ 'ebstid', 'bsts' ], [ 'eitemid', 'items' ] ];
+function danglingSlots() {
+  const out = { hangers: [], storage: [] };
+  const cids = new Set(arr(SAVE && SAVE.soul && SAVE.soul.chrs).map(c => c && c.cid)), seen = new Set();
+  for (const h of arr(SAVE && SAVE.soul && SAVE.soul.chrslots)) {
+    if (!h || !h.cid) continue;
+    if (!cids.has(h.cid) || seen.has(h.cid)) out.hangers.push(h);
+    seen.add(h.cid);
+  }
+  const cl = (SAVE && SAVE.cl) || {};
+  const have = {}; for (const [ k, list ] of SAFETY_CL) have[k] = new Set(arr(cl[list]).map(x => x && x[k]));
+  for (const sl of arr(cl.slots)) for (const [ k ] of SAFETY_CL) { const v = sl && sl[k]; if (v && v !== '-1' && !have[k].has(v)) out.storage.push({ sl, k }); }
+  return out;
+}
+function fixDanglingSlots() {
+  const d = danglingSlots();
+  for (const h of d.hangers) h.cid = '';
+  for (const x of d.storage) x.sl[x.k] = '-1';
+  return d.hangers.length + d.storage.length;
+}
 
 function runSaveCheck() {
   const out = [];
@@ -9033,7 +9171,68 @@ function runSaveCheck() {
 
   // load-time repairs
   if (HEALTH_LOAD.repairedChars) add('note', `${HEALTH_LOAD.repairedChars} broken character${HEALTH_LOAD.repairedChars === 1 ? '' : 's'} in text fields were repaired while loading. The rest of the save loaded normally.`);
-  if (HEALTH_LOAD.repairedFighters) add('note', `Decal slots, bag or rage were over the limit on ${HEALTH_LOAD.repairedFighters} fighter${HEALTH_LOAD.repairedFighters === 1 ? '' : 's'} and were brought back within range.`, 'fighters');
+
+  // fighters with more decal slots, Death Bag or rage than their type, grade and limit break allow
+  safe('fighter limits', () => {
+    const over = fightersOverCap();
+    if (!over.length) return;
+    const nm = { skill: 'decal slots', bag: 'Death Bag', rage: 'rage' };
+    const tot = (o, k) => k === 'skill' ? [ o.R.skillBase + o.has.skill, o.R.skillCap ] : k === 'bag' ? [ o.R.bagBase + o.has.bag, o.R.bagCap ] : [ o.R.rageBase + o.has.rage, o.R.rageCap ];
+    const lbl = o => `${escapeHtml(o.c.name || 'a fighter')} (${escapeHtml(o.c.type || '?')} Grade ${o.c.grade} Limit Break ${o.c.limit_break || 0}: ${o.over.map(k => { const [ h, m ] = tot(o, k); return `${nm[k]} ${h}, max ${m}`; }).join(', ')})`;
+    add('warning', `${over.length} fighter${over.length === 1 ? ' has' : 's have'} more decal slots, Death Bag or rage than ${over.length === 1 ? 'its' : 'their'} type, grade and limit break allow: ${over.slice(0, 4).map(lbl).join('; ')}${over.length > 4 ? '; …' : ''}. The game never makes these values (only Skill Masters gain rage, up to 8 at Limit Break 4); they come from another editor or an old editor version. The editor shows these fighters at their limits and leaves the save as it is unless you fix it.`, 'fighters', {
+      label: 'Bring them back within the limits', run: () => { const n = fixFightersOverCap(); return `${n} fighter${n === 1 ? '' : 's'} set back within the limits for their limit break.`; }
+    });
+  });
+
+  // decals equipped beyond the fighter's decal slots
+  safe('decal slots', () => {
+    const over = decalsOverSlots();
+    if (!over.length) return;
+    const n = over.reduce((k, o) => k + o.extra.length, 0);
+    add('warning', `${over.length} fighter${over.length === 1 ? ' has' : 's have'} more decals equipped than ${over.length === 1 ? 'its' : 'their'} decal slots: ${over.slice(0, 4).map(o => `${escapeHtml(o.c.name || 'a fighter')} (${arr(o.c.eqskls).length} decals, ${o.slots} slots)`).join('; ')}${over.length > 4 ? '; …' : ''}. The game never equips more than the slots.`, 'fighters', {
+      label: 'Take off the extra decals', run: () => { const k = fixDecalsOverSlots(); return `Took off ${k} decal${k === 1 ? '' : 's'} (premium ones went back to the decal stock).`; }
+    });
+  });
+
+  // weapons / armor with more durability or ammo than the part allows
+  safe('durability', () => {
+    const over = partsOverMax();
+    if (!over.length) return;
+    const what = { dur: 'durability', rest: 'ammo', spare: 'spare ammo' };
+    const lbl = o => `${escapeHtml(o.rec.name || o.inst.ptid)} (${escapeHtml(o.where)}: ${o.why.map(w => w === 'dur' ? `durability ${o.inst.dur} of ${o.md}` : w === 'rest' ? `ammo ${o.inst.rest} of ${o.rec.capacity}` : `spare ammo ${o.inst.spare} of ${o.rec.spare}`).join(', ')})`;
+    add('warning', `${over.length} weapon${over.length === 1 ? '' : 's'}/armor ${over.length === 1 ? 'has' : 'have'} more ${[ ...new Set(over.flatMap(o => o.why)) ].map(w => what[w]).join(' or ')} than the part allows: ${over.slice(0, 4).map(lbl).join('; ')}${over.length > 4 ? '; …' : ''}. The game never goes above the part's maximum.`, 'storage', {
+      label: 'Set them to the maximum', run: () => { const k = fixPartsOverMax(); return `${k} weapon${k === 1 ? '' : 's'}/armor set to the part's maximum.`; }
+    });
+  });
+
+  // stat levels above the cap for the limit break
+  safe('stat caps', () => {
+    const over = statsOverCap();
+    if (!over.length) return;
+    const nm = { hp: 'HP', str: 'STR', dex: 'DEX', vit: 'VIT', stm: 'STM', luk: 'LUK' };
+    add('warning', `${over.length} fighter${over.length === 1 ? ' has' : 's have'} stats above the cap for ${over.length === 1 ? 'its' : 'their'} grade and limit break: ${over.slice(0, 4).map(o => `${escapeHtml(o.c.name || 'a fighter')} (${o.over.map(k => `${nm[k]} ${o.c.bodylvl[k]}`).join(', ')}; cap ${o.R.statCap} plus bonus)`).join('; ')}${over.length > 4 ? '; …' : ''}. The game never raises a stat past the cap.`, 'fighters', {
+      label: 'Set them to the cap', run: () => { const k = fixStatsOverCap(); return `${k} fighter${k === 1 ? '' : 's'} set to the stat cap, with the level recalculated.`; }
+    });
+  });
+
+  // saved level not matching the stats and upgrades
+  safe('fighter level', () => {
+    const bad = levelMismatches();
+    if (!bad.length) return;
+    add('warning', `${bad.length} fighter${bad.length === 1 ? "'s level doesn't" : "s' levels don't"} match ${bad.length === 1 ? 'its' : 'their'} stats and upgrades: ${bad.slice(0, 4).map(c => `${escapeHtml(c.name || 'a fighter')} (saved ${c.lvl}, should be ${computedLevel(c)})`).join('; ')}${bad.length > 4 ? '; …' : ''}. The game's level is the six stats minus 5 plus the slots, bag and rage bought.`, 'fighters', {
+      label: 'Recalculate the levels', run: () => { const k = fixLevelMismatches(); return `${k} level${k === 1 ? '' : 's'} recalculated.`; }
+    });
+  });
+
+  // freezer hangers and Storage Box slots pointing at nothing
+  safe('dangling slots', () => {
+    const d = danglingSlots();
+    if (!d.hangers.length && !d.storage.length) return;
+    const parts = [ d.hangers.length && `${d.hangers.length} freezer hanger${d.hangers.length === 1 ? ' names a fighter' : 's name fighters'} that ${d.hangers.length === 1 ? "isn't" : "aren't"} in the save (or one already in another hanger)`, d.storage.length && `${d.storage.length} Storage Box slot${d.storage.length === 1 ? ' names an item' : 's name items'} that ${d.storage.length === 1 ? "isn't" : "aren't"} stored` ].filter(Boolean);
+    add('problem', `${parts.join('; ')}. The game expects every hanger and slot to point at something real.`, d.hangers.length ? 'fighters' : 'storage', {
+      label: 'Empty them', run: () => { const k = fixDanglingSlots(); return `Emptied ${k} hanger${k === 1 ? '' : 's'}/slot${k === 1 ? '' : 's'}.`; }
+    });
+  });
 
   // dates
   safe('dates', () => {
@@ -10245,7 +10444,8 @@ function restoreEmptyShapes(built, raw) {
 // At load the save is kept as text (ORIG_SAVE). Download builds the new save,
 // runs both through the same adapter the editor uses and lists what differs,
 // so a slip (wrong fighter, wrong field) shows up before the file is written.
-// Files are named brggame_YYYY-MM-DD_HHMM so older downloads are never replaced.
+// Files are named brggame_YYYY-MM-DD_HHMMSS so older downloads are never replaced (seconds, so two downloads in
+// the same minute get different names).
 // ---------------------------------------------------------------------------
 
 let ORIG_SAVE = { root: null, text: '', file: null, name: '' };
@@ -10259,7 +10459,7 @@ function reviewAdapt(raw) {
 function reviewStamp(d) {
   d = d || new Date();
   const p = n => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}`;
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
 }
 function reviewFileName(ext, stamp) { return `brggame_${stamp || reviewStamp()}.${ext}`; }
 
@@ -10466,12 +10666,15 @@ function reviewDiff(A, B, rawA, rawB) {
   const fa = rawA.soul && rawA.soul.flrid, fb = rawB.soul && rawB.soul.flrid;
   const locLbl = id => !id ? 'none' : hvnFloor(id) ? hvnFloorLabel(hvnFloor(id)) : id;
   if (fa !== fb) lc.lines.push(`Paused floor: ${locLbl(fa)} → ${locLbl(fb)}`);
-  if (BOSS_LOCK.root === RAW_SAV_ROOT && BOSS_LOCK.mode) {
-    // compare with the planned floors as they'd be after any floor move (the paused floor is never locked)
-    const bl = sec('Boss floor lock'), hA = blkExisting(rawB.soul && rawB.soul.flrid);
+  if (BOSS_LOCK.root === RAW_SAV_ROOT && BOSS_LOCK.mode && !(RUN_END.root === RAW_SAV_ROOT && RUN_END.on)) {
+    // compare with the planned floors as they'd be after any floor move (the paused floor is never locked); the lock
+    // starts from the floor before a go-back to the last boss floor, so that's what it's compared with
+    const bl = sec('Boss floor lock'), hA = blkExisting(blkFrom());
     bl.lines.push(`Locked to: ${BLK_MODES[BOSS_LOCK.mode].label}${BOSS_LOCK.which ? ' · only ' + ((blkWhichOptions(BOSS_LOCK.mode).find(o => o.v === BOSS_LOCK.which) || {}).label || BOSS_LOCK.which) : ''}`);
+    // only the floors the lock writes (a go-back can add a skipped map B floor of its own)
+    const lp = blkPlanFresh(), wrote = new Set(arr(lp && lp.items).filter(it => it.entry).map(it => it.floor.id));
     for (const e of arr(rawB.soul && rawB.soul.hvntrinfo)) {
-      if (e.flrid === rawB.soul.flrid) continue;
+      if (e.flrid === rawB.soul.flrid || !wrote.has(e.flrid)) continue;
       const o = hA.get(e.flrid), f = hvnFloor(e.flrid), lbl = f ? f.no + 'F' : e.flrid;
       if (!o) bl.lines.push(`${lbl}: added as ${blkKind(e.refareaid).label}`);
       else if (o.refareaid !== e.refareaid) bl.lines.push(`${lbl}: ${blkKind(o.refareaid).label} → ${blkKind(e.refareaid).label}`);
