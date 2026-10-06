@@ -2883,7 +2883,8 @@ function gearDiscountPct(chr, stat) {
   return Math.max(0, 100 - off);
 }
 function gearProblem(chr, p, site) {
-  const rec = p && PT_INDEX[p.ptid];
+  if (!p) return "the item isn't in the fighter's Death Bag";
+  const rec = PT_INDEX[p.ptid];
   if (!rec) return "unknown part (not in this masters.db)";
   if (!(GEAR_SITE_TYPES[site] || []).includes(rec.type)) return "wrong slot for this part";
   if (GEAR_NEVER.test(rec.id) || Number(rec.is_consume) === 1) return "not equippable";
@@ -9047,6 +9048,118 @@ function fixFightersOverCap() {
   }
   return list.length;
 }
+// More safety checks, each verified against masters.db and the game-made records of 16 real saves (none of them
+// fires on a game-made record): fighters the game plays with (not ENEMY, DUMMY or CONCILIATE, which keep other
+// rules), every rule from master_body_detail / master_part.
+function safetyFighter(c) { return !!c && c.state !== 'ENEMY' && c.state !== 'DUMMY' && c.state !== 'CONCILIATE'; }
+function decalSlotsOf(c) {
+  const R = fighterRanges(c.type || 'BAL', c.grade != null ? c.grade : 1, c.limit_break || 0);
+  return Math.min(R.skillBase + (Number(c.bodylvl && c.bodylvl.skill) || 0), R.skillCap);
+}
+// decals equipped beyond the fighter's slots (skill_slots + slots bought): the ones past the last slot
+function decalsOverSlots() {
+  const out = [];
+  for (const c of arr(SAVE && SAVE.soul && SAVE.soul.chrs)) {
+    if (!safetyFighter(c) || !arr(c.eqskls).length) continue;
+    const slots = decalSlotsOf(c), list = arr(c.eqskls).slice().sort((a, b) => (Number(a.slot) || 0) - (Number(b.slot) || 0));
+    const keep = list.filter(e => (Number(e.slot) || 0) < slots).slice(0, slots), extra = list.filter(e => !keep.includes(e));
+    if (extra.length) out.push({ c, slots, extra });
+  }
+  return out;
+}
+function fixDecalsOverSlots() {
+  let n = 0;
+  SAVE.soul.psskls = arr(SAVE.soul.psskls);
+  for (const o of decalsOverSlots()) {
+    o.c.eqskls = arr(o.c.eqskls).filter(e => !o.extra.includes(e));
+    for (const e of o.extra) {
+      n++;
+      // like taking it off in game: a premium decal goes back to the stock, a normal one is lost
+      const id = e.id || e.sklid;
+      if (!(SKL_INDEX[id] && Number(SKL_INDEX[id].premium) === 1)) continue;
+      let st = SAVE.soul.psskls.find(x => x.id === id);
+      if (!st) SAVE.soul.psskls.push(st = { id, lvl: 1, cnt: 0, is_checked: 1 });
+      st.cnt = Math.min((st.cnt || 0) + 1, DECAL_CAP);
+    }
+  }
+  return n;
+}
+// weapons / armor with more durability, ammo or spare ammo than master_part allows (dur x dur_c^(lvl-1), capacity, spare)
+function partsOverMax() {
+  const out = [];
+  const look = (inst, where) => {
+    const rec = inst && PT_INDEX[inst.ptid];
+    if (!rec) return;
+    const md = partMaxDur(rec, inst.lvl), why = [];
+    if (md > 0 && Number(inst.dur) > md) why.push('dur');
+    // parts with no magazine / no spare store 0 (all 11,852 game-made parts in the test saves)
+    if (Number(inst.rest) > (Number(rec.capacity) || 0)) why.push('rest');
+    if (Number(inst.spare) > (Number(rec.spare) || 0)) why.push('spare');
+    if (why.length) out.push({ inst, rec, md, why, where });
+  };
+  for (const c of arr(SAVE && SAVE.soul && SAVE.soul.chrs)) if (c && c.state !== 'ENEMY') for (const p of arr(c.pspts)) look(p, `${c.name || 'a fighter'}'s Death Bag`);
+  for (const p of arr(SAVE && SAVE.cl && SAVE.cl.pts)) look(p, 'Storage Box');
+  return out;
+}
+function fixPartsOverMax() {
+  const list = partsOverMax();
+  for (const o of list) {
+    if (o.why.includes('dur')) o.inst.dur = o.md;
+    if (o.why.includes('rest')) o.inst.rest = Number(o.rec.capacity) || 0;
+    if (o.why.includes('spare')) o.inst.spare = Number(o.rec.spare) || 0;
+  }
+  return list.length;
+}
+// stat levels above the cap for the type, grade and limit break (param_lv_max); the save stores each stat with its
+// bonus added, so the cap applies to the stat minus its bonus
+const SAFETY_STATS = [ 'hp', 'str', 'dex', 'vit', 'stm', 'luk' ];
+function statsOverCap() {
+  const out = [];
+  for (const c of arr(SAVE && SAVE.soul && SAVE.soul.chrs)) {
+    if (!safetyFighter(c) || !c.bodylvl) continue;
+    const R = fighterRanges(c.type || 'BAL', c.grade != null ? c.grade : 1, c.limit_break || 0), bb = c.bodybonus || {};
+    const over = SAFETY_STATS.filter(k => (Number(c.bodylvl[k]) || 0) - (Number(bb[k + '_bonus']) || 0) > R.statCap);
+    if (over.length) out.push({ c, R, over });
+  }
+  return out;
+}
+function fixStatsOverCap() {
+  const list = statsOverCap();
+  for (const o of list) {
+    for (const k of o.over) o.c.bodylvl[k] = o.R.statCap + (Number((o.c.bodybonus || {})[k + '_bonus']) || 0);
+    recomputeLevel(o.c);
+  }
+  return list.length;
+}
+// the level the game shows is the six stats (with bonuses) - 5 + the slots, bag and rage bought (true for every one
+// of 509 game-made fighters checked); fighters over their limits are left to that check, whose fix sets the level
+function levelMismatches() {
+  const skip = new Set(fightersOverCap().concat(statsOverCap()).map(o => o.c));
+  return arr(SAVE && SAVE.soul && SAVE.soul.chrs).filter(c => c && c.bodylvl && c.state !== 'ENEMY' && !skip.has(c) && Number(c.lvl) !== computedLevel(c));
+}
+function fixLevelMismatches() { const list = levelMismatches(); for (const c of list) recomputeLevel(c); return list.length; }
+// freezer hangers naming a fighter that isn't in the save, or the same fighter twice; Storage Box slots naming an
+// item that isn't stored
+const SAFETY_CL = [ [ 'eptid', 'pts' ], [ 'emsrid', 'msrs' ], [ 'ebstid', 'bsts' ], [ 'eitemid', 'items' ] ];
+function danglingSlots() {
+  const out = { hangers: [], storage: [] };
+  const cids = new Set(arr(SAVE && SAVE.soul && SAVE.soul.chrs).map(c => c && c.cid)), seen = new Set();
+  for (const h of arr(SAVE && SAVE.soul && SAVE.soul.chrslots)) {
+    if (!h || !h.cid) continue;
+    if (!cids.has(h.cid) || seen.has(h.cid)) out.hangers.push(h);
+    seen.add(h.cid);
+  }
+  const cl = (SAVE && SAVE.cl) || {};
+  const have = {}; for (const [ k, list ] of SAFETY_CL) have[k] = new Set(arr(cl[list]).map(x => x && x[k]));
+  for (const sl of arr(cl.slots)) for (const [ k ] of SAFETY_CL) { const v = sl && sl[k]; if (v && v !== '-1' && !have[k].has(v)) out.storage.push({ sl, k }); }
+  return out;
+}
+function fixDanglingSlots() {
+  const d = danglingSlots();
+  for (const h of d.hangers) h.cid = '';
+  for (const x of d.storage) x.sl[x.k] = '-1';
+  return d.hangers.length + d.storage.length;
+}
 
 function runSaveCheck() {
   const out = [];
@@ -9068,6 +9181,56 @@ function runSaveCheck() {
     const lbl = o => `${escapeHtml(o.c.name || 'a fighter')} (${escapeHtml(o.c.type || '?')} Grade ${o.c.grade} Limit Break ${o.c.limit_break || 0}: ${o.over.map(k => { const [ h, m ] = tot(o, k); return `${nm[k]} ${h}, max ${m}`; }).join(', ')})`;
     add('warning', `${over.length} fighter${over.length === 1 ? ' has' : 's have'} more decal slots, Death Bag or rage than ${over.length === 1 ? 'its' : 'their'} type, grade and limit break allow: ${over.slice(0, 4).map(lbl).join('; ')}${over.length > 4 ? '; …' : ''}. The game never makes these values (only Skill Masters gain rage, up to 8 at Limit Break 4); they come from another editor or an old editor version. The editor shows these fighters at their limits and leaves the save as it is unless you fix it.`, 'fighters', {
       label: 'Bring them back within the limits', run: () => { const n = fixFightersOverCap(); return `${n} fighter${n === 1 ? '' : 's'} set back within the limits for their limit break.`; }
+    });
+  });
+
+  // decals equipped beyond the fighter's decal slots
+  safe('decal slots', () => {
+    const over = decalsOverSlots();
+    if (!over.length) return;
+    const n = over.reduce((k, o) => k + o.extra.length, 0);
+    add('warning', `${over.length} fighter${over.length === 1 ? ' has' : 's have'} more decals equipped than ${over.length === 1 ? 'its' : 'their'} decal slots: ${over.slice(0, 4).map(o => `${escapeHtml(o.c.name || 'a fighter')} (${arr(o.c.eqskls).length} decals, ${o.slots} slots)`).join('; ')}${over.length > 4 ? '; …' : ''}. The game never equips more than the slots.`, 'fighters', {
+      label: 'Take off the extra decals', run: () => { const k = fixDecalsOverSlots(); return `Took off ${k} decal${k === 1 ? '' : 's'} (premium ones went back to the decal stock).`; }
+    });
+  });
+
+  // weapons / armor with more durability or ammo than the part allows
+  safe('durability', () => {
+    const over = partsOverMax();
+    if (!over.length) return;
+    const what = { dur: 'durability', rest: 'ammo', spare: 'spare ammo' };
+    const lbl = o => `${escapeHtml(o.rec.name || o.inst.ptid)} (${escapeHtml(o.where)}: ${o.why.map(w => w === 'dur' ? `durability ${o.inst.dur} of ${o.md}` : w === 'rest' ? `ammo ${o.inst.rest} of ${o.rec.capacity}` : `spare ammo ${o.inst.spare} of ${o.rec.spare}`).join(', ')})`;
+    add('warning', `${over.length} weapon${over.length === 1 ? '' : 's'}/armor ${over.length === 1 ? 'has' : 'have'} more ${[ ...new Set(over.flatMap(o => o.why)) ].map(w => what[w]).join(' or ')} than the part allows: ${over.slice(0, 4).map(lbl).join('; ')}${over.length > 4 ? '; …' : ''}. The game never goes above the part's maximum.`, 'storage', {
+      label: 'Set them to the maximum', run: () => { const k = fixPartsOverMax(); return `${k} weapon${k === 1 ? '' : 's'}/armor set to the part's maximum.`; }
+    });
+  });
+
+  // stat levels above the cap for the limit break
+  safe('stat caps', () => {
+    const over = statsOverCap();
+    if (!over.length) return;
+    const nm = { hp: 'HP', str: 'STR', dex: 'DEX', vit: 'VIT', stm: 'STM', luk: 'LUK' };
+    add('warning', `${over.length} fighter${over.length === 1 ? ' has' : 's have'} stats above the cap for ${over.length === 1 ? 'its' : 'their'} grade and limit break: ${over.slice(0, 4).map(o => `${escapeHtml(o.c.name || 'a fighter')} (${o.over.map(k => `${nm[k]} ${o.c.bodylvl[k]}`).join(', ')}; cap ${o.R.statCap} plus bonus)`).join('; ')}${over.length > 4 ? '; …' : ''}. The game never raises a stat past the cap.`, 'fighters', {
+      label: 'Set them to the cap', run: () => { const k = fixStatsOverCap(); return `${k} fighter${k === 1 ? '' : 's'} set to the stat cap, with the level recalculated.`; }
+    });
+  });
+
+  // saved level not matching the stats and upgrades
+  safe('fighter level', () => {
+    const bad = levelMismatches();
+    if (!bad.length) return;
+    add('warning', `${bad.length} fighter${bad.length === 1 ? "'s level doesn't" : "s' levels don't"} match ${bad.length === 1 ? 'its' : 'their'} stats and upgrades: ${bad.slice(0, 4).map(c => `${escapeHtml(c.name || 'a fighter')} (saved ${c.lvl}, should be ${computedLevel(c)})`).join('; ')}${bad.length > 4 ? '; …' : ''}. The game's level is the six stats minus 5 plus the slots, bag and rage bought.`, 'fighters', {
+      label: 'Recalculate the levels', run: () => { const k = fixLevelMismatches(); return `${k} level${k === 1 ? '' : 's'} recalculated.`; }
+    });
+  });
+
+  // freezer hangers and Storage Box slots pointing at nothing
+  safe('dangling slots', () => {
+    const d = danglingSlots();
+    if (!d.hangers.length && !d.storage.length) return;
+    const parts = [ d.hangers.length && `${d.hangers.length} freezer hanger${d.hangers.length === 1 ? ' names a fighter' : 's name fighters'} that ${d.hangers.length === 1 ? "isn't" : "aren't"} in the save (or one already in another hanger)`, d.storage.length && `${d.storage.length} Storage Box slot${d.storage.length === 1 ? ' names an item' : 's name items'} that ${d.storage.length === 1 ? "isn't" : "aren't"} stored` ].filter(Boolean);
+    add('problem', `${parts.join('; ')}. The game expects every hanger and slot to point at something real.`, d.hangers.length ? 'fighters' : 'storage', {
+      label: 'Empty them', run: () => { const k = fixDanglingSlots(); return `Emptied ${k} hanger${k === 1 ? '' : 's'}/slot${k === 1 ? '' : 's'}.`; }
     });
   });
 

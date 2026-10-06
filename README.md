@@ -64,8 +64,13 @@ When you load a save, a **Save check** panel above the tabs lists anything the e
   - weapons or armor above their part's highest level (fix: cap);
   - gear a fighter couldn't wear (fix: unequip);
   - fighters with more decal slots, Death Bag or rage than their type, grade and limit break allow (`master_body_detail`; only Skill Masters gain rage, up to 8 at Limit Break 4). The game never writes these; they come from other editors or old editor versions. The save is left as it is unless you use the fix (bring them back within the limits);
+  - more decals equipped than the fighter's decal slots (fix: take off the extras; premium decals go back to the stock);
+  - stats above the cap for the grade and limit break, counted without the stat bonus (fix: set to the cap), and a saved level that doesn't match the stats and upgrades (fix: recalculate). Fighters taken from other players (CONCILIATE) and DUMMY fighters follow other rules and aren't checked;
+  - weapons or armor with more durability, ammo or spare ammo than the part allows (`master_part`; fix: set to the maximum);
+  - gear equipped from an item that isn't in the fighter's Death Bag (fix: unequip);
   - fighters over their Death Bag size (a note with **Renew the Express Pass** when it only fits with a pass that ran out);
   - items in two places at once;
+  - freezer hangers naming a fighter that isn't in the save (or one already in another hanger) and Storage Box slots naming an item that isn't stored (fix: empty them);
   - fighters added by an older editor without a freezer slot (fix included);
   - more than 9 defenders (fix: keep the first 9).
 - **Runs:**
