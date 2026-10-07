@@ -4601,6 +4601,7 @@ const BLK_MODES = {
 // boss-enhanced versions) at the Don points; master_mboss names them by type (hearing / sight / predation / U10), and
 // the game's quest text names them in that order: "the 3 Shock Terrors COEN, JIN-DIE, and GOTO-9, along with U-10" and
 // "COEN Mk-2, JIN-DIE Mk-2, GOTO-9 Mk-2, and U10 Mk-2".
+// One-boss lock confirmed in game (user, 2026-10-07).
 const BLK_BOSS_NAMES = { mboss: { 1: 'COEN', 2: 'JIN-DIE', 3: 'GOTO-9', 4: 'U-10' }, boss: { 1: 'COEN Mk-2', 2: 'JIN-DIE Mk-2', 3: 'GOTO-9 Mk-2', 4: 'U10 Mk-2' } };
 function blkKind(refareaid) {
   const k = (arr(AP && AP.hvnBossKis).find(r => r.areaid === refareaid) || {}).kis || '';
