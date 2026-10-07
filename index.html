@@ -540,7 +540,10 @@ function bankCapacityForLevel(level, levelField) {
 
 const STORAGE_BOX_MIN = 30;
 
-const STORAGE_BOX_MAX = 2e3;
+// Storage Box (the game calls it the coin locker, save key cl): masters.db master_const_int COINLOCKER_EXPAND_LIMIT_COUNT (2000) is its
+// largest capacity and COINLOCKER_EXPAND_COUNT (10) the step; read live so a modded masters.db is followed
+const STORAGE_BOX_MAX_DEFAULT = 2e3;
+function storageBoxMax() { const v = constIntOf('COINLOCKER_EXPAND_LIMIT_COUNT', STORAGE_BOX_MAX_DEFAULT); return v >= STORAGE_BOX_MIN ? v : STORAGE_BOX_MAX_DEFAULT; }
 
 const arr = x => Array.isArray(x) ? x : [];
 
@@ -6977,7 +6980,7 @@ function blockStorageBox() {
   const cl = SAVE.cl;
   const cap = cl.slots.length;
   const occupied = cl.slots.filter(s => s.eptid && s.eptid !== '-1' || s.emsrid && s.emsrid !== '-1' || s.ebstid && s.ebstid !== '-1' || s.eitemid && s.eitemid !== '-1').length;
-  return `<section class="block">\n    <div class="block-head"><div><div class="eyebrow">Item Storage</div><h2>Storage Box</h2></div></div>\n    <div class="block-body">\n      <div class="grid" style="margin-bottom:6px;">\n        <div class="field"><label>Capacity (30-${STORAGE_BOX_MAX}, steps of 10)</label><input type="number" id="sb-capacity" min="${STORAGE_BOX_MIN}" max="${STORAGE_BOX_MAX}" step="10" value="${cap}"></div>\n        <div class="field" style="display:flex; align-items:end;"><button class="subtle" id="sb-max">Max (${STORAGE_BOX_MAX})</button></div>\n      </div>\n      <div class="capNote ${occupied >= cap ? 'over' : ''}">${occupied} / ${cap} slots occupied${occupied >= cap ? ' -- FULL, raise capacity to add more' : ''}. Changing capacity adds/removes empty slots at the end; it never deletes occupied ones.</div>\n\n      <div class="eyebrow" style="margin:12px 0 6px;">Bulk blueprints</div>\n      <div class="toolbar">\n        <button class="subtle" id="sb-add-legit-bp">+1 of every obtainable blueprint</button>\n        <button class="subtle" id="sb-add-ps-bp">+1 PlayStation-only blueprint</button>\n        <button class="subtle" id="sb-add-travis-bp">+1 Travis jacket, pants, sunglasses &amp; Beam Katana 1</button>\n        <button class="subtle" id="sb-add-tdm-bp">+1 every TDM blueprint</button>\n      </div>\n\n      <div class="eyebrow" style="margin:12px 0 6px;">Deposit item</div>\n      <div class="subTabs" id="sb-cat-tabs">\n        <div class="subTab active" data-sb-cat="bp">Blueprint</div>\n        <div class="subTab" data-sb-cat="pt">Weapon / Armor</div>\n        <div class="subTab" data-sb-cat="msr">Mushroom</div>\n        <div class="subTab" data-sb-cat="bst">Beast</div>\n        <div class="subTab" data-sb-cat="item">Material / Other Item</div>\n      </div>\n      <div id="sb-add-form"></div>\n\n      <div class="eyebrow" style="margin:16px 0 8px;">Contents <button class="subtle" id="sb-refresh-all" style="margin-left:8px;" title="Durability to 100% and ammo full on every weapon and armor in the Storage Box">Repair &amp; refill all</button> <button class="subtle" id="sb-clear-all" style="margin-left:4px;">Clear all</button></div>\n      <div class="toolbar" style="margin-bottom:6px;"><input type="text" id="sb-content-search" placeholder="Search contents: name, level, or weapon / armor / blueprint / mushroom / beast / material" value="${escapeHtml(SB_CONTENT_FILTER)}" style="flex:1; max-width:360px; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);"><span class="count" id="sb-content-count"></span></div>\n      <div class="listBlock" id="sb-list">\n        ${cl.slots.map((s, i) => storageSlotRow(s, i)).filter(Boolean).join('') || '<div style="padding:10px; color:var(--text-faint); font-size:12px;">No occupied slots.</div>'}\n      </div>\n    </div>\n  </section>`;
+  return `<section class="block">\n    <div class="block-head"><div><div class="eyebrow">Item Storage</div><h2>Storage Box</h2></div></div>\n    <div class="block-body">\n      <div class="grid" style="margin-bottom:6px;">\n        <div class="field"><label>Capacity (30-${storageBoxMax()}, steps of 10)</label><input type="number" id="sb-capacity" min="${STORAGE_BOX_MIN}" max="${storageBoxMax()}" step="10" value="${cap}"></div>\n        <div class="field" style="display:flex; align-items:end;"><button class="subtle" id="sb-max">Max (${storageBoxMax()})</button></div>\n      </div>\n      <div class="capNote ${occupied >= cap ? 'over' : ''}">${occupied} / ${cap} slots occupied${occupied >= cap ? ' -- FULL, raise capacity to add more' : ''}. Changing capacity adds/removes empty slots at the end; it never deletes occupied ones.</div>\n\n      <div class="eyebrow" style="margin:12px 0 6px;">Bulk blueprints</div>\n      <div class="toolbar">\n        <button class="subtle" id="sb-add-legit-bp">+1 of every obtainable blueprint</button>\n        <button class="subtle" id="sb-add-ps-bp">+1 PlayStation-only blueprint</button>\n        <button class="subtle" id="sb-add-travis-bp">+1 Travis jacket, pants, sunglasses &amp; Beam Katana 1</button>\n        <button class="subtle" id="sb-add-tdm-bp">+1 every TDM blueprint</button>\n      </div>\n\n      <div class="eyebrow" style="margin:12px 0 6px;">Deposit item</div>\n      <div class="subTabs" id="sb-cat-tabs">\n        <div class="subTab active" data-sb-cat="bp">Blueprint</div>\n        <div class="subTab" data-sb-cat="pt">Weapon / Armor</div>\n        <div class="subTab" data-sb-cat="msr">Mushroom</div>\n        <div class="subTab" data-sb-cat="bst">Beast</div>\n        <div class="subTab" data-sb-cat="item">Material / Other Item</div>\n      </div>\n      <div id="sb-add-form"></div>\n\n      <div class="eyebrow" style="margin:16px 0 8px;">Contents <button class="subtle" id="sb-refresh-all" style="margin-left:8px;" title="Durability to 100% and ammo full on every weapon and armor in the Storage Box">Repair &amp; refill all</button> <button class="subtle" id="sb-clear-all" style="margin-left:4px;">Clear all</button></div>\n      <div class="toolbar" style="margin-bottom:6px;"><input type="text" id="sb-content-search" placeholder="Search contents: name, level, or weapon / armor / blueprint / mushroom / beast / material" value="${escapeHtml(SB_CONTENT_FILTER)}" style="flex:1; max-width:360px; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);"><span class="count" id="sb-content-count"></span></div>\n      <div class="listBlock" id="sb-list">\n        ${cl.slots.map((s, i) => storageSlotRow(s, i)).filter(Boolean).join('') || '<div style="padding:10px; color:var(--text-faint); font-size:12px;">No occupied slots.</div>'}\n      </div>\n    </div>\n  </section>`;
 }
 
 function itemDisplayName(itemId) {
@@ -7137,14 +7140,14 @@ function wireStorageBox() {
     let target = parseInt(e.target.value, 10) || STORAGE_BOX_MIN;
     target = Math.round(target / 10) * 10;
     if (target < STORAGE_BOX_MIN) target = STORAGE_BOX_MIN;
-    if (target > STORAGE_BOX_MAX) {
-      target = STORAGE_BOX_MAX;
-      toast(`Clamped to max capacity (${STORAGE_BOX_MAX})`);
+    if (target > storageBoxMax()) {
+      target = storageBoxMax();
+      toast(`Clamped to max capacity (${storageBoxMax()})`);
     }
     resizeStorageBox(target);
   });
   document.getElementById('sb-max').addEventListener('click', () => {
-    resizeStorageBox(STORAGE_BOX_MAX);
+    resizeStorageBox(storageBoxMax());
     toast('Storage box maxed');
   });
   document.getElementById('sb-refresh-all').addEventListener('click', () => {
