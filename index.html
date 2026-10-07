@@ -4372,10 +4372,10 @@ function flmUpcoming(target) {
 function flmRoll(target) {
   const root = RAW_SAV_ROOT, cur = root && root.soul, t = hvnFloor(target);
   if (!cur || !t) return null;
-  const items = flmItemsOf(root), ref = flmRefArea(root, cur.flrid);
+  const items = flmItemsOf(root), ref = flmSwapRef(target) || flmRefArea(root, cur.flrid);
   const out = { boxes: [], boss: null, featured: null, upcoming: [], refix: flmRefix(target) };
   const hCur = arr(cur.hvntrinfo).find(e => e && e.flrid === cur.flrid);
-  if (hCur && hCur.rwdid) { const to = flmDraw(t.id, t.areaid, hCur.refareaid || ref, Number(hCur.is_rare) ? 'PTGENTP_TRBOX_SPXL_RARE' : 'PTGENTP_SPXL'); if (to) out.featured = { from: hCur.rwdid, to }; }
+  if (hCur && hCur.rwdid) { const to = flmDraw(t.id, t.areaid, flmSwapRef(target) || hCur.refareaid || ref, Number(hCur.is_rare) ? 'PTGENTP_TRBOX_SPXL_RARE' : 'PTGENTP_SPXL'); if (to) out.featured = { from: hCur.rwdid, to }; }
   for (const u of flmUpcoming(target)) {
     const fx = out.refix[u.id];
     if (fx) {
@@ -4407,7 +4407,7 @@ function flmRoll(target) {
     if (!inst) continue;
     const isFeatured = b.type === 'TBTP_EXLARGE' || b.type === 'TBTP_SPXL' || popType[b.pntid] === 'TBTP_SPXL';
     if (isFeatured) {
-      if (!out.featured) { const to = flmDraw(t.id, t.areaid, (hCur && hCur.refareaid) || ref, hCur && Number(hCur.is_rare) ? 'PTGENTP_TRBOX_SPXL_RARE' : 'PTGENTP_SPXL'); if (to) out.featured = { from: (hCur && hCur.rwdid) || inst.itemid, to }; }
+      if (!out.featured) { const to = flmDraw(t.id, t.areaid, flmSwapRef(target) || (hCur && hCur.refareaid) || ref, hCur && Number(hCur.is_rare) ? 'PTGENTP_TRBOX_SPXL_RARE' : 'PTGENTP_SPXL'); if (to) out.featured = { from: (hCur && hCur.rwdid) || inst.itemid, to }; }
       if (out.featured) out.boxes.push({ eid: b.contentid, pntid: b.pntid, from: inst.itemid, to: out.featured.to, gentype: 'featured' });
     } else if (b.type === 'TBTP_LARGE') {
       const to = flmDraw(t.id, t.areaid, ref, 'PTGENTP_TRBOX_L');
@@ -4500,14 +4500,59 @@ function flmCurrent() {
   if (!s) return null;
   return { pause: s.pause || '', stgid: s.stgid || '', flrid: s.flrid || '', areaid: s.areaid || '' };
 }
+// Screamer Pit twins (EXPERIMENTAL). Regular Heaven uses the RUSH1-5 pits (HVN_AREA_011-015) only below 100F and
+// RUSH6-10 (HVN_AREA_018-022) only from 100F. In every save seen, a pit and its twin five numbers apart are built
+// the same way: same units (BOSS_START / BOSS / BOSS_GOAL), the same 5 ZAKO + 50 ZMB spawn points (named
+// HVN_R<nn>_...), the same goal points and the same map layout; only the arena id, the KIS (enemy set) and the
+// point-name number differ. So a built pit can be moved past the 95F / 100F line by turning it into its twin.
+function flmPitNo(ref) { const k = blkKind(ref); return k.kind === 'pit' ? Number(k.n) : 0; }
+function flmPitRef(n) { const r = arr(AP && AP.hvnBossKis).find(x => new RegExp('_KIS_RUSH' + n + '$').test(x.kis || '')); return r ? r.areaid : ''; }
+function flmPitTwin(ref) { const n = flmPitNo(ref); return !n ? '' : flmPitRef(n <= 5 ? n + 5 : n - 5); }
+// the arena the paused floor needs on `target`: '' = keep its own, else the pit twin it's turned into
+function flmSwapRef(target) {
+  const ref = flmCurRef(), ok = flmAllowed(target), twin = flmPitTwin(ref);
+  if (!ref || !ok.size || ok.has(ref) || !twin || !ok.has(twin)) return '';
+  return twin;
+}
+// turn the built pit on floor `to` (already renamed from the old floor) from arena `fromRef` into `toRef`
+function flmPitConvert(root, to, fromRef, toRef) {
+  const a = flmPitNo(fromRef), b = flmPitNo(toRef);
+  if (!a || !b || !root) return;
+  const pa = 'HVN_R' + String(a).padStart(2, '0') + '_', pb = 'HVN_R' + String(b).padStart(2, '0') + '_';
+  const fl = root.floor || {};
+  const h = arr(root.soul && root.soul.hvntrinfo).find(e => e && e.flrid === to);
+  // (its TRBOX_L placeholders come from the same one-item table for every pit, so they stay as they are)
+  if (h && h.refareaid === fromRef) h.refareaid = toRef;
+  for (const e of arr(fl.rlg && fl.rlg.archive)) {
+    if (!e || e.flrid !== to) continue;
+    if (e.ref_areaid === fromRef) e.ref_areaid = toRef;
+    if (typeof e.units === 'string') e.units = e.units.split('KIS_RUSH' + a + '"').join('KIS_RUSH' + b + '"').split(pa).join(pb);
+  }
+  const cf = fl.closed_area_flags;
+  if (cf && typeof cf === 'object') for (const k of Object.keys(cf)) if (k.startsWith(to + '_') && k.endsWith('_' + fromRef)) { cf[k.slice(0, -fromRef.length) + toRef] = cf[k]; delete cf[k]; }
+  // spawn points of the enemies on the floor (floor.zako.flrzks, floor.pop.xzk / xzmb, zombie.flrzmbs):
+  // only entries for this floor (or with no floor id) are renamed
+  const walk = (n, d) => {
+    if (!n || typeof n !== 'object' || d > 8) return;
+    if (!Array.isArray(n) && n.flrid && n.flrid !== to) return;
+    for (const k of Object.keys(n)) {
+      const v = n[k];
+      if (k === 'pntid' && typeof v === 'string' && v.startsWith(pa)) n[k] = pb + v.slice(pa.length);
+      else if (v && typeof v === 'object' && k !== 'rlg' && k !== 'closed_area_flags') walk(v, d + 1);
+    }
+  };
+  walk(fl, 0);
+  walk(root.zombie, 0);
+}
 function flmTargets() {
   const cur = flmCurrent();
   if (!cur || !cur.pause || cur.stgid !== 'S_HVN') return [];
   const f = hvnFloor(cur.flrid);
   if (!f || !(Number(f.mbsmax) > 0)) return [];
-  const route = hvnRoute(f.id).key, ref = flmCurRef();
+  const route = hvnRoute(f.id).key, ref = flmCurRef(), twin = flmPitTwin(ref);
   // the floor you're on is already built with its arena (e.g. a Don), so only floors that arena can appear on
-  const fits = x => { const ok = flmAllowed(x.id); return !ref || !ok.size || ok.has(ref); };
+  // (a Screamer Pit also goes where its twin can appear, see flmPitTwin)
+  const fits = x => { const ok = flmAllowed(x.id); return !ref || !ok.size || ok.has(ref) || (!!twin && ok.has(twin)); };
   return arr(AP && AP.hvnFloors).filter(x => x.areaid === f.areaid && x.id !== f.id && hvnRoute(x.id).key === route && fits(x)).sort((a, b) => a.no - b.no);
 }
 // rename every reference to floor `from` under node to `to` (object flrid values, keys like
@@ -4545,6 +4590,8 @@ function applyFloorMove(root) {
     if (lvl && root.floor.mboss && Array.isArray(root.floor.mboss.mbss)) for (const m of root.floor.mboss.mbss) if (m && m.lvl != null) m.lvl = lvl;
   }
   flmApplyRolls(root, from, to);
+  const swap = flmSwapRef(to);
+  if (swap) flmPitConvert(root, to, flmCurRef(), swap);
   // the fighter's run summary names the deepest floor of this run
   const chrs = root.soul.chr && root.soul.chr.chrs;
   for (const list of chrs && typeof chrs === 'object' ? Object.values(chrs) : []) for (const c of arr(list)) {
@@ -5006,18 +5053,22 @@ function renderLocation() {
   const targets = flmTargets();
   // floors left out because the arena already built here can't appear on them (e.g. a Don below 100F)
   const curRef = flmCurRef(), sameMap = f ? arr(AP && AP.hvnFloors).filter(x => x.areaid === f.areaid && x.id !== f.id && hvnRoute(x.id).key === hvnRoute(f.id).key).length : 0;
-  const arenaNote = curRef && sameMap > targets.length ? `<div class="capNote" style="margin-top:0;">This floor is a <b>${escapeHtml(blkKind(curRef).label)}</b> floor and it's already built, so only floors where that arena can appear are listed (${sameMap - targets.length} left out${(() => { const k = blkKind(curRef).kind, main = hvnRoute(f.id).key === 'main'; const nos = targets.map(x => x.no).concat([ f.no ]); const span = `this arena only appears on ${Math.min(...nos)}F-${Math.max(...nos)}F`; return k === 'boss' && main ? ': regular Heaven has no Dons below 100F' : k === 'pit' && main ? `: ${span}; the Screamer Pits below 100F and the ones from 100F up are different arenas. A mid-boss floor can be moved anywhere, so to go deeper, move from the next mid-boss floor` : `: ${span}`; })()}).</div>` : '';
+  const arenaNote = curRef && sameMap > targets.length ? `<div class="capNote" style="margin-top:0;">This floor is a <b>${escapeHtml(blkKind(curRef).label)}</b> floor and it's already built, so only floors where that arena can appear are listed (${sameMap - targets.length} left out${(() => { const k = blkKind(curRef).kind, main = hvnRoute(f.id).key === 'main'; const nos = targets.map(x => x.no).concat([ f.no ]); const span = `this arena only appears on ${Math.min(...nos)}F-${Math.max(...nos)}F`; return k === 'boss' && main ? ': regular Heaven has no Dons below 100F' : k === 'pit' && main ? `: ${span}` : `: ${span}`; })()}).</div>` : '';
   if (cur.stgid !== 'S_HVN' || !f) h += `<div class="capNote">Only Heaven boss floors can be moved (the fighter is paused outside Heaven).</div>`;
   else if (!(Number(f.mbsmax) > 0)) h += `<div class="warnNote" style="margin:0 0 10px;"><b>Floor move needs a boss floor.</b> The fighter is on ${escapeHtml(f.no + 'F')}, a normal Heaven floor. Normal floors are built at random, so only boss floors (which always use the same map) can be moved. To move, play to a boss floor (every 5th floor: 55F, 60F, 65F …), quit while standing on it, and load that save here. <b>Lock boss floors</b> below works from this floor.</div>`;
   else if (!targets.length) h += arenaNote || `<div class="capNote">No other boss floor uses this map.</div>`;
   else {
     const sel = 'background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);';
     const t = FLOOR_MOVE.target ? hvnFloor(FLOOR_MOVE.target) : null;
+    const twinN = flmPitNo(flmPitTwin(curRef)), conv = targets.filter(x => flmSwapRef(x.id));
+    const pitNote = conv.length ? `<div class="capNote" style="margin-top:0;">This floor is a <b>Screamer Pit</b> (RUSH${flmPitNo(curRef)}). Regular Heaven uses RUSH1-5 pits only below 100F and RUSH6-10 only from 100F, so on ${conv[0].no < f.no ? 'floors below 100F' : '100F and up'} the pit is turned into its twin, <b>RUSH${twinN}</b>: same map and spawn points, the ${twinN > 5 ? 'deeper' : 'shallower'} floors' enemy set. Those floors are marked <b>pit converted (experimental)</b>: not yet tested in game, so keep a backup. A mid-boss floor moves anywhere without this.</div>` : '';
     h += `<div class="capNote" style="margin-top:0;">Only boss floors of the same route that use the same map are listed (${escapeHtml(hvnRoute(f.id).name)}, ${escapeHtml(hvnMapLabel(f.areaid))}). The boss waiting on the floor is set to the new floor's boss level. Your records (deepest floor, clear times) are left as they are.</div>${arenaNote}
-      <div class="toolbar"><select id="loc-target" style="${sel} min-width:min(340px, 100%); max-width:100%;"><option value="">— keep ${escapeHtml(f.no + 'F')} —</option>${targets.map(x => `<option value="${x.id}" ${FLOOR_MOVE.target === x.id ? 'selected' : ''}>${escapeHtml(hvnFloorLabel(x))} · boss Lv ${x.mbslvlmin}${x.no < f.no ? ' (lower)' : ''}</option>`).join('')}</select>
+${pitNote}
+      <div class="toolbar"><select id="loc-target" style="${sel} min-width:min(340px, 100%); max-width:100%;"><option value="">— keep ${escapeHtml(f.no + 'F')} —</option>${targets.map(x => `<option value="${x.id}" ${FLOOR_MOVE.target === x.id ? 'selected' : ''}>${escapeHtml(hvnFloorLabel(x))} · boss Lv ${x.mbslvlmin}${x.no < f.no ? ' (lower)' : ''}${flmSwapRef(x.id) ? ' · pit converted (experimental)' : ''}</option>`).join('')}</select>
       <button class="action" id="loc-apply">${FLOOR_MOVE.armed ? 'Click again to confirm' : 'Move to this floor'}</button>${FLOOR_MOVE.target ? '<button class="subtle" id="loc-undo">Undo</button>' : ''}</div>`;
     if (t) {
       h += `<div class="capNote">On download the fighter will be on <b>${escapeHtml(hvnFloorLabel(t))}</b> (from ${escapeHtml(f.no + 'F')}), boss Lv ${t.mbslvlmin}.</div>`;
+      if (flmSwapRef(t.id)) h += `<div class="warnNote" style="margin:6px 0;"><b>EXPERIMENTAL: pit converted.</b> ${escapeHtml(t.no + 'F')} can't have this floor's pit (RUSH${flmPitNo(curRef)}), so it's turned into its twin RUSH${flmPitNo(flmSwapRef(t.id))} (arena ${escapeHtml(flmSwapRef(t.id))}): the built arena, its spawn points and the floor's reward plan are renamed to it. The map and its layout don't change. Not yet tested in game; keep a backup and tell us how it goes.</div>`;
       const r = FLOOR_MOVE.rolls, nm = rwdNameHtml;
       const n = r ? r.boxes.length + (r.boss ? 1 : 0) + (r.featured ? 1 : 0) + arr(r.upcoming).length : 0;
       const up = flmUpcoming(t.id);
@@ -11079,6 +11130,7 @@ function reviewDiff(A, B, rawA, rawB) {
   const fa = rawA.soul && rawA.soul.flrid, fb = rawB.soul && rawB.soul.flrid;
   const locLbl = id => !id ? 'none' : hvnFloor(id) ? hvnFloorLabel(hvnFloor(id)) : id;
   if (fa !== fb) lc.lines.push(`Paused floor: ${locLbl(fa)} → ${locLbl(fb)}`);
+  if (fa !== fb && FLOOR_MOVE.root === RAW_SAV_ROOT && FLOOR_MOVE.target === fb && flmSwapRef(fb)) lc.lines.push(`Screamer Pit turned into its ${flmPitNo(flmSwapRef(fb)) > 5 ? '100F+' : 'below-100F'} twin (RUSH${flmPitNo(flmCurRef())} → RUSH${flmPitNo(flmSwapRef(fb))}) so it can be on ${hvnFloor(fb).no}F (EXPERIMENTAL)`);
   if (BOSS_LOCK.root === RAW_SAV_ROOT && BOSS_LOCK.mode && !(RUN_END.root === RAW_SAV_ROOT && RUN_END.on)) {
     // compare with the planned floors as they'd be after any floor move (the paused floor is never locked); the lock
     // starts from the floor before a go-back to the last boss floor, so that's what it's compared with
