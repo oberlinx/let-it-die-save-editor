@@ -419,9 +419,13 @@ const SLOT_TYPES = [ {
 
 // caps from the game: master_const_int BLOODNIUM_POINT_MAX; Recycle Points from
 // the vending machine text VENDER.TXT_RP_MS ("MAX: 999999999", extra is lost)
-const CURRENCY_FIELDS = [ [ 'bloodnium_point', 'Bloodnium', 999999 ], [ 'recycle_point', 'Recycle Points', 999999999 ] ];
+function bloodniumMax() { const v = constIntOf('BLOODNIUM_POINT_MAX', 999999); return v > 0 ? v : 999999; }
+function currencyFields() { return [ [ 'bloodnium_point', 'Bloodnium', bloodniumMax() ], [ 'recycle_point', 'Recycle Points', 999999999 ] ]; }
 
-const FREEZER_CAPACITY = [ 0, 3, 4, 5, 6, 7, 8, 9, 10 ];
+// hangers per Freezer level: masters.db master_freezer (number = level, count = hangers); the list is the fallback
+const FREEZER_CAPACITY_DEFAULT = [ 0, 3, 4, 5, 6, 7, 8, 9, 10 ];
+function freezerLevels() { const r = arr(AP && AP.freezer).filter(x => Number(x.number) > 0); return r.length ? Math.max(...r.map(x => Number(x.number))) : FREEZER_CAPACITY_DEFAULT.length - 1; }
+function freezerCapacity(lvl) { const r = arr(AP && AP.freezer).find(x => Number(x.number) === Number(lvl)); return r ? Number(r.count) : FREEZER_CAPACITY_DEFAULT[lvl] || 0; }
 
 const RESEARCH_STAMP_TYPES = [ 'SLASH', 'SHOOT', 'HIT', 'HEAD', 'BODY', 'LEGS' ];
 
@@ -543,6 +547,7 @@ const STORAGE_BOX_MIN = 30;
 // Storage Box (the game calls it the coin locker, save key cl): masters.db master_const_int COINLOCKER_EXPAND_LIMIT_COUNT (2000) is its
 // largest capacity and COINLOCKER_EXPAND_COUNT (10) the step; read live so a modded masters.db is followed
 const STORAGE_BOX_MAX_DEFAULT = 2e3;
+function storageBoxStep() { const v = constIntOf('COINLOCKER_EXPAND_COUNT', 10); return v > 0 ? v : 10; }
 function storageBoxMax() { const v = constIntOf('COINLOCKER_EXPAND_LIMIT_COUNT', STORAGE_BOX_MAX_DEFAULT); return v >= STORAGE_BOX_MIN ? v : STORAGE_BOX_MAX_DEFAULT; }
 
 const arr = x => Array.isArray(x) ? x : [];
@@ -1864,8 +1869,8 @@ function startSave(soul) {
   if (!soul.chrs.length) soul.chrs.push(freshCharacter());
   if (soul.freezer_level == null) {
     let inferred = 1;
-    for (let lvl = 1; lvl <= 8; lvl++) {
-      if (FREEZER_CAPACITY[lvl] >= soul.chrs.length) {
+    for (let lvl = 1; lvl <= freezerLevels(); lvl++) {
+      if (freezerCapacity(lvl) >= soul.chrs.length) {
         inferred = lvl;
         break;
       }
@@ -2102,7 +2107,7 @@ function bankRow(soul, kind, label, levelField, valueField) {
 function blockCurrency() {
   const soul = SAVE.soul;
   const rank = tdmRankForPoints(soul.tdm_point || 0, AP);
-  return `<section class="block">\n    <div class="block-head"><div><div class="eyebrow">Account</div><h2>Account Details</h2></div></div>\n    <div class="block-body">\n      <div class="grid" style="margin-bottom:14px;">\n        <div class="field"><label>Account ID <span class="id">(Steam ID, read only)</span></label><div id="acc-psnacid" style="padding:8px 0; font-size:14px; word-break:break-all;">${escapeHtml(SAVE.user.psnacid != null && SAVE.user.psnacid !== '' ? String(SAVE.user.psnacid) : '—')}</div></div>\n        <div class="field"><label>Account Name <span class="id">(read only)</span></label><div id="acc-name" style="padding:8px 0; font-size:14px; word-break:break-all;"><b>${escapeHtml(SAVE.user.nm != null && SAVE.user.nm !== '' ? String(SAVE.user.nm) : '—')}</b></div></div>\n        <div class="field"><label>TDM Points</label><input type="number" id="tdm-point" value="${soul.tdm_point || 0}"></div>\n        <div class="field"><label>TDM Rank <span class="id">(from the points)</span></label><div style="padding:8px 0; font-size:14px; word-break:break-all;">${escapeHtml(rank ? formatTdmRank(resolveName(rank.name)) || rank.id : soul.tdm_rank || '?')}</div></div>\n      </div>\n      <div class="eyebrow" style="margin-bottom:8px;">Bank-limited currencies</div>\n      <div class="bankTable">\n        ${bankRow(soul, 'money', 'Kill Coins', 'safe_level', 'free_money')}\n        ${bankRow(soul, 'spirit', 'SPLithium', 'spirit_tank_level', 'spirit')}\n      </div>\n      <div class="grid">\n        ${CURRENCY_FIELDS.map(([f, label, cap]) => `\n          <div class="field">\n            <label>${label}${cap ? ` (max ${cap.toLocaleString()})` : ''}</label>${f === 'recycle_point' ? `<div class="capNote" style="margin:0 0 4px;">In game, anything earned over the max is lost.</div>` : ''}\n            <input type="text" inputmode="numeric" data-currency="${f}" ${cap ? `data-max="${cap}"` : ''} value="${(soul[f] != null ? soul[f] : 0).toLocaleString()}">\n          </div>`).join('')}\n      </div>\n      ${masteryBlockHtml()}\n    </div>\n  </section>`;
+  return `<section class="block">\n    <div class="block-head"><div><div class="eyebrow">Account</div><h2>Account Details</h2></div></div>\n    <div class="block-body">\n      <div class="grid" style="margin-bottom:14px;">\n        <div class="field"><label>Account ID <span class="id">(Steam ID, read only)</span></label><div id="acc-psnacid" style="padding:8px 0; font-size:14px; word-break:break-all;">${escapeHtml(SAVE.user.psnacid != null && SAVE.user.psnacid !== '' ? String(SAVE.user.psnacid) : '—')}</div></div>\n        <div class="field"><label>Account Name <span class="id">(read only)</span></label><div id="acc-name" style="padding:8px 0; font-size:14px; word-break:break-all;"><b>${escapeHtml(SAVE.user.nm != null && SAVE.user.nm !== '' ? String(SAVE.user.nm) : '—')}</b></div></div>\n        <div class="field"><label>TDM Points</label><input type="number" id="tdm-point" value="${soul.tdm_point || 0}"></div>\n        <div class="field"><label>TDM Rank <span class="id">(from the points)</span></label><div style="padding:8px 0; font-size:14px; word-break:break-all;">${escapeHtml(rank ? formatTdmRank(resolveName(rank.name)) || rank.id : soul.tdm_rank || '?')}</div></div>\n      </div>\n      <div class="eyebrow" style="margin-bottom:8px;">Bank-limited currencies</div>\n      <div class="bankTable">\n        ${bankRow(soul, 'money', 'Kill Coins', 'safe_level', 'free_money')}\n        ${bankRow(soul, 'spirit', 'SPLithium', 'spirit_tank_level', 'spirit')}\n      </div>\n      <div class="grid">\n        ${currencyFields().map(([f, label, cap]) => `\n          <div class="field">\n            <label>${label}${cap ? ` (max ${cap.toLocaleString()})` : ''}</label>${f === 'recycle_point' ? `<div class="capNote" style="margin:0 0 4px;">In game, anything earned over the max is lost.</div>` : ''}\n            <input type="text" inputmode="numeric" data-currency="${f}" ${cap ? `data-max="${cap}"` : ''} value="${(soul[f] != null ? soul[f] : 0).toLocaleString()}">\n          </div>`).join('')}\n      </div>\n      ${masteryBlockHtml()}\n    </div>\n  </section>`;
 }
 
 function wireCurrency() {
@@ -2741,7 +2746,7 @@ function blockCharacters() {
   const chrs = SAVE.soul.chrs;
   const FZ = realFreezerInfo();
   const freezerLevel = FZ.level || 1;
-  const freezerCap = FZ.slots || FREEZER_CAPACITY[Math.min(Math.max(freezerLevel, 1), 8)];
+  const freezerCap = FZ.slots || freezerCapacity(Math.min(Math.max(freezerLevel, 1), freezerLevels()));
   const atCap = !freeHangers().length;
   const chr = chrs[activeCharIdx] || chrs[0];
   const isCurrent = chr && chr.cid && chr.cid === SAVE.soul.crntcid;
@@ -4873,7 +4878,8 @@ function applyRunEnd(root) {
   const c = info && info.chr;
   if (c) {
     s.free_money = (Number(s.free_money) || 0) + info.add;
-    s.bloodnium_point = (Number(s.bloodnium_point) || 0) + info.blood;
+    // the game caps Bloodnium at BLOODNIUM_POINT_MAX (a total already above it is left as it is)
+    { const had = Number(s.bloodnium_point) || 0; s.bloodnium_point = Math.max(had, Math.min(bloodniumMax(), had + info.blood)); }
     c.money = 0; c.bloodnium = 0; c.pause = '';
     c.bloodnium_result = JSON.stringify({ enemy_count: 0, bloodnium: 0, elapsed_time: 0, max_floor_id: '' });
   }
@@ -6980,7 +6986,7 @@ function blockStorageBox() {
   const cl = SAVE.cl;
   const cap = cl.slots.length;
   const occupied = cl.slots.filter(s => s.eptid && s.eptid !== '-1' || s.emsrid && s.emsrid !== '-1' || s.ebstid && s.ebstid !== '-1' || s.eitemid && s.eitemid !== '-1').length;
-  return `<section class="block">\n    <div class="block-head"><div><div class="eyebrow">Item Storage</div><h2>Storage Box</h2></div></div>\n    <div class="block-body">\n      <div class="grid" style="margin-bottom:6px;">\n        <div class="field"><label>Capacity (30-${storageBoxMax()}, steps of 10)</label><input type="number" id="sb-capacity" min="${STORAGE_BOX_MIN}" max="${storageBoxMax()}" step="10" value="${cap}"></div>\n        <div class="field" style="display:flex; align-items:end;"><button class="subtle" id="sb-max">Max (${storageBoxMax()})</button></div>\n      </div>\n      <div class="capNote ${occupied >= cap ? 'over' : ''}">${occupied} / ${cap} slots occupied${occupied >= cap ? ' -- FULL, raise capacity to add more' : ''}. Changing capacity adds/removes empty slots at the end; it never deletes occupied ones.</div>\n\n      <div class="eyebrow" style="margin:12px 0 6px;">Bulk blueprints</div>\n      <div class="toolbar">\n        <button class="subtle" id="sb-add-legit-bp">+1 of every obtainable blueprint</button>\n        <button class="subtle" id="sb-add-ps-bp">+1 PlayStation-only blueprint</button>\n        <button class="subtle" id="sb-add-travis-bp">+1 Travis jacket, pants, sunglasses &amp; Beam Katana 1</button>\n        <button class="subtle" id="sb-add-tdm-bp">+1 every TDM blueprint</button>\n      </div>\n\n      <div class="eyebrow" style="margin:12px 0 6px;">Deposit item</div>\n      <div class="subTabs" id="sb-cat-tabs">\n        <div class="subTab active" data-sb-cat="bp">Blueprint</div>\n        <div class="subTab" data-sb-cat="pt">Weapon / Armor</div>\n        <div class="subTab" data-sb-cat="msr">Mushroom</div>\n        <div class="subTab" data-sb-cat="bst">Beast</div>\n        <div class="subTab" data-sb-cat="item">Material / Other Item</div>\n      </div>\n      <div id="sb-add-form"></div>\n\n      <div class="eyebrow" style="margin:16px 0 8px;">Contents <button class="subtle" id="sb-refresh-all" style="margin-left:8px;" title="Durability to 100% and ammo full on every weapon and armor in the Storage Box">Repair &amp; refill all</button> <button class="subtle" id="sb-clear-all" style="margin-left:4px;">Clear all</button></div>\n      <div class="toolbar" style="margin-bottom:6px;"><input type="text" id="sb-content-search" placeholder="Search contents: name, level, or weapon / armor / blueprint / mushroom / beast / material" value="${escapeHtml(SB_CONTENT_FILTER)}" style="flex:1; max-width:360px; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);"><span class="count" id="sb-content-count"></span></div>\n      <div class="listBlock" id="sb-list">\n        ${cl.slots.map((s, i) => storageSlotRow(s, i)).filter(Boolean).join('') || '<div style="padding:10px; color:var(--text-faint); font-size:12px;">No occupied slots.</div>'}\n      </div>\n    </div>\n  </section>`;
+  return `<section class="block">\n    <div class="block-head"><div><div class="eyebrow">Item Storage</div><h2>Storage Box</h2></div></div>\n    <div class="block-body">\n      <div class="grid" style="margin-bottom:6px;">\n        <div class="field"><label>Capacity (${STORAGE_BOX_MIN}-${storageBoxMax()}, steps of ${storageBoxStep()})</label><input type="number" id="sb-capacity" min="${STORAGE_BOX_MIN}" max="${storageBoxMax()}" step="${storageBoxStep()}" value="${cap}"></div>\n        <div class="field" style="display:flex; align-items:end;"><button class="subtle" id="sb-max">Max (${storageBoxMax()})</button></div>\n      </div>\n      <div class="capNote ${occupied >= cap ? 'over' : ''}">${occupied} / ${cap} slots occupied${occupied >= cap ? ' -- FULL, raise capacity to add more' : ''}. Changing capacity adds/removes empty slots at the end; it never deletes occupied ones.</div>\n\n      <div class="eyebrow" style="margin:12px 0 6px;">Bulk blueprints</div>\n      <div class="toolbar">\n        <button class="subtle" id="sb-add-legit-bp">+1 of every obtainable blueprint</button>\n        <button class="subtle" id="sb-add-ps-bp">+1 PlayStation-only blueprint</button>\n        <button class="subtle" id="sb-add-travis-bp">+1 Travis jacket, pants, sunglasses &amp; Beam Katana 1</button>\n        <button class="subtle" id="sb-add-tdm-bp">+1 every TDM blueprint</button>\n      </div>\n\n      <div class="eyebrow" style="margin:12px 0 6px;">Deposit item</div>\n      <div class="subTabs" id="sb-cat-tabs">\n        <div class="subTab active" data-sb-cat="bp">Blueprint</div>\n        <div class="subTab" data-sb-cat="pt">Weapon / Armor</div>\n        <div class="subTab" data-sb-cat="msr">Mushroom</div>\n        <div class="subTab" data-sb-cat="bst">Beast</div>\n        <div class="subTab" data-sb-cat="item">Material / Other Item</div>\n      </div>\n      <div id="sb-add-form"></div>\n\n      <div class="eyebrow" style="margin:16px 0 8px;">Contents <button class="subtle" id="sb-refresh-all" style="margin-left:8px;" title="Durability to 100% and ammo full on every weapon and armor in the Storage Box">Repair &amp; refill all</button> <button class="subtle" id="sb-clear-all" style="margin-left:4px;">Clear all</button></div>\n      <div class="toolbar" style="margin-bottom:6px;"><input type="text" id="sb-content-search" placeholder="Search contents: name, level, or weapon / armor / blueprint / mushroom / beast / material" value="${escapeHtml(SB_CONTENT_FILTER)}" style="flex:1; max-width:360px; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);"><span class="count" id="sb-content-count"></span></div>\n      <div class="listBlock" id="sb-list">\n        ${cl.slots.map((s, i) => storageSlotRow(s, i)).filter(Boolean).join('') || '<div style="padding:10px; color:var(--text-faint); font-size:12px;">No occupied slots.</div>'}\n      </div>\n    </div>\n  </section>`;
 }
 
 function itemDisplayName(itemId) {
@@ -7138,7 +7144,7 @@ function wireStorageBox() {
   applyStorageContentFilter();
   document.getElementById('sb-capacity').addEventListener('change', e => {
     let target = parseInt(e.target.value, 10) || STORAGE_BOX_MIN;
-    target = Math.round(target / 10) * 10;
+    target = Math.round(target / storageBoxStep()) * storageBoxStep();
     if (target < STORAGE_BOX_MIN) target = STORAGE_BOX_MIN;
     if (target > storageBoxMax()) {
       target = storageBoxMax();
@@ -7458,7 +7464,8 @@ let rbType = 'MONEY';
 function blockRewardBox() {
   const presents = SAVE.presents;
   const n = presents.length;
-  const warn = n >= 50 ? `<div class="warnNote">${n} items -- at 50+ the game blocks leaving the Waiting Room for the tower or raiding until this drops below 50.</div>` : '';
+  const lim = constIntOf('PRESENT_BOX_LIMIT', 50) || 50;   // masters.db master_const_int
+  const warn = n >= lim ? `<div class="warnNote">${n} items -- at ${lim}+ the game blocks leaving the Waiting Room for the tower or raiding until this drops below ${lim}.</div>` : '';
   const capNote = n > 999 ? '<div class="warnNote">Over 999 -- the in-game display caps at "999+"; there\'s no real storage limit, just a display cap.</div>' : '';
   return `<section class="block">\n    <div class="block-head"><div><div class="eyebrow">Mailbox</div><h2>Reward Box</h2></div></div>\n    <div class="block-body">\n      ${warn}${capNote}\n      <div class="eyebrow" style="margin-bottom:6px;">Add a reward</div>\n      <div class="grid" style="margin-bottom:8px;">\n        <div class="field"><label>Type</label><select id="rb-type" style="width:100%; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);">\n          ${PRESENT_TYPES.map(t => `<option value="${t.id}" ${t.id === rbType ? 'selected' : ''}>${t.label}</option>`).join('')}\n        </select></div>\n      </div>\n      <div id="rb-add-form"></div>\n      <div class="toolbar" style="margin-top:10px;"><button class="subtle" id="rb-clear">Clear all</button><div class="count">${n} items</div></div>\n      <div class="listBlock" id="rb-list">\n        ${presents.map((p, i) => rewardRow(p, i)).join('') || '<div style="padding:10px; color:var(--text-faint); font-size:12px;">Empty.</div>'}\n      </div>\n    </div>\n  </section>`;
 }
