@@ -17,7 +17,7 @@ You can also download `index.html` and open it straight from your PC.
    `...\steamapps\common\LET IT DIE\Savedata\`.
 5. Check the **Save check** panel (see below), make your changes, then click **Download .sav**. A list of everything you changed appears first so you can check it; you can also save a backup of the original from there. The file downloads as `brggame_<date>_<time>.sav` so older downloads are never replaced. Rename it to your save's name (e.g. `brggame.sav`) and put it in place of your save. A copy is also kept in **Download history** (see below), so you can go back if an edit goes wrong.
 
-**PSN players:** your save has to be decrypted first. You'll also need a copy of `masters.db`, which only comes with the PC version. If you don't have the PC game, ask in the [LET IT DIE Discord](https://discordapp.com/invite/gdMZBbK) or DM u/Oberlinx on Reddit.
+**PSN players:** your save has to be decrypted first (see [PlayStation saves: step by step](#playstation-saves-step-by-step), also in the editor under **PlayStation users: how-to**). You'll also need a copy of `masters.db`, which only comes with the PC version. If you don't have the PC game, ask in the [LET IT DIE Discord](https://discordapp.com/invite/gdMZBbK) or DM u/Oberlinx on Reddit.
 
 ## Getting around
 
@@ -116,6 +116,20 @@ When you load a save, a **Save check** panel above the tabs lists anything the e
 ### PlayStation saves
 
 The editor detects PlayStation saves. On a PS save, the **Include PS-only** boxes (Research, Decals, Rewards, Waiting Room) start ticked and PS-only content isn't flagged. On a PC save they start unticked and PS-only content is marked so it can be cleaned up.
+
+### PlayStation saves: step by step
+
+LET IT DIE Offline Edition is a **PS4 game** (a PS5 plays it through backwards compatibility), so its save is a **PS4 save** on both consoles and can be copied to a USB drive. Sony does not allow PS5-native saves on USB. The PSN save transfer from the online game ends on **30 November 2026**. You need a USB drive formatted FAT32 or exFAT (not "extended storage"), a computer and a PC `masters.db` that matches your game version. No PlayStation Plus subscription is needed.
+
+**Part 1: copy the save to USB.** Plug the drive into the console. Go to *Settings > Saved Data and Game/App Settings > Saved Data (PS4)*. On a PS4 choose *Upload or Delete from Console Storage > Copy to USB Drive*; on a PS5 choose *Console Storage* and the *Copy to USB Drive* tab. Tick the LET IT DIE save and press Copy. On your computer you will see a `PS4` folder. **Copy it somewhere safe as your backup and never edit it.**
+
+**Part 2: decrypt.** On [garlicsaves.com](https://garlicsaves.com) create a free account. On the Dashboard add your PSN account under *PS4 Profiles*: the profile name is your PSN online name, and the Account ID is the 16-character name of the folder inside `PS4/SAVEDATA/` on your USB drive (the one above `CUSA03769`). Open *Decrypt*, choose the profile and upload your save. You get your decrypted save: `brggame.sav` plus an `sce_sys` folder. Keep them together.
+
+**Part 3: edit.** Load `masters.db`, then `brggame.sav` here. Make your changes and click **Download .sav**; read the review window and Save check. Rename the download to `brggame.sav`, put it in the folder from Part 2 (replacing the old one) and zip `brggame.sav` and `sce_sys` so both sit in the root of the zip.
+
+**Part 4: re-encrypt and copy back.** On Garlic open *Encrypt*, choose your profile and drop in the zip. Leave **PS5 save** unticked. You get `LET_IT_DIE_CUSA03769_enc.zip`, with your own account put back into the folder it builds. Extract it to the **root of the USB drive** so the drive shows `PS4/SAVEDATA/<your account folder>/CUSA03769/` holding `savedata` and `savedata.bin`. On the console go to the same Saved Data (PS4) menu, choose the USB drive, *Copy to Console Storage*, tick the save and confirm. Start the game and check your fighters before you delete your backup.
+
+**If something goes wrong:** if the console does not list the save, check that `PS4` is at the top of the drive; if Garlic rejects the zip, `brggame.sav` and `sce_sys` must be directly in it, not inside another folder; if the game rejects or resets the save, copy your backup back the same way and try again from the original files.
 
 ### Stews
 

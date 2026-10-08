@@ -405,6 +405,17 @@
   .tip:hover::after, .tip:focus::after { content: attr(data-tip); position: absolute; left: 0; top: 20px; z-index: 300; width: max-content; max-width: min(280px, 80vw); padding: 7px 9px; background: var(--panel); color: var(--text); border: 1px solid var(--panel-border-bright); box-shadow: 0 6px 18px rgba(0,0,0,.4); font-size: 11.5px; font-weight: normal; line-height: 1.4; white-space: normal; text-align: left; }
   @media (pointer: coarse), (max-width: 640px) { .tip { width: 22px; height: 22px; font-size: 12px; } .tip:hover::after, .tip:focus::after { position: fixed; left: 12px; right: 12px; top: auto; bottom: 70px; max-width: none; width: auto; } }
 
+  .psGuide h3 { font-family: var(--display); font-size: 15px; margin: 16px 0 6px; }
+  .psGuide ol, .psGuide ul { margin: 4px 0 8px 20px; padding: 0; font-size: 13px; line-height: 1.5; }
+  .psGuide li { margin: 3px 0; }
+  .psGuide p { font-size: 13px; line-height: 1.5; }
+  .psGuide a { color: var(--accent-bright); text-decoration: underline; }
+  .psGuide a:hover { color: var(--text); }
+  .psIntro { font-size: 12.5px; line-height: 1.5; color: var(--text); margin: 0 0 6px; }
+  .psGuide code { background: var(--bg); border: 1px solid var(--panel-border); padding: 0 4px; font-family: var(--mono); font-size: 12px; }
+  .psGuide pre { background: var(--bg); border: 1px solid var(--panel-border); padding: 8px 10px; font-family: var(--mono); font-size: 12px; margin: 6px 0; overflow: auto; }
+  .uiOverlay .block.wide { max-width: 860px; }
+
 </style>
 </head>
 <body>
@@ -424,7 +435,7 @@
     <span class="qswrap"><input id="qs" type="text" placeholder="Search tabs &amp; settings (Ctrl+K)" autocomplete="off" aria-label="Search tabs and settings"><div id="qs-drop"></div></span>
     <button class="subtle" id="btn-keys" title="Keyboard shortcuts (?)">⌨</button>
     <button class="subtle" id="btn-theme" title="Switch theme">☀</button>
-    <div class="psnNote">PSN saves must first be decrypted. Use <a href="https://garlicsaves.com" target="_blank" rel="noopener">garlicsaves.com</a> or read <a href="https://discord.com/channels/256677044174323713/1544630372208480316/1547464159804002397" target="_blank" rel="noopener">this guide</a></div>
+    <div class="psnNote"><button class="subtle" id="btn-psguide" title="Step by step: copy a PS4/PS5 save to USB, decrypt, edit, re-encrypt, copy back">🎮 PlayStation users: how-to</button><br>PSN saves must first be decrypted. Use <a href="https://garlicsaves.com" target="_blank" rel="noopener">garlicsaves.com</a> or read <a href="https://discord.com/channels/256677044174323713/1544630372208480316/1547464159804002397" target="_blank" rel="noopener">this guide</a></div>
   </div>
 </header>
 
@@ -11998,6 +12009,70 @@ function uiHelp() {
   ov.addEventListener('click', e => { if (e.target === ov) uiCloseOverlay(); });
   document.getElementById('ui-ov-close').addEventListener('click', uiCloseOverlay);
 }
+
+function uiOpenPsGuide() {
+  uiCloseOverlay();
+  const ov = document.createElement('div'); ov.className = 'uiOverlay'; ov.id = 'ui-overlay';
+  ov.innerHTML = `<section class="block wide"><div class="block-head"><div><div class="eyebrow">PlayStation</div><h2>Edit your PS4 / PS5 save, step by step</h2></div></div><div class="block-body">
+    <div class="psIntro">LET IT DIE Offline Edition is a <b>PS4 game</b>; a PS5 plays it through backwards compatibility. Its save counts as a <b>PS4 save</b> on both consoles, which is why copying it to a USB drive works (Sony does not allow PS5-native saves on USB). The save transfer from the online game ends on <b>30 November 2026</b>.</div>
+    <div class="psGuide">
+    <p><b>You need:</b> a USB drive formatted <b>FAT32 or exFAT</b> (not set up as "extended storage"), a computer, and a PC <code>masters.db</code> from a game version that matches your save. No PlayStation Plus subscription is needed.</p>
+    <h3>Part 1: Copy your save from the console to USB</h3>
+    <ol>
+      <li>Plug the USB drive into the console.</li>
+      <li>Go to <b>Settings &gt; Saved Data and Game/App Settings &gt; Saved Data (PS4)</b>.</li>
+      <li><b>PS4:</b> choose <i>Upload or Delete from Console Storage</i>, then <i>Copy to USB Drive</i>.<br><b>PS5:</b> choose <i>Console Storage</i>, then the <i>Copy to USB Drive</i> tab.</li>
+      <li>Pick LET IT DIE, tick the save and press <b>Copy</b>.</li>
+      <li>Plug the drive into your computer. You will see a <code>PS4</code> folder. <b>Copy that whole folder somewhere safe. This is your backup. Never edit or overwrite it.</b></li>
+    </ol>
+    <h3>Part 2: Decrypt it</h3>
+    <ol>
+      <li>Go to <a href="https://garlicsaves.com" target="_blank" rel="noopener">garlicsaves.com</a>, <b>create a free account</b> and log in.</li>
+      <li>On the <b>Dashboard</b>, under <b>PS4 Profiles</b>, add your PSN account (once only):
+        <ul><li><b>Profile name:</b> your PSN online name.</li>
+        <li><b>Account ID:</b> the 16-character name of the folder on your USB drive. It is the folder inside <code>PS4/SAVEDATA/</code>, the one above <code>CUSA03769</code>. Copy it exactly. The site's <i>How do I find my Account ID?</i> link shows more.</li></ul>
+        Click <b>Add Profile</b>.</li>
+      <li>Open <b>Decrypt</b> from the menu on the left, choose your profile and upload your save from the USB copy. Follow the page's prompts for which files it wants.</li>
+      <li>Download the result. It is your decrypted save: <code>brggame.sav</code> plus an <code>sce_sys</code> folder. <b>Keep both together.</b></li>
+    </ol>
+    <h3>Part 3: Edit it</h3>
+    <ol>
+      <li>Load the PC <code>masters.db</code> here, then the decrypted <code>brggame.sav</code>. "PS" shows by the file name when the editor detects a PlayStation save.</li>
+      <li>Make your changes. The status bar at the bottom counts your unsaved changes, and <b>Changes</b> lists them with an Undo for each.</li>
+      <li>Click <b>Download .sav</b>. Read the review window and the Save check before you accept. The editor also keeps the original in <b>Download history</b>.</li>
+      <li>The download is named like <code>brggame_2026-10-08_063000.sav</code>. <b>Rename it to <code>brggame.sav</code></b> and put it in the folder from Part 2, replacing the old one. The folder must contain <code>brggame.sav</code> in its root and the <code>sce_sys</code> folder.</li>
+      <li>Zip that folder (select <code>brggame.sav</code> and <code>sce_sys</code>, then zip them) so both are in the root of the zip.</li>
+    </ol>
+    <h3>Part 4: Re-encrypt and copy back</h3>
+    <ol>
+      <li>On Garlic, open <b>Encrypt</b>, choose your profile, and drop in the zip. It reads the save name and size from the zip by itself. <b>Leave "PS5 save" unticked</b>, because this is a PS4 game. Click <b>Encrypt</b>.</li>
+      <li>You get a zip named like <code>LET_IT_DIE_CUSA03769_enc.zip</code>. Garlic puts your own account back into the folder it builds.</li>
+      <li>Extract it to the <b>root of the USB drive</b>, not into a folder. Afterwards the drive shows:
+<pre>PS4/
+  SAVEDATA/
+    &lt;your account folder&gt;/
+      CUSA03769/
+        savedata
+        savedata.bin</pre></li>
+      <li>Plug the drive into the console. Go to <b>Settings &gt; Saved Data and Game/App Settings &gt; Saved Data (PS4)</b>, choose the USB drive, then <b>Copy to Console Storage</b>. Tick the LET IT DIE save and confirm the overwrite.</li>
+      <li>Start the game and check your fighters <b>before</b> you delete your backup.</li>
+    </ol>
+    <h3>If something goes wrong</h3>
+    <ul>
+      <li><b>The save isn't listed on the console.</b> The folders are in the wrong place on the drive. Check that <code>PS4</code> is at the top, not inside another folder.</li>
+      <li><b>Garlic says the zip is wrong.</b> The zip must hold <code>brggame.sav</code> and <code>sce_sys</code> directly, not inside another folder.</li>
+      <li><b>The game rejects or resets the save.</b> Restore your backup from Part 1 the same way (Part 4, step 4), then try again from the original files.</li>
+      <li><b>The editor warns about masters.db.</b> Load a masters.db that matches your game version.</li>
+      <li><b>Parts or decals look wrong.</b> Some only exist on PlayStation. Tick <i>Include PS-only</i> on the Research and Decals tabs.</li>
+      <li><b>Anything else.</b> Open the Save check at the top of the editor and send what it says when you ask for help.</li>
+    </ul>
+    </div>
+
+    <div class="toolbar" style="margin-top:10px;"><button class="subtle" id="ui-ov-close">Close</button></div></div></section>`;
+  document.body.appendChild(ov);
+  ov.addEventListener('click', e => { if (e.target === ov) uiCloseOverlay(); });
+  document.getElementById('ui-ov-close').addEventListener('click', uiCloseOverlay);
+}
 function uiCloseOverlay() { const o = document.getElementById('ui-overlay'); if (o) o.remove(); }
 document.addEventListener('keydown', e => {
   const k = e.key;
@@ -12181,6 +12256,7 @@ function uiAfterRender() {
   document.getElementById('btn-theme').addEventListener('click', uiToggleTheme);
   document.getElementById('btn-keys').addEventListener('click', uiHelp);
   document.getElementById('btn-recent').addEventListener('click', uiOpenRecent);
+  document.getElementById('btn-psguide').addEventListener('click', uiOpenPsGuide);
   document.getElementById('sb-check').addEventListener('click', uiJumpProblem);
   uiTrackHeader();
   document.getElementById('sb-chg').addEventListener('click', () => uiOpenChanges());
