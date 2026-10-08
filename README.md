@@ -32,6 +32,7 @@ You can also download `index.html` and open it straight from your PC.
 - **Recent saves** (header button): the last 4 saves you loaded, kept in this browser only, so you can reopen one without finding the file. There is a switch to stop remembering, and Forget all.
 - **masters.db mismatch warning:** if the save uses many parts, decals or beasts your masters.db does not know, the Save check says it is probably an older or different masters.db.
 - **? help tips** next to the less obvious settings (hover, tap or tab to one).
+- **Quick tour:** the first time you open the editor on a computer, a short tour points out loading masters.db and your save, the tabs, search, the status bar and the download review. Skip it any time with Esc; the **Take the tour** button in the header plays it again.
 - **Keyboard:** Ctrl+S download, `[` `]` previous/next tab, `1`-`4` groups, `?` help.
 - **Light or dark theme** (button in the header), larger touch targets on phones, and you can **drop** a `.sav`, `.json` or `masters.db` anywhere on the page.
 

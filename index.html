@@ -416,6 +416,16 @@
   .psGuide pre { background: var(--bg); border: 1px solid var(--panel-border); padding: 8px 10px; font-family: var(--mono); font-size: 12px; margin: 6px 0; overflow: auto; }
   .uiOverlay .block.wide { max-width: 860px; }
 
+  /* ===== first-run tour ===== */
+  #ui-tour { position: fixed; inset: 0; z-index: 3000; }
+  #ui-tour .tourShade { position: fixed; inset: 0; background: rgba(0,0,0,.72); }
+  #ui-tour .tourHole { position: fixed; display: none; border: 2px solid var(--accent-bright); border-radius: 4px; box-shadow: 0 0 0 9999px rgba(0,0,0,.72); pointer-events: none; }
+  #ui-tour .tourCard { position: fixed; background: var(--panel); color: var(--text); border: 1px solid var(--accent-bright); box-shadow: 0 10px 30px rgba(0,0,0,.55); padding: 14px 16px; outline: none; }
+  #ui-tour .tourCard h3 { margin: 2px 0 6px; font-family: var(--display); font-size: 17px; }
+  #ui-tour .tourCard p { margin: 0 0 12px; font-size: 13px; line-height: 1.5; }
+  #ui-tour .tourStep { font-size: 11px; color: var(--text-faint); }
+  #ui-tour .tourBtns { display: flex; gap: 8px; align-items: center; }
+
 </style>
 </head>
 <body>
@@ -434,6 +444,7 @@
     <button class="subtle" id="btn-history" title="Saves you downloaded with this editor, kept in this browser">🕘 Download history</button>
     <span class="qswrap"><input id="qs" type="text" placeholder="Search tabs &amp; settings (Ctrl+K)" autocomplete="off" aria-label="Search tabs and settings"><div id="qs-drop"></div></span>
     <button class="subtle" id="btn-keys" title="Keyboard shortcuts (?)">⌨</button>
+    <button class="subtle" id="btn-tour" title="A short tour of the editor">Take the tour</button>
     <button class="subtle" id="btn-theme" title="Switch theme">☀</button>
     <div class="psnNote"><button class="subtle" id="btn-psguide" title="Step by step: copy a PS4/PS5 save to USB, decrypt, edit, re-encrypt, copy back">🎮 PlayStation users: how-to</button><br>PSN saves must first be decrypted. Use <a href="https://garlicsaves.com" target="_blank" rel="noopener">garlicsaves.com</a> or read <a href="https://discord.com/channels/256677044174323713/1544630372208480316/1547464159804002397" target="_blank" rel="noopener">this guide</a></div>
   </div>
@@ -11881,7 +11892,7 @@ function uiStatusUpdate() {
   st.className = !pend ? 'sbclean' : !n ? 'sbclean' : UI.curSig === UI.dlSig ? 'sbok' : 'sbdirty';
   st.textContent = !pend ? 'Checking changes…' : !n ? 'No changes yet' : UI.curSig === UI.dlSig ? `✓ ${n} change${n === 1 ? '' : 's'}, downloaded` : `● ${n} unsaved change${n === 1 ? '' : 's'}`;
   const ck = document.getElementById('sb-check');
-  ck.className = np ? 'sbprob' : nw ? 'sbdirty' : 'sbok';
+  ck.className = 'linkbtn ' + (np ? 'sbprob' : nw ? 'sbdirty' : 'sbok');
   uiStatusDots(); ck.disabled = !(np || nw); ck.style.cursor = (np || nw) ? 'pointer' : 'default';
   ck.textContent = np ? `Save check: ${np} problem${np === 1 ? '' : 's'}` : nw ? `Save check: ${nw} warning${nw === 1 ? '' : 's'}` : 'Save check: OK';
 }
@@ -12088,7 +12099,7 @@ document.addEventListener('keydown', e => {
     return;
   }
   if (uiTyping(e) || e.ctrlKey || e.metaKey || e.altKey) return;
-  if (document.getElementById('review-overlay') || document.getElementById('ui-overlay')) return;
+  if (document.getElementById('review-overlay') || document.getElementById('ui-overlay') || document.getElementById('ui-tour')) return;
   if (k === '/') { e.preventDefault(); document.getElementById('qs').focus(); return; }
   if (k === '?') { uiHelp(); return; }
   if (!SAVE) return;
@@ -12257,6 +12268,7 @@ function uiAfterRender() {
   document.getElementById('btn-keys').addEventListener('click', uiHelp);
   document.getElementById('btn-recent').addEventListener('click', uiOpenRecent);
   document.getElementById('btn-psguide').addEventListener('click', uiOpenPsGuide);
+  document.getElementById('btn-tour').addEventListener('click', uiTourStart);
   document.getElementById('sb-check').addEventListener('click', uiJumpProblem);
   uiTrackHeader();
   document.getElementById('sb-chg').addEventListener('click', () => uiOpenChanges());
@@ -12479,6 +12491,62 @@ function uiAddTips() {
   }
 }
 
+// ---- first-run tour -------------------------------------------------------------------------------
+const TOUR_KEY = 'lid.tour';
+const TOUR_STEPS = [
+  { sel: '#chip-masters', title: 'Load masters.db', text: "Start here. Load the masters.db from your game's Content folder. It tells the editor what the game allows, so edits stay in range. PlayStation saves need a PC masters.db." },
+  { sel: '#chip-save', title: 'Load your save', text: 'Then load your save, or drag a .sav anywhere on the page. PlayStation saves must be decrypted first; the 🎮 button next to it explains how.' },
+  { sel: '.stickyNav', title: 'The tabs', text: 'Four sections hold the tabs: Account, Fighters, Run & Floors and Tools. A dot on a tab means you changed something there.', fallback: 'They appear here once a save is loaded.' },
+  { sel: '#qs', title: 'Search', text: "Press Ctrl+K and type what you're after, such as 'bloodnium' or 'storage', and it takes you straight to it." },
+  { sel: '#statusbar', title: 'Status bar', text: 'This counts your unsaved changes and shows the Save check. Changes lists every edit with an Undo for each, and the Save check button jumps to the next problem.', fallback: 'It appears at the bottom once a save is loaded.' },
+  { sel: '#btn-download-sav', title: 'Download safely', text: 'Download shows a full review of what changed before anything is saved. The editor keeps a copy of your original, so you can always go back. Keep your own backup too.' },
+  { sel: null, title: "That's it", text: 'Press ? any time for shortcuts, or hover the small ? circles for help on odd settings. You can replay this tour from the header.' }
+];
+const TOUR = { i: 0, on: false };
+function uiTourVisible(el) { if (!el) return false; const r = el.getBoundingClientRect(); const st = getComputedStyle(el); return r.width > 0 && r.height > 0 && st.display !== 'none' && st.visibility !== 'hidden'; }
+function uiTourShow() {
+  const step = TOUR_STEPS[TOUR.i]; if (!step) return uiTourEnd(true);
+  let root = document.getElementById('ui-tour');
+  if (!root) { root = document.createElement('div'); root.id = 'ui-tour'; root.setAttribute('role', 'dialog'); root.setAttribute('aria-label', 'Quick tour'); document.body.appendChild(root); }
+  const el = step.sel ? document.querySelector(step.sel) : null, vis = uiTourVisible(el);
+  if (vis) el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  const last = TOUR.i === TOUR_STEPS.length - 1, n = TOUR_STEPS.length;
+  const text = UI_ESC(step.text) + (!vis && step.fallback ? ' <i>(' + UI_ESC(step.fallback) + ')</i>' : '');
+  root.innerHTML = '<div class="tourShade"></div><div class="tourHole"></div><div class="tourCard" tabindex="-1"><div class="tourStep">' + (TOUR.i + 1) + ' of ' + n + '</div><h3>' + UI_ESC(step.title) + '</h3><p>' + text + '</p><div class="tourBtns"><button class="subtle" id="tour-skip">' + (last ? 'Close' : 'Skip') + '</button><span style="flex:1"></span>' + (TOUR.i ? '<button class="subtle" id="tour-back">Back</button>' : '') + '<button class="action" id="tour-next">' + (last ? 'Done' : 'Next') + '</button></div></div>';
+  const hole = root.querySelector('.tourHole'), card = root.querySelector('.tourCard');
+  if (vis) { const r = el.getBoundingClientRect(); hole.style.cssText = 'display:block; left:' + (r.left - 6) + 'px; top:' + (r.top - 6) + 'px; width:' + (r.width + 12) + 'px; height:' + (r.height + 12) + 'px;'; root.querySelector('.tourShade').style.display = 'none'; }
+  else { hole.style.display = 'none'; }
+  // place the card below the target (or above if no room), kept on screen; centered when there is no target
+  const cw = Math.min(340, innerWidth - 24); card.style.width = cw + 'px';
+  const ch = card.offsetHeight;
+  let left, top;
+  if (vis) { const r = el.getBoundingClientRect(); left = Math.max(12, Math.min(r.left, innerWidth - cw - 12)); top = r.bottom + 14; if (top + ch > innerHeight - 12) top = Math.max(12, r.top - ch - 14); if (top < 12 || (top + ch > innerHeight - 12)) top = Math.max(12, innerHeight - ch - 12); }
+  else { left = Math.max(12, (innerWidth - cw) / 2); top = Math.max(12, (innerHeight - ch) / 2); }
+  card.style.left = left + 'px'; card.style.top = top + 'px';
+  document.getElementById('tour-next').addEventListener('click', () => { if (last) uiTourEnd(true); else { TOUR.i++; uiTourShow(); } });
+  const bk = document.getElementById('tour-back'); if (bk) bk.addEventListener('click', () => { TOUR.i--; uiTourShow(); });
+  document.getElementById('tour-skip').addEventListener('click', () => uiTourEnd(true));
+  document.getElementById('tour-next').focus({ preventScroll: true });
+}
+function uiTourStart() { uiCloseOverlay(); TOUR.i = 0; TOUR.on = true; uiTourShow(); }
+function uiTourEnd(markDone) { TOUR.on = false; const r = document.getElementById('ui-tour'); if (r) r.remove(); if (markDone) uiLsSet(TOUR_KEY, 'done'); }
+window.addEventListener('resize', () => { if (TOUR.on) uiTourShow(); });
+document.addEventListener('keydown', e => {
+  if (!document.getElementById('ui-tour')) return;
+  if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); uiTourEnd(true); return; }
+  if (e.key === 'ArrowRight') { e.preventDefault(); const b = document.getElementById('tour-next'); if (b) b.click(); }
+  else if (e.key === 'ArrowLeft') { e.preventDefault(); const b = document.getElementById('tour-back'); if (b) b.click(); }
+  else if (e.key === 'Tab') { /* keep focus inside the card */ const f = [...document.querySelectorAll('#ui-tour button')]; if (!f.length) return; const i = f.indexOf(document.activeElement); e.preventDefault(); f[(i + (e.shiftKey ? -1 : 1) + f.length) % f.length].focus(); }
+  else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) e.stopImmediatePropagation();
+}, true);
+function uiTourAuto() {
+  if (uiLsGet(TOUR_KEY) === 'done') return;
+  if (navigator.webdriver) return; // automated browsers (tests) are not first-time visitors
+  if (!window.matchMedia || window.matchMedia('(max-width: 640px), (pointer: coarse)').matches) return;
+  setTimeout(() => { if (uiLsGet(TOUR_KEY) !== 'done' && !document.getElementById('ui-overlay') && !document.getElementById('review-overlay') && !SAVE) uiTourStart(); }, 700);
+}
+
+uiTourAuto();
 document.getElementById('btn-download-sav').addEventListener('click', () => reviewAndDownload('sav'));
 document.getElementById('btn-download-json').addEventListener('click', () => reviewAndDownload('json'));
 document.getElementById('btn-report').addEventListener('click', openSaveReport);
