@@ -19,6 +19,17 @@ You can also download `index.html` and open it straight from your PC.
 
 **PSN players:** your save has to be decrypted first. You'll also need a copy of `masters.db`, which only comes with the PC version. If you don't have the PC game, ask in the [LET IT DIE Discord](https://discordapp.com/invite/gdMZBbK) or DM u/Oberlinx on Reddit.
 
+## Getting around
+
+- **Four groups** (Account, Fighters, Run & Floors, Tools) with the tabs of the open group underneath. The editor remembers your last tab and fighter.
+- **Search** (Ctrl+K or `/`): type a tab or a setting (for example "bloodnium" or "storage") and jump straight to it.
+- **Status bar** at the bottom: how many unsaved changes you have, the Save check result, a **Changes** button and **Download .sav**. The browser warns you if you try to leave with unsaved changes.
+- **Changes** (button or `C`): everything that differs from the save as you loaded it. **Undo** puts one value, or one fighter, back. Floor moves, boss locks, End the run, Rewind and Free continues are listed under *Applied when you download* with a Cancel button. **Start over** reloads the original file.
+- **Max everything safe** (Account tab): shows exactly what will be raised to the game's own limits (from masters.db), lets you untick anything, then applies it. Fighters are an extra, unticked option.
+- **Allowed ranges** are shown under number boxes. The editor only accepts values the game can hold.
+- **Keyboard:** Ctrl+S download, `[` `]` previous/next tab, `1`-`4` groups, `?` help.
+- **Light or dark theme** (button in the header), larger touch targets on phones, and you can **drop** a `.sav`, `.json` or `masters.db` anywhere on the page.
+
 ## Tabs
 
 | Tab | What it does |

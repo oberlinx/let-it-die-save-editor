@@ -213,7 +213,7 @@
   .subDetails .subDetailsBody { padding: 8px 10px 10px; }
 
   .toast {
-    position: fixed; bottom: 18px; right: 18px; background: var(--panel); border: 1px solid var(--good);
+    position: fixed; bottom: 64px; right: 18px; background: var(--panel); border: 1px solid var(--good);
     color: var(--good-bright); padding: 10px 16px; font-size: 12px; z-index: 100; opacity: 0; transform: translateY(8px);
     transition: opacity 0.2s, transform 0.2s;
   }
@@ -302,6 +302,94 @@
   .stewH { font-family: var(--display); font-size: 14px; margin: 10px 0 6px; }
   @media (max-width: 640px) { .stewAct { grid-template-columns: 1fr; gap: 4px; } }
   a.gitlink:hover { color: var(--accent-bright); }
+
+  /* ===== UI pack (2026-10-08): groups, search, status bar, changes drawer, hints, light theme ===== */
+  .grpbar { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  .grpbtn { padding: 8px 16px; border: 1px solid var(--panel-border-bright); background: var(--bg-raised); color: var(--text-dim); font-family: var(--mono); font-size: 13px; cursor: pointer; border-radius: 3px; }
+  .grpbtn:hover { color: var(--text); }
+  .grpbtn.active { background: var(--panel); color: var(--text); border-color: var(--accent-bright); box-shadow: inset 0 -2px 0 var(--accent-bright); }
+  .tabbtn[data-tab-btn]:not(.ingroup) { display: none; }
+  .tabbtn:focus-visible, .grpbtn:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent-bright); outline-offset: 1px; }
+
+  .qswrap { position: relative; display: inline-block; }
+  #qs { width: 250px; max-width: 60vw; background: var(--bg); color: var(--text); border: 1px solid var(--panel-border-bright); padding: 7px 10px; font-family: var(--mono); font-size: 12px; }
+  #qs-drop { position: absolute; left: 0; top: 100%; min-width: 360px; max-width: 92vw; max-height: 60vh; overflow: auto; background: var(--panel); border: 1px solid var(--panel-border-bright); z-index: 400; display: none; box-shadow: 0 8px 24px rgba(0,0,0,.45); }
+  #qs-drop .qsrow { padding: 7px 10px; cursor: pointer; font-size: 12px; display: flex; gap: 8px; align-items: baseline; border-bottom: 1px solid var(--panel-border); }
+  #qs-drop .qsrow.sel, #qs-drop .qsrow:hover { background: var(--accent); color: #fff; }
+  #qs-drop .qsrow .qsin { margin-left: auto; color: var(--text-faint); font-size: 11px; white-space: nowrap; }
+  #qs-drop .qsrow.sel .qsin, #qs-drop .qsrow:hover .qsin { color: #fff; }
+  #qs-drop .qsnone { padding: 10px; color: var(--text-dim); font-size: 12px; }
+  .flashHit { outline: 3px solid var(--accent-bright); outline-offset: 3px; animation: flashHit 2.2s ease-out; }
+  @keyframes flashHit { 0% { background: rgba(214,57,44,.45); } 100% { background: transparent; } }
+
+  #statusbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 60; display: none; align-items: center; gap: 12px; flex-wrap: wrap; padding: 7px 18px; background: var(--bg-raised); border-top: 1px solid var(--panel-border-bright); font-size: 12px; }
+  #statusbar .sbsep { width: 1px; height: 16px; background: var(--panel-border); }
+  #statusbar .sbfile { color: var(--text-dim); max-width: 26ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #statusbar .sbdirty { color: var(--warn); font-weight: bold; }
+  #statusbar .sbclean { color: var(--text-dim); }
+  #statusbar .sbok { color: var(--good-bright); }
+  #statusbar .sbprob { color: var(--accent-bright); font-weight: bold; }
+  #statusbar .sbspace { flex: 1; }
+  main { padding-bottom: 90px; }
+
+  #chg-drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(560px, 100vw); z-index: 900; background: var(--panel); border-left: 1px solid var(--panel-border-bright); box-shadow: -10px 0 30px rgba(0,0,0,.5); display: none; flex-direction: column; }
+  #chg-drawer .dhead { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--panel-border); }
+  #chg-drawer .dhead h2 { margin: 0; font-size: 18px; flex: 1; font-family: var(--display); }
+  #chg-drawer .dbody { flex: 1; overflow: auto; padding: 12px 16px; }
+  #chg-drawer .dfoot { padding: 10px 16px; border-top: 1px solid var(--panel-border); display: flex; gap: 8px; flex-wrap: wrap; }
+  #chg-drawer li { display: flex; gap: 8px; align-items: baseline; margin: 3px 0; }
+  #chg-drawer li .ltxt { flex: 1; }
+  #chg-drawer .undoBtn { padding: 1px 8px; font-size: 11px; }
+  #chg-drawer .pend { border: 1px solid var(--accent); padding: 8px 10px; margin-bottom: 12px; }
+  #chg-drawer .pend .prow { display: flex; gap: 8px; align-items: center; margin: 4px 0; font-size: 12px; }
+  #chg-drawer .pend .prow span { flex: 1; }
+
+  .uiOverlay { position: fixed; inset: 0; z-index: 1000; background: rgba(0,0,0,.7); display: flex; align-items: flex-start; justify-content: center; padding: 40px 16px; overflow: auto; }
+  .uiOverlay .block { max-width: 760px; width: 100%; margin: 0; }
+  .maxRow { display: flex; gap: 10px; align-items: flex-start; padding: 6px 0; border-bottom: 1px solid var(--panel-border); font-size: 13px; }
+  .maxRow input { margin-top: 3px; }
+  .kbdTable td { padding: 4px 10px 4px 0; font-size: 13px; vertical-align: top; }
+  kbd { border: 1px solid var(--panel-border-bright); background: var(--bg); padding: 1px 6px; font-family: var(--mono); font-size: 12px; border-radius: 3px; }
+
+  .rng { font-size: 11px; color: var(--text-faint); margin-top: 2px; }
+  #drop-veil { position: fixed; inset: 0; z-index: 2000; background: rgba(168,41,31,.35); border: 4px dashed var(--accent-bright); display: none; align-items: center; justify-content: center; font-size: 26px; color: #fff; pointer-events: none; text-shadow: 0 2px 8px #000; }
+  #btn-theme, #btn-keys { min-width: 38px; }
+
+  @media (pointer: coarse), (max-width: 640px) {
+    button, select, input[type="text"], input[type="number"], input[type="datetime-local"], input[type="date"], .tabbtn, .grpbtn, .loadchip { min-height: 42px; }
+    input[type="checkbox"], input[type="radio"] { width: 20px; height: 20px; }
+    .tabbtn { padding: 10px 14px; font-size: 13px; }
+    header { padding: 12px 14px; }
+    h1 { font-size: 20px; margin-bottom: 8px; }
+    main { padding: 14px 12px 110px; }
+    #qs { width: 100%; max-width: 100%; }
+    .qswrap { display: block; width: 100%; }
+    #statusbar { padding: 6px 10px; gap: 8px; flex-wrap: nowrap; overflow-x: auto; font-size: 11px; white-space: nowrap; }
+    #statusbar .sbfile, #statusbar .sbsep { display: none; }
+    header { position: static; }
+    .bankRow { grid-template-columns: 1fr 1fr; }
+    .bankRow .bankLabel { grid-column: 1 / -1; }
+    .block-head { flex-wrap: wrap; gap: 8px; }
+    .block-head > div { flex-wrap: wrap; min-width: 0; }
+    .subTabs { flex-wrap: wrap; }
+    .toast { bottom: 70px; right: 8px; left: 8px; }
+  }
+
+  html[data-theme="light"] {
+    --bg: #f4f1ec; --bg-raised: #ffffff; --panel: #ffffff; --panel-border: #cfc8bd; --panel-border-bright: #a79f92;
+    --text: #1d1b18; --text-dim: #55504a; --text-faint: #7d776e; --accent: #a8291f; --accent-bright: #b3281c;
+    --good: #1d1b18; --good-bright: #12652b; --warn: #b3281c;
+  }
+  html[data-theme="light"] body { background-image: none; }
+  html[data-theme="light"] header { background: linear-gradient(180deg, #ffffff, #f4f1ec); }
+  html[data-theme="light"] .graveRow:hover td { background: rgba(0,0,0,0.04); }
+  html[data-theme="light"] #chg-drawer, html[data-theme="light"] #qs-drop { box-shadow: 0 8px 24px rgba(0,0,0,.18); }
+  html[data-theme="light"] .run .up { color: #12652b; } html[data-theme="light"] .run .down { color: #a8291f; }
+  html[data-theme="light"] .rwdBp { color: #0b5560; background: rgba(53,198,216,.18); }
+  html[data-theme="light"] [style*="color:#9fd39f"] { color: #2d6a2d !important; }
+  html[data-theme="light"] [style*="color:#e6b86a"] { color: #8a5a00 !important; }
+  html[data-theme="light"] [style*="color:#f2d33a"] { color: #7a5f00 !important; border-color: #7a5f00 !important; }
+  html[data-theme="light"] ::selection { color: #fff; }
 </style>
 </head>
 <body>
@@ -317,6 +405,9 @@
     <button class="action" id="btn-download-json" disabled title="Review your changes, then save them as brggame_date_time.json (uncompressed)">⬇ Download .json</button>
     <button class="subtle" id="btn-report" disabled title="A summary of this save and its Save check, to paste when asking for help">📋 Save report</button>
     <button class="subtle" id="btn-history" title="Saves you downloaded with this editor, kept in this browser">🕘 Download history</button>
+    <span class="qswrap"><input id="qs" type="text" placeholder="Search tabs &amp; settings (Ctrl+K)" autocomplete="off" aria-label="Search tabs and settings"><div id="qs-drop"></div></span>
+    <button class="subtle" id="btn-keys" title="Keyboard shortcuts (?)">⌨</button>
+    <button class="subtle" id="btn-theme" title="Switch theme">☀</button>
     <div class="psnNote">PSN saves must first be decrypted. Use <a href="https://garlicsaves.com" target="_blank" rel="noopener">garlicsaves.com</a> or read <a href="https://discord.com/channels/256677044174323713/1544630372208480316/1547464159804002397" target="_blank" rel="noopener">this guide</a></div>
   </div>
 </header>
@@ -329,6 +420,9 @@
 </main>
 
 <div class="toast" id="toast"></div>
+<div id="statusbar" role="status"><span class="sbfile" id="sb-file"></span><span class="sbsep"></span><span id="sb-state"></span><span class="sbsep"></span><span id="sb-check"></span><span class="sbspace"></span><button class="subtle" id="sb-chg" title="See and undo what you changed (C)">Changes</button><button class="action" id="sb-dl" title="Review changes and download (Ctrl+S)">⬇ Download .sav</button></div>
+<aside id="chg-drawer" aria-label="Changes"></aside>
+<div id="drop-veil">Drop a save (.sav / .json) or masters.db here</div>
 
 <script id="templates-data" type="application/json">{"user_config_menu_start": {"user_config_menu": {"pss": [], "pis": []}}, "loading_announces_start": {"loading_announces": [{"message": "LET IT DIE Offline by SliveredMindOps", "send_start_time": 1537920000, "send_stop_time": 2147483640, "prio": 0, "banner_duration": 0}]}, "cl_start": {"cl": {"slots": [{"slot": 0, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 1, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 2, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 3, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 4, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 5, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 6, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 7, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 8, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 9, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 10, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 11, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 12, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 13, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 14, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 15, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 16, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 17, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 18, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 19, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 20, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 21, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 22, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 23, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 24, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 25, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 26, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 27, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 28, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 29, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}], "pts": [], "msrs": [], "bsts": [], "items": []}}, "soul_start": {"soul": {"rank": 1, "tdm_rank": "TDM_RANK_01_01", "tdm_point": 0, "money": 0, "free_money": 0, "paid_money": 0, "spirit": 0, "recycle_point": 0, "bloodnium_point": 0, "mstpnt": 0, "crntcid": "332641c8-65e0-400a-8be5-e47c5a125739", "pause": "", "pb": 2, "tid": "", "favorite_team": "", "joinwid": "", "safe_level": 1, "safe_hp": 680, "safe_limit": 50000, "spirit_tank_level": 1, "spirit_tank_hp": 680, "spirit_tank_limit": 50000, "team_expired_time": 0, "last_hub_time": 1583321090, "last_visiting_shop_time": 0, "announce_display": 1582765200, "mainte_announce": 1582768800, "free_continue_count": 0, "free_continue_max_count": 0, "automaticshop_lamp": 1, "automaticshop_weekly_lamp": 0, "whistle_id": "", "whistle_limit": 0, "gi": {"kzids": {}, "tbrs": {}, "eatemsrids": {}, "getemsrids": {}, "kebstids": {}, "kmbids": {}, "zmbrwds": {}}, "als": {}, "chrs": [{"cid": "332641c8-65e0-400a-8be5-e47c5a125739", "name": "LET_IT_DIE_OFFLINE", "sklgauge": 0, "lvl": 1, "type": "BAL", "grade": 1, "limit_break": 0, "hp": 200, "exp": 0, "get_exp": 0, "exp_rate": 100, "money": 0, "money_rate": 100, "spirit": 0, "bloodnium": 0, "escdie": 0, "pause": "", "gasmask": "ASSET_NM_GAS_HEAD_002", "state": "USE", "conbegin": 0, "conexpire": 0, "ransom": 0, "cuname": "", "pspts": {}, "eqpts": {}, "eqskls": {}, "psmsrs": {}, "psbsts": {}, "psitems": {}, "stat": {"elms": {}}, "body": {"id": "BODY_MALE_001", "baid": "ASSET_MALE_BODY_001", "haid": "", "gender": "GENDER_MALE", "colr": 1.0, "colg": 1.0, "colb": 1.0, "voicep": 1, "voiceb": 1, "provoke": 1}, "bodylvl": {"lvl": 1, "hp": 1, "str": 1, "dex": 1, "vit": 1, "stm": 1, "luk": 1, "skill": 0, "bag": 0}, "bodybonus": {"hp_bonus": 0, "str_bonus": 0, "dex_bonus": 0, "vit_bonus": 0, "stm_bonus": 0, "luk_bonus": 0}, "db": {"slots": [{"slot": 0, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 1, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 2, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 3, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 4, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 5, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 6, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 7, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 8, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 9, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 10, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 11, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 12, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 13, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 14, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 15, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 16, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 17, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 18, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 19, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}]}, "quickuse": {"slots": {}}, "quickusearm": {"slots": [{"slot": 0, "eptid": "-2", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 1, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 2, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 3, "eptid": "-2", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 4, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 5, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}]}, "select_arm_slots": {}, "hunterrecord": {"count": 0, "total_win": 0, "total_lose": 0, "win_rate": 0}, "battlesummary": {}}], "chrslots": [{"slot": 0, "cid": "332641c8-65e0-400a-8be5-e47c5a125739"}, {"slot": 1, "cid": ""}, {"slot": 2, "cid": ""}], "dchrs": {}, "hunters": {}, "psskls": {}, "cl": {"slots": {}, "pts": {}, "msrs": {}, "bsts": {}, "items": {}}, "stamp": {"stamp_list": [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1]}, "magazine": {"status_list": [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1]}, "gameflg": ["KGF_MOTHERVALVE_LIST_00", "KGF_MOTHERVALVE_LIST_01", "KGF_MOTHERVALVE_LIST_02", "KGF_MOTHERVALVE_LIST_03"], "opelvflrs": [{"id": "ELV_MAIN_HUB", "price": 0}], "mstlvl": [{"ptarmtp": "PTARMTP_00", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_01", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_02", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_03", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_04", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_05", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_06", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_07", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_08", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_11", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_12", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_13", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_16", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_17", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_18", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_19", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_20", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_21", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_22", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_23", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_24", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_25", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_26", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_28", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_29", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_30", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_31", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_32", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_33", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_34", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_35", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_36", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_37", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_38", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_39", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_40", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_41", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_42", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_43", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_44", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_45", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_46", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_47", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_48", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_50", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_51", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_52", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_53", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_54", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_55", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_56", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_57", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_58", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_59", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_62", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_63", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_64", "abp": -1, "lvl": 1, "is_checked": 0}], "statmsrs": {}, "msrbook": {}, "bstbook": {}, "quests": {}, "partresearch": {}, "waiting": {}, "quick_config": {"pss": {}, "pis": {}}, "vip": {"vip_flag": 0, "vip_type": 0, "vip_pass_num": 0, "oneday_vip_pass_num": 0, "expired_time": 0, "automatic_renewal": 0, "friendship": 1}, "mail": [{"maileid": "656698dc-f0ac-4ca8-8f81-d5dcae820b14", "mailid": "MAIL_05", "from": "YOTSUYAMA", "title": "", "message": "", "created": 1583317286, "is_checked": 0}, {"maileid": "d83237d3-6a8f-40cc-9d2e-287957a1fcb4", "mailid": "MAIL_18", "from": "YOTSUYAMA", "title": "", "message": "", "created": 1583317286, "is_checked": 0}, {"maileid": "1bf8926d-af86-4192-b6c0-f49ab5b52e81", "mailid": "MAIL_18", "from": "YOTSUYAMA", "title": "", "message": "", "created": 1583276836, "is_checked": 0}, {"maileid": "9dd6315e-89b6-40d7-a4fe-737dfd94a326", "mailid": "MAIL_05", "from": "YOTSUYAMA", "title": "", "message": "", "created": 1583276836, "is_checked": 0}, {"maileid": "", "mailid": "", "from": "ANNOUNCE", "title": "", "message": "", "created": 1582772400, "is_checked": 0}, {"maileid": "", "mailid": "", "from": "ANNOUNCE", "title": "", "message": "", "created": 1582772400, "is_checked": 0}, {"maileid": "", "mailid": "", "from": "ANNOUNCE", "title": "", "message": "", "created": 1582772400, "is_checked": 0}, {"maileid": "", "mailid": "", "from": "ANNOUNCE", "title": "", "message": "", "created": 1582772400, "is_checked": 0}, {"maileid": "", "mailid": "", "from": "ANNOUNCE", "title": "", "message": "", "created": 1583316000, "is_checked": 0}, {"maileid": "", "mailid": "", "from": "ANNOUNCE", "title": "", "message": "", "created": 1537920000, "is_checked": 0}, {"maileid": "", "mailid": "", "from": "ANNOUNCE", "title": "", "message": "", "created": 1537920000, "is_checked": 0}, {"maileid": "", "mailid": "", "from": "ANNOUNCE", "title": "", "message": "", "created": 1480464000, "is_checked": 0}], "jointeams": [{"tid": "", "name": "Yotsuyama", "emblem": "TM_EM_DUMY", "pos_x": 0, "pos_y": 0, "war_win": 0, "war_lose": 0, "member_cnt": 0, "tdm_point_avr": 0}], "areaflgs": {}, "escflgs": {}, "radio": {"channel": "000", "power": 1}, "screenshot": {}, "unlocked_fighter": {}, "research_stamp": {}, "hvn_treasure_info": {}, "armorskins": {}}}, "hitchart_start": {"hitchart": ["SN_BGM_Radio_Music_0002", "SN_BGM_Radio_Music_0143", "SN_BGM_Radio_Music_0003", "SN_BGM_Radio_Music_0005", "SN_BGM_Radio_Music_0004"]}, "all_quests_start": {"all_quests": []}, "user_start": {"user": {"acid": "6969696969", "name": "LET IT DIE Offline by SliveredMindOps", "medal": 0, "medalinfo": {"free_medal": 0, "paid_medal": 0, "medal_exp": []}, "automaticshop_buyable_goods_ids": [26702, 26701, 26700, 26699, 26698, 26704, 26703, 14194, 14201, 14196, 14200, 14195, 14197, 14199, 14198, 26748, 26905, 26711, 26740, 26875, 26791, 26769, 26775, 26859, 26720], "automaticshop_bought_goods_ids": [], "automaticshop_hvn_bought_goods_ids": [], "automaticshop_weekly_buyable_goods_ids": [{"good_id": 14194, "research_possible": 0}, {"good_id": 14195, "research_possible": 0}, {"good_id": 14196, "research_possible": 0}, {"good_id": 14197, "research_possible": 0}, {"good_id": 14198, "research_possible": 0}, {"good_id": 14199, "research_possible": 0}, {"good_id": 14200, "research_possible": 0}, {"good_id": 14201, "research_possible": 0}], "automaticshop_exchangeable_goods_ids": [6308, 6316, 6315, 6318, 6321, 6319, 6311, 6312, 6322, 6310, 6320, 6309, 6304, 6326, 6324, 6307, 6328, 6317, 6302, 6323, 6327, 6301, 6325, 6305, 6306, 6303, 6313, 6314], "automaticshop_exchanged_goods_ids": [], "automaticshop_bloodnium_exchangeable_goods_ids": [8569, 8575, 8566, 8579, 8562, 8584, 8573, 8571, 8556, 8583, 8570, 8561, 8558, 8574, 8559, 8572, 8587, 8585, 8582, 8557, 8568, 8586, 8554, 8563, 8555, 8560, 8567, 8581, 8552, 8551, 8553, 8577, 8578, 8580, 8576, 8564, 8565], "automaticshop_bloodnium_exchanged_goods_ids": [], "langsnd": "int", "langtxt": "int", "srv_time": 1583348588, "soul": {"rank": 1, "tdm_rank": "TDM_RANK_01_01", "tdm_point": 0, "money": 0, "free_money": 0, "paid_money": 0, "spirit": 0, "joinwid": "", "recycle_point": 0, "bloodnium_point": 0, "safe_level": 1, "safe_hp": 680, "safe_limit": 50000, "spirit_tank_level": 1, "spirit_tank_hp": 680, "spirit_tank_limit": 50000, "favorite_team": "", "gi": {"kzids": [], "tbrs": [], "getemsrids": [], "eatemsrids": [], "kebstids": [], "kmbids": [], "zmbrwds": []}, "als": [], "chrs": [{"uid": 459881, "cid": "332641c8-65e0-400a-8be5-e47c5a125739", "name": "Billy", "sklgauge": 0, "lvl": 1, "type": "BAL", "grade": 1, "limit_break": 0, "hp": 200, "exp": 0, "get_exp": 0, "money": 0, "spirit": 0, "bloodnium": 0, "escdie": 0, "pspts": [], "eqpts": [], "eqskls": [], "psmsrs": [], "psbsts": [], "psitems": [], "stat": {"elms": []}, "pause": "", "body": {"id": "BODY_MALE_001", "gender": "GENDER_MALE", "baid": "ASSET_MALE_BODY_001", "haid": "", "colr": 1, "colg": 1, "colb": 1, "voicep": 1, "voiceb": 1, "provoke": 1}, "gasmask": "ASSET_NM_GAS_HEAD_002", "db": {"slots": [{"slot": 0, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 1, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 2, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 3, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 4, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 5, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 6, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 7, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 8, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 9, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 10, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 11, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 12, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 13, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 14, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 15, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 16, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 17, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 18, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 19, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}], "pts": [], "msrs": [], "bsts": [], "items": []}, "quickuse": [], "quickusearm": {"slots": [{"slot": 0, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 1, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 2, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 3, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 4, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}, {"slot": 5, "eptid": "-1", "emsrid": "-1", "ebstid": "-1", "eitemid": "-1"}]}, "state": "USE", "bodylvl": {"lvl": 1, "hp": 1, "str": 1, "dex": 1, "vit": 1, "stm": 1, "luk": 1, "skill": 0, "bag": 0}, "bodybonus": {"hp_bonus": 0, "str_bonus": 0, "dex_bonus": 0, "vit_bonus": 0, "stm_bonus": 0, "luk_bonus": 0}, "money_rate": 100, "exp_rate": 100, "conexpire": 0, "conbegin": 0, "ransom": 0, "cuname": "", "battlesummary": [], "hunterrecord": {"count": 0, "total_win": 0, "total_lose": 0, "win_rate": 0}, "select_arm_slots": []}], "chrslots": [{"slot": 0, "cid": "332641c8-65e0-400a-8be5-e47c5a125739"}, {"slot": 1, "cid": ""}, {"slot": 2, "cid": ""}], "dchrs": [], "hunters": [], "psskls": [], "statmsrs": [], "msrbook": [], "bstbook": [], "cl": [], "stamp": {"stamp_list": [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1]}, "magazine": {"status_list": [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1]}, "sinario_prog": [], "gameflg": ["KGF_MOTHERVALVE_LIST_00", "KGF_MOTHERVALVE_LIST_01", "KGF_MOTHERVALVE_LIST_02", "KGF_MOTHERVALVE_LIST_03"], "opelvflrs": [{"id": "ELV_MAIN_HUB", "price": 0}], "mstlvl": [{"ptarmtp": "PTARMTP_00", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_01", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_02", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_03", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_04", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_05", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_06", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_07", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_08", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_11", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_12", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_13", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_16", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_17", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_18", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_19", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_20", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_21", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_22", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_23", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_24", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_25", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_26", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_28", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_29", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_30", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_31", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_32", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_33", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_34", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_35", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_36", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_37", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_38", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_39", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_40", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_41", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_42", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_43", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_44", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_45", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_46", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_47", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_48", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_50", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_51", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_52", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_53", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_54", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_55", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_56", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_57", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_58", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_59", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_62", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_63", "abp": -1, "lvl": 1, "is_checked": 0}, {"ptarmtp": "PTARMTP_64", "abp": -1, "lvl": 1, "is_checked": 0}], "mstpnt": 0, "crntcid": "332641c8-65e0-400a-8be5-e47c5a125739", "quests": [], "research": [], "partresearch": [], "waiting": [], "pause": "", "quick_config": {"pss": [], "pis": []}, "pb": 2, "vip": {"vip_flag": 0, "vip_type": 0, "vip_pass_num": 0, "oneday_vip_pass_num": 0, "expired_time": 0, "automatic_renewal": 0, "friendship": 1}, "mail": [{"maileid": "656698dc-f0ac-4ca8-8f81-d5dcae820b14", "mailid": "MAIL_05", "from": "YOTSUYAMA", "title": "", "message": "", "created": 1583317286, "is_checked": 0}, {"maileid": "d83237d3-6a8f-40cc-9d2e-287957a1fcb4", "mailid": "MAIL_18", "from": "YOTSUYAMA", "title": "", "message": "2,\u300cSkill decal\u300eHeavy Tank\u300f\u00d71\u300d<br>\u300cKill Coins\u00d720000\u300d", "created": 1583317286, "is_checked": 0}, {"maileid": "1bf8926d-af86-4192-b6c0-f49ab5b52e81", "mailid": "MAIL_18", "from": "YOTSUYAMA", "title": "", "message": "1,\u300cSPLithium\u00d710000\u300d<br>\u300cExpress 1 Day Pass\u00d73\u300d", "created": 1583276836, "is_checked": 0}, {"maileid": "9dd6315e-89b6-40d7-a4fe-737dfd94a326", "mailid": "MAIL_05", "from": "YOTSUYAMA", "title": "", "message": "", "created": 1583276836, "is_checked": 0}, {"maileid": "", "mailid": "", "from": "ANNOUNCE", "title": "", "message": "<a=https://store.steampowered.com/app/1241352><img=game_banner_exp.png??q=6427cd6f16a8af531a731e1529edd902></a><br>\r\n2/26/2020<br>\r\n(Special)Express Pass On Sale Now! ", "created": 1582772400, "is_checked": 0}, {"maileid": "", "mailid": "", "from": "ANNOUNCE", "title": "", "message": "<a=https://store.steampowered.com/app/1241350><img=game_banner_10d.png??q=b74b6d3fb9477bc11fb9a5ffbaee07f6></a><br>\r\n2/26/2020<br>\r\n(Special)10 Death Metals On Sale Now! ", "created": 1582772400, "is_checked": 0}, {"maileid": "", "mailid": "", "from": "ANNOUNCE", "title": "", "message": "<a=https://store.steampowered.com/app/1241351><img=game_banner_50d.png??q=88e6f01521e29bc54c1bdb137ee994ec></a><br>\r\n2/26/2020<br>\r\n(Special)50 Death Metals On Sale Now! ", "created": 1582772400, "is_checked": 0}, {"maileid": "", "mailid": "", "from": "ANNOUNCE", "title": "", "message": "<a=http://www.letitdiethegame.com/news.html#/5088/><img=tx_ps4_prbanner_v0091_info.png??q=49c27878fe10d43e84464bc8eb10dcff></a><br>\r\n2/26/2020 - 3/29/2020<br>\r\nTDM Battle Rush: Season 10 Finale<br>", "created": 1582772400, "is_checked": 0}, {"maileid": "", "mailid": "", "from": "ANNOUNCE", "title": "", "message": "<a=http://www.letitdiethegame.com/news.html#/1231/><img=tx_ps4_prbanner_v0045_info.png?????q=b947d14de6a3e4608967c2f9ce955cf8></a><br>\r\nTower of Barbs: Tectonic Terror Event!", "created": 1583316000, "is_checked": 0}, {"maileid": "", "mailid": "", "from": "ANNOUNCE", "title": "", "message": "<a=https://store.steampowered.com/app/907880><img=tx_ps4_prbanner_v0119_info.png???q=2813748313b9f958e20e14d434ef401d></a><br>\r\nNeed Help Exploring the Tower?<br>\r\nSpecial Pack On Sale Now!", "created": 1537920000, "is_checked": 0}, {"maileid": "", "mailid": "", "from": "ANNOUNCE", "title": "", "message": "<a=https://store.steampowered.com/app/907881><img=tx_ps4_prbanner_v0118_info.png??q=0f16ad3fa84ffed303d68ed362357449></a><br>\r\nNeed Even More Help Exploring the Tower? <br>\r\nPlatinum Pack On Sale Now!", "created": 1537920000, "is_checked": 0}, {"maileid": "", "mailid": "", "from": "ANNOUNCE", "title": "", "message": "<a=https://www.letitdiethegame.com/news#/3132/><img=tx_ps4_prbanner_v0120_info.png????????q=7213c9b6863d1cfeea220de0b6db25f0></a><br>\r\nLogin Everyday<br>\r\nBe sure to login everyday to pick up some awesome<br>\r\ngifts.", "created": 1480464000, "is_checked": 0}], "jointeams": [{"tid": "", "name": "Yotsuyama", "emblem": "TM_EM_DUMY", "pos_x": 0, "pos_y": 0, "war_win": 0, "war_lose": 0, "tdm_point_avr": 0, "member_cnt": 0, "active_member_cnt": 0, "last_war_time": 0, "created": 0, "modified": 0}], "tid": "", "areaflgs": [], "escflgs": [], "radio": {"channel": "000", "power": 1}, "screenshot": [], "team_expired_time": 0, "last_hub_time": 1583321090, "last_visiting_shop_time": 0, "mainte_announce": 1582768800, "announce_display": 1582765200, "free_continue_count": 0, "free_continue_max_count": 0, "automaticshop_lamp": 1, "automaticshop_weekly_lamp": 0, "whistle_id": "", "whistle_limit": 0, "unlocked_fighter": [], "research_stamp": [], "hvn_treasure_info": []}}}, "playlog_start": {"playlog": [{"uid": "696969", "total_play_time": 427, "total_money": 0, "total_mushroom_cnt": 0, "total_mushroom_kind": 0, "total_beast_cnt": 0, "total_beast_kind": 0, "total_get_weapon_cnt": 0, "total_get_armor_cnt": 0, "total_get_material_cnt": 0, "shop_enable_equip_kind": 2, "total_research_cnt": 0, "total_skill_cnt": 0, "exchange_skill_cnt": 0, "bivouac": 0, "return_cnt": 0, "max_floor": "-", "move_floor_cnt": 0, "elevator_cnt": 0, "escalator_cnt": 0, "move_dist": "0", "interruption": 18, "bad_condition_cnt": 0, "total_throw_mushroom_cnt": 0, "total_baked_mushroom_cnt": 0, "total_throw_beast_cnt": 0, "total_baked_beast_cnt": 0, "total_purchase_cnt": 0, "total_purchase_gyaku_cnt": 0, "shop_get_money": 0, "shop_use_money": 0, "init_use_money": 0, "total_break_weapon_cnt": 0, "total_break_armor_cnt": 0, "circle_crusher": 0, "user": {"total_damage": "0", "total_give_damage": "0", "attack_cnt": 0, "hit_cnt": 0, "use_GORE_cnt": 0, "use_RAGEMOVE_cnt": 0, "use_StealthAttack_cnt": 0, "use_HeadShot_cnt": 0, "use_JustGuard_cnt": 0, "use_Trampled_cnt": 0, "use_Provocation_cnt": 0, "use_GermanSuplex_cnt": 0, "use_JumpAttack_cnt": 0, "use_DeprivedWeapon_cnt": 0, "use_Dropkick_cnt": 0}, "died": {"total_died_cnt": 0, "killed_NormalEnemy_cnt": 0, "killed_Zombie_cnt": 0, "killed_PlayerEnemy_cnt": 0, "killed_4ForceMen_cnt": 0, "killed_Coen_cnt": 0, "killed_Jindie_cnt": 0, "killed_Goto09_cnt": 0, "killed_U10_cnt": 0, "killed_MaxSharp_cnt": 0, "killed_Jackson_cnt": 0, "killed_Crowley_cnt": 0, "killed_Gunkan_cnt": 0, "killed_JACKAL_X_cnt": 0, "killed_JACKAL_Y_cnt": 0, "killed_JACKAL_Z_cnt": 0, "killed_JACKAL_XX_cnt": 0, "killed_JACKAL_YY_cnt": 0, "killed_JACKAL_ZZ_cnt": 0, "killed_JACKAL_XXX_cnt": 0, "killed_JACKAL_YYY_cnt": 0, "killed_JACKAL_ZZZ_cnt": 0, "killed_whitesteel_cnt": 0, "killed_rednapalm_cnt": 0, "killed_blackthunder_cnt": 0, "killed_palewind_cnt": 0, "by_RAGEMOVE_cnt": 0, "by_GORE_cnt": 0, "by_fall_cnt": 0, "by_beast_cnt": 0}, "kill": {"total_enemy_cnt": 0, "kill_NormalEnemy_cnt": 0, "kill_Zombie_cnt": 0, "kill_PlayerEnemy_cnt": 0, "kill_4ForceMen_cnt": 0, "kill_Coen_cnt": 0, "kill_Jindie_cnt": 0, "kill_Goto09_cnt": 0, "kill_U10_cnt": 0, "kill_MaxSharp_cnt": 0, "kill_Jackson_cnt": 0, "kill_Crowley_cnt": 0, "kill_Gunkan_cnt": 0, "kill_JACKAL_X_cnt": 0, "kill_JACKAL_Y_cnt": 0, "kill_JACKAL_Z_cnt": 0, "kill_whitesteel_cnt": 0, "kill_rednapalm_cnt": 0, "kill_blackthunder_cnt": 0, "kill_palewind_cnt": 0, "by_RAGEMOVE_cnt": 0, "kill_beast_cnt": 0}, "famous": {"skill": "", "arm": "", "head": "", "body": "", "legs": "", "category": "", "died_arm": "", "died_area": "", "mushroom": "", "beast": ""}, "chara": {"send_cnt": 0, "send_time": 0, "send_success": 0, "send_failed": 0, "revenge_success": 0, "receive_cnt": 0, "receive_kill_cnt": 0, "receive_died_cnt": 0, "receive_average": "0"}, "money": {"total_get_money": "0", "total_use_money": "0", "total_get_spirit": "0", "total_use_spirit": "0", "shop_use_money": "0", "shop_get_money": "0", "item_shop_use_money": "0", "floor_shop_use_money": "0", "mushroom_shop_use_money": "0", "mushroom_shop_get_money": "0", "attack_get_money": "0", "attack_get_spirit": "0", "defense_get_money": "0", "defense_get_spirit": "0", "init_get_spirit": "0", "fighter_use_money": "0", "ransom_use_money": "0", "init_use_money": "0"}, "fighter": {"get_fighter": 1, "lost_fighter": 0, "recover_fighter": 0, "destory_fighter": 0, "capture_fighter": 0, "init_fighter": 0, "get_init_fighter": 0, "release_capture_fighter": 0, "captured_my_fighter": 0, "release_fighter": 0, "release_my_fighter": 0}, "fort": {"attack_cnt": 0, "attack_success_cnt": 0, "attack_fail_cnt": 0, "attack_escape_cnt": 0, "defense_cnt": 0, "defense_success_cnt": 0, "defense_fail_cnt": 0, "total_team_cnt": 0, "long_time_team": "", "during_war_cnt": 0, "old_version_tdm_rank": "--", "old_version_tdm_point": 0, "long_time_teams": []}}]}, "user_research_start": {"user_research": [{"ptid": "PT_ARM_WP005_001", "lvl": 1, "research_type": "FINISHED", "receive_type": "CHARGE", "is_announced": 1, "is_checked": 0, "before_ptid": "", "before_lvl": 0}, {"ptid": "PT_ARM_WP005_001", "lvl": 2, "research_type": "LEVELUP", "receive_type": "UNKNOWN", "is_announced": 0, "is_checked": 0, "before_ptid": "", "before_lvl": 0}, {"ptid": "PT_ARM_WP006_001", "lvl": 1, "research_type": "FINISHED", "receive_type": "CHARGE", "is_announced": 1, "is_checked": 0, "before_ptid": "", "before_lvl": 0}, {"ptid": "PT_ARM_WP006_001", "lvl": 2, "research_type": "LEVELUP", "receive_type": "UNKNOWN", "is_announced": 0, "is_checked": 0, "before_ptid": "", "before_lvl": 0}]}}</script>
 <script>
@@ -2032,7 +2126,7 @@ function renderAll() {
     if (el.scrollTop > 0) scrollStates[el.id] = el.scrollTop;
   });
   if (TABS.some(t => t.id === activeTab && t.when && !t.when())) activeTab = 'account';
-  app.innerHTML = `\n    ${blockHealth()}\n    <div class="tabbar">\n      ${TABS.filter(t => !t.when || t.when()).map(t => `<button class="tabbtn ${activeTab === t.id ? 'active' : ''}" data-tab-btn="${t.id}">${t.label}</button>`).join('')}\n    </div>\n    <div class="tabpanel" data-tab-panel="account" style="display:${activeTab === 'account' ? 'block' : 'none'}">${blockCurrency()}</div>\n    <div class="tabpanel" data-tab-panel="fighters" style="display:${activeTab === 'fighters' ? 'block' : 'none'}">${blockCharacters()}${blockSkins()}</div>\n    <div class="tabpanel" data-tab-panel="research" style="display:${activeTab === 'research' ? 'block' : 'none'}">${blockBlueprints()}</div>\n    <div class="tabpanel" data-tab-panel="decals" style="display:${activeTab === 'decals' ? 'block' : 'none'}">${blockSkillDecals()}</div>\n    <div class="tabpanel" data-tab-panel="stews" style="display:${activeTab === 'stews' ? 'block' : 'none'}">${blockStews()}</div>\n    <div class="tabpanel" data-tab-panel="bags" style="display:${activeTab === 'bags' ? 'block' : 'none'}">${blockBags()}</div>\n    <div class="tabpanel" data-tab-panel="boxes" style="display:${activeTab === 'boxes' ? 'block' : 'none'}">${blockBoxes()}</div>\n    <div class="tabpanel" data-tab-panel="hub" style="display:${activeTab === 'hub' ? 'block' : 'none'}">${blockHub()}</div>\n    <div class="tabpanel" data-tab-panel="defense" style="display:${activeTab === 'defense' ? 'block' : 'none'}">${blockDefense()}</div>\n    <div class="tabpanel" data-tab-panel="photos" style="display:${activeTab === 'photos' ? 'block' : 'none'}">${blockPhotos()}</div>\n    <div class="tabpanel" data-tab-panel="graves" style="display:${activeTab === 'graves' ? 'block' : 'none'}">${blockGraves()}</div>\n    <div class="tabpanel" data-tab-panel="dates" style="display:${activeTab === 'dates' ? 'block' : 'none'}">${blockDates()}</div>\n    <div class="tabpanel" data-tab-panel="storage" style="display:${activeTab === 'storage' ? 'block' : 'none'}">${blockStorageBox()}</div>\n    <div class="tabpanel" data-tab-panel="rewards" style="display:${activeTab === 'rewards' ? 'block' : 'none'}">${blockRewardBox()}</div>\n    <div class="tabpanel" data-tab-panel="quests" style="display:${activeTab === 'quests' ? 'block' : 'none'}">${blockQuests()}</div>\n    <div class="tabpanel" data-tab-panel="rally" style="display:${activeTab === 'rally' ? 'block' : 'none'}">${blockRally()}</div>\n    <div class="tabpanel" data-tab-panel="location" style="display:${activeTab === 'location' ? 'block' : 'none'}">${blockLocation()}</div>\n    <div class="tabpanel" data-tab-panel="run" style="display:${activeTab === 'run' ? 'block' : 'none'}">${blockRun()}</div>\n    <div class="tabpanel" data-tab-panel="collection" style="display:${activeTab === 'collection' ? 'block' : 'none'}">${blockCollection()}</div>\n    <div class="tabpanel" data-tab-panel="jackals" style="display:${activeTab === 'jackals' ? 'block' : 'none'}">${blockJackals()}</div>\n    <div class="tabpanel" data-tab-panel="layouts" style="display:${activeTab === 'layouts' ? 'block' : 'none'}">${blockLayouts()}</div>\n    <div class="tabpanel" data-tab-panel="stats" style="display:${activeTab === 'stats' ? 'block' : 'none'}">${blockStats()}</div>\n    <div class="tabpanel" data-tab-panel="vip" style="display:${activeTab === 'vip' ? 'block' : 'none'}">${blockVip()}${blockFreeCont()}</div>\n    <div class="tabpanel" data-tab-panel="compare" style="display:${activeTab === 'compare' ? 'block' : 'none'}">${blockCompare()}</div>\n    <div class="tabpanel" data-tab-panel="raw" style="display:${activeTab === 'raw' ? 'block' : 'none'}">${blockRaw()}</div>\n    <div class="tabpanel" data-tab-panel="jdiff" style="display:${activeTab === 'jdiff' ? 'block' : 'none'}">${blockJd()}</div>\n  `;
+  app.innerHTML = `\n    ${blockHealth()}\n    ${uiTabbarHtml()}\n    <div class="tabpanel" data-tab-panel="account" style="display:${activeTab === 'account' ? 'block' : 'none'}">${blockCurrency()}</div>\n    <div class="tabpanel" data-tab-panel="fighters" style="display:${activeTab === 'fighters' ? 'block' : 'none'}">${blockCharacters()}${blockSkins()}</div>\n    <div class="tabpanel" data-tab-panel="research" style="display:${activeTab === 'research' ? 'block' : 'none'}">${blockBlueprints()}</div>\n    <div class="tabpanel" data-tab-panel="decals" style="display:${activeTab === 'decals' ? 'block' : 'none'}">${blockSkillDecals()}</div>\n    <div class="tabpanel" data-tab-panel="stews" style="display:${activeTab === 'stews' ? 'block' : 'none'}">${blockStews()}</div>\n    <div class="tabpanel" data-tab-panel="bags" style="display:${activeTab === 'bags' ? 'block' : 'none'}">${blockBags()}</div>\n    <div class="tabpanel" data-tab-panel="boxes" style="display:${activeTab === 'boxes' ? 'block' : 'none'}">${blockBoxes()}</div>\n    <div class="tabpanel" data-tab-panel="hub" style="display:${activeTab === 'hub' ? 'block' : 'none'}">${blockHub()}</div>\n    <div class="tabpanel" data-tab-panel="defense" style="display:${activeTab === 'defense' ? 'block' : 'none'}">${blockDefense()}</div>\n    <div class="tabpanel" data-tab-panel="photos" style="display:${activeTab === 'photos' ? 'block' : 'none'}">${blockPhotos()}</div>\n    <div class="tabpanel" data-tab-panel="graves" style="display:${activeTab === 'graves' ? 'block' : 'none'}">${blockGraves()}</div>\n    <div class="tabpanel" data-tab-panel="dates" style="display:${activeTab === 'dates' ? 'block' : 'none'}">${blockDates()}</div>\n    <div class="tabpanel" data-tab-panel="storage" style="display:${activeTab === 'storage' ? 'block' : 'none'}">${blockStorageBox()}</div>\n    <div class="tabpanel" data-tab-panel="rewards" style="display:${activeTab === 'rewards' ? 'block' : 'none'}">${blockRewardBox()}</div>\n    <div class="tabpanel" data-tab-panel="quests" style="display:${activeTab === 'quests' ? 'block' : 'none'}">${blockQuests()}</div>\n    <div class="tabpanel" data-tab-panel="rally" style="display:${activeTab === 'rally' ? 'block' : 'none'}">${blockRally()}</div>\n    <div class="tabpanel" data-tab-panel="location" style="display:${activeTab === 'location' ? 'block' : 'none'}">${blockLocation()}</div>\n    <div class="tabpanel" data-tab-panel="run" style="display:${activeTab === 'run' ? 'block' : 'none'}">${blockRun()}</div>\n    <div class="tabpanel" data-tab-panel="collection" style="display:${activeTab === 'collection' ? 'block' : 'none'}">${blockCollection()}</div>\n    <div class="tabpanel" data-tab-panel="jackals" style="display:${activeTab === 'jackals' ? 'block' : 'none'}">${blockJackals()}</div>\n    <div class="tabpanel" data-tab-panel="layouts" style="display:${activeTab === 'layouts' ? 'block' : 'none'}">${blockLayouts()}</div>\n    <div class="tabpanel" data-tab-panel="stats" style="display:${activeTab === 'stats' ? 'block' : 'none'}">${blockStats()}</div>\n    <div class="tabpanel" data-tab-panel="vip" style="display:${activeTab === 'vip' ? 'block' : 'none'}">${blockVip()}${blockFreeCont()}</div>\n    <div class="tabpanel" data-tab-panel="compare" style="display:${activeTab === 'compare' ? 'block' : 'none'}">${blockCompare()}</div>\n    <div class="tabpanel" data-tab-panel="raw" style="display:${activeTab === 'raw' ? 'block' : 'none'}">${blockRaw()}</div>\n    <div class="tabpanel" data-tab-panel="jdiff" style="display:${activeTab === 'jdiff' ? 'block' : 'none'}">${blockJd()}</div>\n  `;
   wireHealth();
   wireCurrency();
   wireCharacters();
@@ -2088,6 +2182,7 @@ function renderAll() {
       if (activeTab === 'compare') renderCompare();
       if (activeTab === 'raw') renderRaw();
       if (activeTab === 'jdiff') renderJd();
+      uiTabChanged();
       window.scrollTo(0, 0);
     });
   });
@@ -2096,6 +2191,7 @@ function renderAll() {
     const el = document.getElementById(id);
     if (el) el.scrollTop = scrollStates[id];
   }
+  uiAfterRender();
 }
 
 function bankRow(soul, kind, label, levelField, valueField) {
@@ -10982,6 +11078,7 @@ function reviewVal(k, v) {
   if (v === undefined || v === null || v === '') return '—';
   if (REVIEW_ONOFF.has(k)) return Number(v) ? 'On' : 'Off';
   if (k === 'vip_type') return Number(v) === 1 ? '1-Day Express' : '30-Day Express';
+  if (k === 'tdm_rank') { const r = arr(AP && AP.tdmrank).find(x => x.id === v); if (r) return formatTdmRank(resolveName(r.name)) || String(v); }
   if (reviewIsTime(k) && Number(v) > 1e8) return dtFmt(Number(v));
   if (typeof v === 'number') return v.toLocaleString();
   return String(v);
@@ -11279,6 +11376,7 @@ async function reviewAndDownload(kind) {
       triggerDownload(data, fname, kind === 'sav' ? 'application/octet-stream' : 'application/json');
       toast(`Downloaded ${fname}`);
       reviewClose();
+      if (sections) { UI.changes = sections; UI.curSig = uiSig(sections); UI.dlSig = UI.curSig; uiStatusUpdate(); }
       histRecord(kind, fname, data, sections);
     } catch (err) { toast(`Failed to build .${kind}: ` + err.message, true); }
   });
@@ -11289,7 +11387,7 @@ async function reviewAndDownload(kind) {
 // Funshots and every Save check result) to paste when asking for help. No account, Steam or PSN ids;
 // names can be hidden. Made from the save as it is in the editor, and says if there are edits not yet downloaded.
 // ---------------------------------------------------------------------------
-const EDITOR_BUILD = '2026-10-05';
+const EDITOR_BUILD = '2026-10-08';
 const REPORT_UI = { hideNames: false };
 const REPORT_STATE = { USE: 'playing', FREE: 'in the freezer', GUARD: 'defender', DIE: 'dead', ENEMY: 'enemy', DUMMY: 'dummy' };
 function reportPlain(html) {
@@ -11544,6 +11642,528 @@ function triggerDownload(data, filename, mime) {
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 1e3);
 }
+
+
+// ===========================================================================
+// UI PACK (2026-10-08): tab groups, search, status bar, changes drawer, shortcuts, "Max everything safe",
+// remembered tab / fighter / theme, range hints, themes, drag-and-drop.
+// Nothing here changes the save by itself: every edit still goes through the existing handlers.
+// ===========================================================================
+const UI = { inSig: '', group: 'account', changes: null, curSig: '', dlSig: null, origRoot: null, origObj: null, timer: 0, lastTab: {}, ready: false, restoring: false, qsSel: 0, qsHits: [] };
+const UI_ESC = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+function uiLsGet(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } }
+function uiLsSet(k, v) { try { window.localStorage.setItem(k, v); } catch (e) { /* storage blocked: fine */ } }
+
+// ---- 4. tab groups ------------------------------------------------------
+const TAB_GROUPS = [
+  { id: 'account', label: 'Account', tabs: [ 'account', 'vip', 'dates', 'stats', 'collection', 'rewards', 'storage' ] },
+  { id: 'fighters', label: 'Fighters', tabs: [ 'fighters', 'layouts', 'decals', 'research', 'stews', 'quests', 'graves' ] },
+  { id: 'run', label: 'Run & Floors', tabs: [ 'location', 'run', 'rally', 'defense', 'hub', 'bags', 'boxes', 'jackals' ] },
+  { id: 'tools', label: 'Tools', tabs: [ 'photos', 'compare', 'raw', 'jdiff' ] }
+];
+function uiGroupOf(tab) { const g = TAB_GROUPS.find(x => x.tabs.includes(tab)); return g ? g.id : 'tools'; }
+function uiVisibleTabIds() { const vis = new Set(TABS.filter(t => !t.when || t.when()).map(t => t.id)); const out = []; for (const g of TAB_GROUPS) for (const id of g.tabs) if (vis.has(id)) out.push(id); for (const id of vis) if (!out.includes(id)) out.push(id); return out; }
+function uiTabbarHtml() {
+  const vis = TABS.filter(t => !t.when || t.when()), byId = new Map(vis.map(t => [ t.id, t ]));
+  const cur = uiGroupOf(activeTab);
+  const ordered = uiVisibleTabIds().map(id => byId.get(id));
+  return `<div class="grpbar" role="tablist" aria-label="Sections">${TAB_GROUPS.map((g, i) => `<button class="grpbtn ${g.id === cur ? 'active' : ''}" data-grp="${g.id}" title="${g.label} (key ${i + 1})">${g.label}</button>`).join('')}</div>
+    <div class="tabbar">${ordered.map(t => `<button class="tabbtn ${activeTab === t.id ? 'active' : ''} ${uiGroupOf(t.id) === cur ? 'ingroup' : ''}" data-group="${uiGroupOf(t.id)}" data-tab-btn="${t.id}">${t.label}</button>`).join('')}</div>`;
+}
+function uiSyncTabs() {
+  const g = uiGroupOf(activeTab);
+  UI.group = g; UI.lastTab[g] = activeTab;
+  document.querySelectorAll('.grpbtn').forEach(b => b.classList.toggle('active', b.dataset.grp === g));
+  document.querySelectorAll('.tabbtn[data-tab-btn]').forEach(b => b.classList.toggle('ingroup', b.dataset.group === g));
+}
+function uiTabChanged() { uiSyncTabs(); uiLsSet('lid.tab', activeTab); }
+function uiGoGroup(id) {
+  const g = TAB_GROUPS.find(x => x.id === id); if (!g) return;
+  const vis = uiVisibleTabIds().filter(t => g.tabs.includes(t));
+  const want = UI.lastTab[id] && vis.includes(UI.lastTab[id]) ? UI.lastTab[id] : vis[0];
+  const b = want && document.querySelector(`[data-tab-btn="${want}"]`); if (b) b.click();
+}
+function uiStepTab(d) {
+  const ids = uiVisibleTabIds(), i = ids.indexOf(activeTab), n = ids[(i + d + ids.length) % ids.length];
+  const b = document.querySelector(`[data-tab-btn="${n}"]`); if (b) { b.click(); b.focus({ preventScroll: true }); }
+}
+function uiWireTabs() {
+  document.querySelectorAll('.grpbtn').forEach(b => b.addEventListener('click', () => uiGoGroup(b.dataset.grp)));
+  document.querySelectorAll('.tabbtn[data-tab-btn]').forEach(b => b.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight') { e.preventDefault(); uiStepTab(1); } else if (e.key === 'ArrowLeft') { e.preventDefault(); uiStepTab(-1); }
+  }));
+}
+
+// ---- 1. search ------------------------------------------------------------
+const UI_KEYWORDS = {
+  account: 'kill coins money spirit splithium bloodnium recycle points tdm rank bank level tank weapon mastery funshot research stamp currency max everything',
+  fighters: 'fighter freezer grade level limit break stats hp str dex vit stm luk gas mask class model gear inventory parts weapons armor skins hanger name delete recover add max all',
+  layouts: 'layout loadout build preset decal equip',
+  research: 'research blueprint blueprints parts weapons armor level chokufunsha funshot',
+  decals: 'decal decals skill stock slots',
+  stews: 'stew stews rarity seed queue cook',
+  bags: 'mystery bag lost bag bags',
+  boxes: 'death box deathbox boxes',
+  hub: 'waiting room hub custom',
+  defense: 'defense defender fort alarm whistle kidnap guard',
+  photos: 'screenshots photos pictures images export',
+  graves: 'dead fighters graves archive',
+  dates: 'dates time clock timers expire',
+  storage: 'storage box coin locker capacity items slots',
+  rewards: 'reward box rewards present presents mail gifts',
+  quests: 'quests orders completed taken cleared progress',
+  rally: 'stamp rally floors stamps bonus',
+  location: 'location floor travel move boss lock rewind run end screamer pit paused go back',
+  run: 'current run crash end run death bag',
+  collection: 'collection mushroom beast book magazines skins barbs catalogue',
+  jackals: 'jackals jackal rewards',
+  stats: 'stats statistics play log counters',
+  vip: 'vip express pass membership free continues renewal',
+  compare: 'compare second save clone copy fighters between saves',
+  raw: 'raw data json tree edit',
+  jdiff: 'json compare diff advanced'
+};
+function uiSearchEntries() {
+  const out = [], seen = new Set();
+  for (const id of uiVisibleTabIds()) {
+    const t = TABS.find(x => x.id === id), g = TAB_GROUPS.find(x => x.tabs.includes(id));
+    out.push({ tab: id, text: t.label, in: g ? g.label : '', kw: UI_KEYWORDS[id] || '', kind: 'tab' }); seen.add(id + '|' + t.label);
+  }
+  document.querySelectorAll('[data-tab-panel]').forEach(p => {
+    const tab = p.dataset.tabPanel; if (!document.querySelector(`[data-tab-btn="${tab}"]`)) return;
+    const tl = (TABS.find(x => x.id === tab) || {}).label || tab;
+    p.querySelectorAll('label, h2, .eyebrow, summary, button').forEach(el => {
+      if (el.closest('table') || el.closest('#chg-drawer')) return;
+      let tx = (el.textContent || '').replace(/\s+/g, ' ').trim();
+      if (!tx || tx.length > 64 || tx.length < 3) return;
+      const k = tab + '|' + tx; if (seen.has(k)) return; seen.add(k);
+      out.push({ tab, text: tx, in: tl, kw: '', kind: 'item' });
+    });
+  });
+  return out;
+}
+function uiSearchRun(q) {
+  q = q.trim().toLowerCase(); if (!q) return [];
+  const toks = q.split(/\s+/);
+  const res = [];
+  for (const e of uiSearchEntries()) {
+    const hay = (e.text + ' ' + e.kw + ' ' + e.in).toLowerCase(), tx = e.text.toLowerCase();
+    if (!toks.every(t => hay.includes(t))) continue;
+    let s = 0;
+    if (tx === q) s += 100; else if (tx.startsWith(q)) s += 60; else if (tx.includes(q)) s += 40; else s += 10;
+    if (e.kind === 'tab') s += 15;
+    res.push([ s, e ]);
+  }
+  res.sort((a, b) => b[0] - a[0]);
+  return res.slice(0, 12).map(x => x[1]);
+}
+function uiQsRender() {
+  const drop = document.getElementById('qs-drop'), q = document.getElementById('qs').value;
+  if (!q.trim()) { drop.style.display = 'none'; return; }
+  UI.qsHits = SAVE ? uiSearchRun(q) : [];
+  UI.qsSel = Math.min(UI.qsSel, Math.max(0, UI.qsHits.length - 1));
+  drop.innerHTML = !SAVE ? '<div class="qsnone">Load masters.db and a save first.</div>'
+    : UI.qsHits.length ? UI.qsHits.map((h, i) => `<div class="qsrow ${i === UI.qsSel ? 'sel' : ''}" data-qs="${i}"><span>${UI_ESC(h.text)}</span><span class="qsin">${h.kind === 'tab' ? 'tab' : ''}${h.kind === 'tab' || !h.in ? '' : ''}${h.kind === 'item' ? 'in ' + UI_ESC(h.in) : ''}</span></div>`).join('')
+    : '<div class="qsnone">Nothing matches.</div>';
+  drop.style.display = 'block';
+  drop.querySelectorAll('[data-qs]').forEach(r => r.addEventListener('mousedown', e => { e.preventDefault(); uiQsPick(Number(r.dataset.qs)); }));
+}
+function uiQsPick(i) {
+  const h = UI.qsHits[i]; if (!h) return;
+  const inp = document.getElementById('qs'); inp.value = ''; inp.blur();
+  document.getElementById('qs-drop').style.display = 'none';
+  uiGoto(h.tab, h.kind === 'item' ? h.text : '');
+}
+function uiGoto(tab, text) {
+  const b = document.querySelector(`[data-tab-btn="${tab}"]`);
+  if (b && activeTab !== tab) b.click();
+  if (text) setTimeout(() => uiFlash(tab, text), 90);
+  else window.scrollTo(0, 0);
+}
+function uiFlash(tab, text) {
+  const p = document.querySelector(`[data-tab-panel="${tab}"]`); if (!p) return;
+  const el = [ ...p.querySelectorAll('label, h2, .eyebrow, summary, button') ].find(e => (e.textContent || '').replace(/\s+/g, ' ').trim() === text);
+  if (!el) return;
+  for (let d = el.closest('details'); d; d = d.parentElement && d.parentElement.closest('details')) d.open = true;
+  el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  el.classList.add('flashHit'); setTimeout(() => el.classList.remove('flashHit'), 2300);
+  const inp = el.tagName === 'LABEL' && el.parentElement && el.parentElement.querySelector('input, select');
+  if (inp && inp.focus) inp.focus({ preventScroll: true });
+}
+function uiWireSearch() {
+  const inp = document.getElementById('qs'), drop = document.getElementById('qs-drop');
+  inp.addEventListener('input', () => { UI.qsSel = 0; uiQsRender(); });
+  inp.addEventListener('focus', () => { if (inp.value.trim()) uiQsRender(); });
+  inp.addEventListener('blur', () => { setTimeout(() => { drop.style.display = 'none'; }, 120); });
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); UI.qsSel = Math.min(UI.qsSel + 1, UI.qsHits.length - 1); uiQsRender(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); UI.qsSel = Math.max(UI.qsSel - 1, 0); uiQsRender(); }
+    else if (e.key === 'Enter') { e.preventDefault(); uiQsPick(UI.qsSel); }
+    else if (e.key === 'Escape') { inp.value = ''; inp.blur(); drop.style.display = 'none'; }
+  });
+}
+
+// ---- 2. status bar + unsaved warning --------------------------------------
+function uiChangeCount(sections) { return sections ? sections.reduce((n, s) => n + s.lines.length, 0) : 0; }
+function uiComputeChanges() {
+  if (!SAVE || !RAW_SAV_ROOT || !ORIG_SAVE.text || ORIG_SAVE.root !== RAW_SAV_ROOT) return null;
+  const root = buildDownloadRoot();
+  const rawA = JSON.parse(ORIG_SAVE.text), rawB = JSON.parse(JSON.stringify(root));
+  return reviewDiff(reviewAdapt(JSON.parse(JSON.stringify(rawA))), reviewAdapt(rawB), rawA, rawB);
+}
+function uiSig(sections) { return sections ? JSON.stringify(sections.map(s => s.lines)) : ''; }
+// cheap fingerprint of everything that can differ from the loaded save; the (slow) change list is only rebuilt when it moves
+function uiInputSig() {
+  try {
+    return JSON.stringify([ SAVE, FLOOR_MOVE.root === RAW_SAV_ROOT && FLOOR_MOVE.target, BOSS_LOCK.root === RAW_SAV_ROOT && [ BOSS_LOCK.mode, BOSS_LOCK.which, BOSS_LOCK.extend, BOSS_LOCK.rewards ], RUN_END.root === RAW_SAV_ROOT && RUN_END.on,
+      REWIND.root === RAW_SAV_ROOT && REWIND.on, FREE_CONT.root === RAW_SAV_ROOT && [ FREE_CONT.on, FREE_CONT.perDay ], STAMP_MARK.root === RAW_SAV_ROOT && STAMP_MARK.on, JKL.root === RAW_SAV_ROOT && JKL.edits,
+      SHUTDOWN_RESET.root === RAW_SAV_ROOT && [ ...SHUTDOWN_RESET.cids ], FIGHTER_DELETES.root === RAW_SAV_ROOT && [ [ ...FIGHTER_DELETES.cids ], [ ...FIGHTER_DELETES.eids ] ], FIGHTER_RECOVERS.root === RAW_SAV_ROOT && [ ...FIGHTER_RECOVERS.cids ],
+      RALLY.root === RAW_SAV_ROOT && [ RALLY.stamps, RALLY.bonus ], RAW_VIEW.edAt, DATE_RULES, RAW_SAV_ROOT === UI.origRoot ]);
+  } catch (e) { return String(Math.random()); }
+}
+function uiScheduleStatus() {
+  const sig = uiInputSig();
+  if (sig === UI.inSig && UI.changes !== null) return;
+  clearTimeout(UI.timer);
+  UI.pendingSig = true;
+  UI.timer = setTimeout(() => {
+    UI.pendingSig = false;
+    const sg = uiInputSig();
+    try { UI.changes = uiComputeChanges(); UI.curSig = uiSig(UI.changes); UI.inSig = sg; } catch (err) { console.warn('change count failed', err); UI.changes = null; UI.curSig = ''; }
+    uiStatusUpdate();
+  }, 900);
+}
+function uiDirty() {
+  if (!SAVE || !RAW_SAV_ROOT) return false;
+  // an edit made in the last second may not be counted yet: compare the live fingerprint with the one the count was made from
+  if (UI.pendingSig) { try { if (uiInputSig() !== UI.inSig) return true; } catch (e) { return true; } }
+  const n = uiChangeCount(UI.changes); return n > 0 && UI.curSig !== UI.dlSig;
+}
+function uiStatusUpdate() {
+  const bar = document.getElementById('statusbar'); if (!bar) return;
+  if (!SAVE || !RAW_SAV_ROOT) { bar.style.display = 'none'; return; }
+  bar.style.display = 'flex';
+  const n = uiChangeCount(UI.changes), pend = UI.changes !== null;
+  const it = (HEALTH && HEALTH.items) || [];
+  const np = it.filter(x => x.level === 'problem').length, nw = it.filter(x => x.level === 'warning').length;
+  document.getElementById('sb-file').textContent = ORIG_SAVE.name || 'save';
+  document.getElementById('sb-file').title = ORIG_SAVE.name || '';
+  const st = document.getElementById('sb-state');
+  st.className = !pend ? 'sbclean' : !n ? 'sbclean' : UI.curSig === UI.dlSig ? 'sbok' : 'sbdirty';
+  st.textContent = !pend ? 'Checking changes…' : !n ? 'No changes yet' : UI.curSig === UI.dlSig ? `✓ ${n} change${n === 1 ? '' : 's'}, downloaded` : `● ${n} unsaved change${n === 1 ? '' : 's'}`;
+  const ck = document.getElementById('sb-check');
+  ck.className = np ? 'sbprob' : nw ? 'sbdirty' : 'sbok';
+  ck.textContent = np ? `Save check: ${np} problem${np === 1 ? '' : 's'}` : nw ? `Save check: ${nw} warning${nw === 1 ? '' : 's'}` : 'Save check: OK';
+}
+window.addEventListener('beforeunload', e => { if (uiDirty()) { e.preventDefault(); e.returnValue = ''; return ''; } });
+
+// ---- 3. changes drawer ------------------------------------------------------
+function uiPending() {
+  const out = [], r = RAW_SAV_ROOT; if (!r) return out;
+  if (FLOOR_MOVE.root === r && FLOOR_MOVE.target) out.push({ text: `Move to floor ${hvnFloor(FLOOR_MOVE.target) ? hvnFloorLabel(hvnFloor(FLOOR_MOVE.target)) : FLOOR_MOVE.target}`, cancel: () => { FLOOR_MOVE.target = ''; FLOOR_MOVE.armed = false; FLOOR_MOVE.msg = ''; FLOOR_MOVE.rolls = null; } });
+  if (BOSS_LOCK.root === r && BOSS_LOCK.mode) out.push({ text: `Boss floor lock: ${(BLK_MODES[BOSS_LOCK.mode] || {}).label || BOSS_LOCK.mode}`, cancel: () => { BOSS_LOCK.mode = ''; BOSS_LOCK.which = ''; BOSS_LOCK.plan = null; } });
+  if (RUN_END.root === r && RUN_END.on) out.push({ text: 'End the run (fighter goes home)', cancel: () => { RUN_END.on = false; } });
+  if (REWIND.root === r && REWIND.on) out.push({ text: 'Rewind the run', cancel: () => { REWIND.on = false; } });
+  if (FREE_CONT.root === r && FREE_CONT.on) out.push({ text: `Free continues (${FREE_CONT.perDay} a day)`, cancel: () => { FREE_CONT.on = false; } });
+  return out;
+}
+// lines that can be undone: text of the line (exactly as the review writes it) -> function that puts the value back
+function uiReverts() {
+  const map = new Map();
+  if (!UI.origObj || !SAVE) return map;
+  const A = UI.origObj, aS = A.soul || {}, bS = SAVE.soul || {}, back = fn => () => fn();
+  const same = (x, y) => JSON.stringify(x) === JSON.stringify(y);
+  const clone = v => v === undefined ? undefined : JSON.parse(JSON.stringify(v));
+  for (const k of new Set(Object.keys(aS).concat(Object.keys(bS)))) {
+    if ([ 'chrs', 'chrslots', 'psskls', 'hubcustom', 'mstlvl', 'vip', 'modified', 'uid', 'crntcid' ].includes(k)) continue;
+    const a = aS[k], b = bS[k];
+    if ((a && typeof a === 'object') || (b && typeof b === 'object') || a === b) continue;
+    if (k === 'tdm_rank') continue; // follows the points
+    map.set(`${REVIEW_SOUL_LABELS[k] || reviewKeyLabel(k)}: ${reviewVal(k, a)} → ${reviewVal(k, b)}`, back(() => {
+      if (a === undefined) delete SAVE.soul[k]; else SAVE.soul[k] = a;
+      if (k === 'tdm_point') { if (aS.tdm_rank === undefined) delete SAVE.soul.tdm_rank; else SAVE.soul.tdm_rank = aS.tdm_rank; }
+    }));
+  }
+  const va = aS.vip || {}, vb = bS.vip || {};
+  const vipLabel = { vip_flag: 'Express member', vip_type: 'Express Pass kind', vip_pass_num: '30-Day passes held', oneday_vip_pass_num: '1-Day passes held', expired_time: 'VIP expires', automatic_renewal: 'VIP auto-renew' };
+  for (const k of new Set(Object.keys(va).concat(Object.keys(vb)))) if (!same(va[k], vb[k])) map.set(`${vipLabel[k] || 'VIP ' + k}: ${reviewVal(k, va[k])} → ${reviewVal(k, vb[k])}`, back(() => { SAVE.soul.vip = SAVE.soul.vip || {}; if (va[k] === undefined) delete SAVE.soul.vip[k]; else SAVE.soul.vip[k] = clone(va[k]); }));
+  // decal stock
+  const ka = {}, kb = {};
+  for (const s of arr(aS.psskls)) ka[s.id] = s.cnt || 0;
+  for (const s of arr(bS.psskls)) kb[s.id] = s.cnt || 0;
+  for (const id of new Set(Object.keys(ka).concat(Object.keys(kb)))) if ((ka[id] || 0) !== (kb[id] || 0)) map.set(`${reviewDecalName(id)}: ${ka[id] || 0} → ${kb[id] || 0}`, back(() => {
+    SAVE.soul.psskls = arr(SAVE.soul.psskls); const e = SAVE.soul.psskls.find(s => s.id === id), oe = arr(aS.psskls).find(s => s.id === id);
+    if (e && oe) e.cnt = oe.cnt; else if (e && !oe) SAVE.soul.psskls.splice(SAVE.soul.psskls.indexOf(e), 1); else if (!e && oe) SAVE.soul.psskls.push(clone(oe));
+  }));
+  // weapon mastery
+  const ma = {}, mb = {};
+  for (const m of arr(aS.mstlvl)) ma[m.ptarmtp] = m.lvl;
+  for (const m of arr(bS.mstlvl)) mb[m.ptarmtp] = m.lvl;
+  const mstName = id => { const r = arr(AP && AP.ptarmtps).find(x => x.id === id); return (r && resolveName(r.name)) || id; };
+  for (const id of new Set(Object.keys(ma).concat(Object.keys(mb)))) if ((ma[id] || 1) !== (mb[id] || 1)) map.set(`${mstName(id)}: Lv ${ma[id] || 1} → Lv ${mb[id] || 1}`, back(() => {
+    SAVE.soul.mstlvl = arr(SAVE.soul.mstlvl); const i = SAVE.soul.mstlvl.findIndex(m => m.ptarmtp === id), oe = arr(aS.mstlvl).find(m => m.ptarmtp === id);
+    if (oe) { if (i >= 0) SAVE.soul.mstlvl[i] = clone(oe); else SAVE.soul.mstlvl.push(clone(oe)); } else if (i >= 0) SAVE.soul.mstlvl.splice(i, 1);
+  }));
+  // fighters (whole fighter put back as it was loaded); only when the name is unique among changed fighters
+  const byA = new Map(arr(aS.chrs).map(c => [ c.cid, c ])), byB = new Map(arr(bS.chrs).map(c => [ c.cid, c ]));
+  const changed = [];
+  for (const [ cid, b ] of byB) { const a = byA.get(cid); if (a && !same(a, b)) changed.push(b); }
+  for (const b of changed) {
+    if (changed.filter(x => x.name === b.name).length !== 1) continue;
+    map.set(`@fighter:${b.name || '?'}`, back(() => { const i = arr(SAVE.soul.chrs).findIndex(c => c && c.cid === b.cid); if (i >= 0) SAVE.soul.chrs[i] = clone(byA.get(b.cid)); }));
+  }
+  return map;
+}
+function uiAfterUndo(msg) { try { runSaveCheck(); } catch (e) { /* ignore */ } renderAll(); uiOpenChanges(true); toast(msg); }
+function uiCloseChanges() { const d = document.getElementById('chg-drawer'); if (d) d.style.display = 'none'; }
+function uiOpenChanges(keep) {
+  const d = document.getElementById('chg-drawer'); if (!d) return;
+  if (!SAVE || !RAW_SAV_ROOT) { toast('Load a save first', true); return; }
+  let sections = null, why = '';
+  try { sections = uiComputeChanges(); UI.changes = sections; UI.curSig = uiSig(sections); UI.inSig = uiInputSig(); uiStatusUpdate(); } catch (err) { why = err.message; }
+  const rev = uiReverts(), pend = uiPending(), n = uiChangeCount(sections);
+  const secHtml = sections === null ? `<div class="capNote">The change list couldn't be made (${UI_ESC(why)}).</div>`
+    : !sections.length ? '<div class="capNote" style="margin:0;">No changes since you loaded this save.</div>'
+    : sections.map((s, si) => `<details ${s.lines.length <= 14 ? 'open' : ''} style="margin-bottom:8px;"><summary style="cursor:pointer;"><b>${UI_ESC(s.title)}</b> <span class="id">(${s.lines.length})</span></summary>
+      <ul style="margin:6px 0 0 18px; padding:0; font-size:12px; line-height:1.6; list-style:disc;">${s.lines.map((l, li) => {
+        let key = rev.has(l) ? l : null;
+        if (!key && s.title === 'Fighters') { const nm = l.split(': ')[0]; if (rev.has('@fighter:' + nm)) key = '@fighter:' + nm; }
+        return `<li><span class="ltxt">${UI_ESC(l)}</span>${key ? `<button class="subtle undoBtn" data-undo="${si}:${li}" title="Put this back the way it was when you loaded the save">Undo</button>` : ''}</li>`;
+      }).join('')}</ul></details>`).join('');
+  d.innerHTML = `<div class="dhead"><h2>Changes <span class="id">(${n})</span></h2><button class="subtle" id="chg-close">Close</button></div>
+    <div class="dbody">
+      ${pend.length ? `<div class="pend"><b style="font-size:12px;">Applied when you download</b>${pend.map((p, i) => `<div class="prow"><span>${UI_ESC(p.text)}</span><button class="subtle undoBtn" data-cancel="${i}">Cancel</button></div>`).join('')}</div>` : ''}
+      <div class="capNote" style="margin-top:0;">Everything here differs from the save as you loaded it${ORIG_SAVE.name ? ` (${UI_ESC(ORIG_SAVE.name)})` : ''}. <b>Undo</b> puts that one value (or that one fighter) back. Lines without an Undo button are changed on their own tab, or use <b>Start over</b> below. Changes that depend on each other (for example a floor move) are cancelled in the box above.</div>
+      ${secHtml}
+    </div>
+    <div class="dfoot"><button class="action" id="chg-dl">⬇ Review &amp; download</button>${ORIG_SAVE.file ? '<button class="subtle" id="chg-reset" title="Throw away every edit and load the file again">Start over from the loaded file</button>' : ''}</div>`;
+  d.style.display = 'flex';
+  document.getElementById('chg-close').addEventListener('click', uiCloseChanges);
+  document.getElementById('chg-dl').addEventListener('click', () => { uiCloseChanges(); reviewAndDownload('sav'); });
+  const rs = document.getElementById('chg-reset');
+  if (rs) rs.addEventListener('click', () => {
+    if (!confirm('Throw away every edit and load the file again?')) return;
+    uiCloseChanges(); loadSaveFiles([ ORIG_SAVE.file ]);
+  });
+  d.querySelectorAll('[data-cancel]').forEach(b => b.addEventListener('click', () => { const p = pend[Number(b.dataset.cancel)]; p.cancel(); uiAfterUndo('Cancelled: ' + p.text); }));
+  d.querySelectorAll('[data-undo]').forEach(b => b.addEventListener('click', () => {
+    const [ si, li ] = b.dataset.undo.split(':').map(Number), l = sections[si].lines[li];
+    let key = rev.has(l) ? l : null;
+    if (!key && sections[si].title === 'Fighters') key = '@fighter:' + l.split(': ')[0];
+    const fn = key && rev.get(key); if (!fn) return;
+    try { fn(); } catch (err) { toast('Undo failed: ' + err.message, true); return; }
+    uiAfterUndo('Put back: ' + (key.startsWith('@fighter:') ? key.slice(9) : l.split(':')[0]));
+  }));
+}
+
+// ---- 5. keyboard shortcuts ----------------------------------------------------
+function uiTyping(e) { const t = e.target; return !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable); }
+function uiHelp() {
+  uiCloseOverlay();
+  const ov = document.createElement('div'); ov.className = 'uiOverlay'; ov.id = 'ui-overlay';
+  ov.innerHTML = `<section class="block"><div class="block-head"><div><div class="eyebrow">Help</div><h2>Keyboard shortcuts</h2></div></div><div class="block-body">
+    <table class="kbdTable">
+      <tr><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>Review changes and download the .sav</td></tr>
+      <tr><td><kbd>Ctrl</kbd>+<kbd>K</kbd> or <kbd>/</kbd></td><td>Search tabs and settings</td></tr>
+      <tr><td><kbd>[</kbd> and <kbd>]</kbd></td><td>Previous / next tab</td></tr>
+      <tr><td><kbd>1</kbd> – <kbd>4</kbd></td><td>Jump to Account, Fighters, Run &amp; Floors, Tools</td></tr>
+      <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>Move between tabs while a tab button is selected</td></tr>
+      <tr><td><kbd>C</kbd></td><td>Open the list of changes</td></tr>
+      <tr><td><kbd>?</kbd></td><td>This help</td></tr>
+      <tr><td><kbd>Esc</kbd></td><td>Close a window or the search</td></tr>
+    </table>
+    <div class="capNote">Single-key shortcuts only work when you are not typing in a box. You can also drop a .sav, .json or masters.db file anywhere on the page.</div>
+    <div class="toolbar" style="margin-top:10px;"><button class="subtle" id="ui-ov-close">Close</button></div></div></section>`;
+  document.body.appendChild(ov);
+  ov.addEventListener('click', e => { if (e.target === ov) uiCloseOverlay(); });
+  document.getElementById('ui-ov-close').addEventListener('click', uiCloseOverlay);
+}
+function uiCloseOverlay() { const o = document.getElementById('ui-overlay'); if (o) o.remove(); }
+document.addEventListener('keydown', e => {
+  const k = e.key;
+  if ((e.ctrlKey || e.metaKey) && !e.altKey && (k === 's' || k === 'S')) {
+    e.preventDefault();
+    const b = document.getElementById('btn-download-sav'); if (b && !b.disabled) b.click(); else toast('Load a save first', true);
+    return;
+  }
+  if ((e.ctrlKey || e.metaKey) && (k === 'k' || k === 'K')) { e.preventDefault(); document.getElementById('qs').focus(); document.getElementById('qs').select(); return; }
+  if (k === 'Escape') {
+    if (document.getElementById('ui-overlay')) { uiCloseOverlay(); return; }
+    const d = document.getElementById('chg-drawer'); if (d && d.style.display !== 'none' && d.style.display !== '') { uiCloseChanges(); return; }
+    return;
+  }
+  if (uiTyping(e) || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (document.getElementById('review-overlay') || document.getElementById('ui-overlay')) return;
+  if (k === '/') { e.preventDefault(); document.getElementById('qs').focus(); return; }
+  if (k === '?') { uiHelp(); return; }
+  if (!SAVE) return;
+  if (k === ']') uiStepTab(1); else if (k === '[') uiStepTab(-1);
+  else if (k >= '1' && k <= '4') uiGoGroup(TAB_GROUPS[Number(k) - 1].id);
+  else if (k === 'c' || k === 'C') uiOpenChanges();
+});
+
+// ---- 6. Max everything safe -----------------------------------------------------
+function uiMaxRows() {
+  const s = SAVE.soul, rows = [], num = v => Number(v).toLocaleString();
+  for (const [ label, levelField, valueField ] of [ [ 'Kill Coins', 'safe_level', 'free_money' ], [ 'SPLithium', 'spirit_tank_level', 'spirit' ] ]) {
+    const maxLvl = bankMaxLevel(levelField), cap = bankCapacityForLevel(maxLvl, levelField), lvl = s[levelField] != null ? s[levelField] : 1, held = s[valueField] || 0;
+    if (lvl < maxLvl || held < cap) rows.push({ label: `${label}: bank level ${lvl} → ${maxLvl}, held ${num(held)} → ${num(cap)}`, on: true, apply() {
+      s[levelField] = maxLvl; const lk = levelField.replace('_level', '_limit'); if (lk in s) s[lk] = cap; s[valueField] = cap; } });
+  }
+  for (const [ f, label, cap ] of currencyFields()) {
+    if (cap && (s[f] || 0) < cap) rows.push({ label: `${label}: ${num(s[f] || 0)} → ${num(cap)}`, on: true, apply() { s[f] = cap; } });
+  }
+  { const mx = tdmPointMax(); if ((s.tdm_point || 0) < mx) rows.push({ label: `TDM Points: ${num(s.tdm_point || 0)} → ${num(mx)}`, on: true, apply() { s.tdm_point = mx; const r = tdmRankForPoints(mx, AP); if (r) s.tdm_rank = r.id; } }); }
+  rows.push({ label: 'Weapon Mastery: every category to its top level', on: true, apply() { const b = document.getElementById('mst-max-all'); if (b) b.click(); } });
+  const nf = arr(s.chrs).filter(c => c && c.state !== 'ENEMY' && c.state !== 'DUMMY').length;
+  rows.push({ label: `All fighters (${nf}): Grade ${gradeMax()}, top Limit Break, all stats, slots, Death Bag and Rage. Fighters that are dead, kidnapped or in a run are skipped.`, on: false, apply() { maxAllFighters(); } });
+  return rows;
+}
+function uiOpenMax() {
+  if (!SAVE) { toast('Load a save first', true); return; }
+  uiCloseOverlay();
+  const rows = uiMaxRows();
+  const ov = document.createElement('div'); ov.className = 'uiOverlay'; ov.id = 'ui-overlay';
+  ov.innerHTML = `<section class="block"><div class="block-head"><div><div class="eyebrow">Account</div><h2>Max everything safe</h2></div></div><div class="block-body">
+    <div class="capNote" style="margin-top:0;">Raises these to the game's own limits and no further (limits come from masters.db). Untick anything you want to leave. Nothing changes until you press Apply, and you can undo each value afterwards in <b>Changes</b>.</div>
+    ${rows.map((r, i) => `<label class="maxRow"><input type="checkbox" data-maxrow="${i}" ${r.on ? 'checked' : ''}><span>${UI_ESC(r.label)}</span></label>`).join('')}
+    <div class="toolbar" style="margin-top:12px;"><button class="action" id="max-apply">Apply</button><button class="subtle" id="max-cancel">Cancel</button></div></div></section>`;
+  document.body.appendChild(ov);
+  ov.addEventListener('click', e => { if (e.target === ov) uiCloseOverlay(); });
+  document.getElementById('max-cancel').addEventListener('click', uiCloseOverlay);
+  document.getElementById('max-apply').addEventListener('click', () => {
+    let n = 0;
+    ov.querySelectorAll('[data-maxrow]').forEach(c => { if (c.checked) { try { rows[Number(c.dataset.maxrow)].apply(); n++; } catch (err) { toast('Failed: ' + err.message, true); } } });
+    uiCloseOverlay();
+    try { runSaveCheck(); } catch (e) { /* ignore */ }
+    renderAll();
+    toast(n ? `Maxed ${n} thing${n === 1 ? '' : 's'}` : 'Nothing selected');
+  });
+}
+
+// ---- 7. remembered tab / fighter ----------------------------------------------------
+function uiRestoreLast() {
+  const t = uiLsGet('lid.tab');
+  if (t && uiVisibleTabIds().includes(t) && t !== activeTab) { const b = document.querySelector(`[data-tab-btn="${t}"]`); if (b) b.click(); }
+  const cid = uiLsGet('lid.chr');
+  if (cid && SAVE && SAVE.soul) { const i = arr(SAVE.soul.chrs).findIndex(c => c && c.cid === cid); if (i >= 0 && i !== activeCharIdx) { activeCharIdx = i; renderAll(); } }
+}
+function uiRememberChar() { try { const c = SAVE && SAVE.soul && SAVE.soul.chrs[activeCharIdx]; if (c && c.cid) uiLsSet('lid.chr', c.cid); } catch (e) { /* ignore */ } }
+
+// ---- 8. range hints --------------------------------------------------------------------
+const UI_RANGE_TEXT = { 'rb-num': '1 to 999,999', 'chr-name': 'Up to 32 characters', 'stew-seed': 'Whole number 0 to 4,294,967,295, or blank', 'tdm-point': null };
+function uiHintFor(el) {
+  if (el.id && UI_RANGE_TEXT[el.id] !== undefined && UI_RANGE_TEXT[el.id] !== null) return UI_RANGE_TEXT[el.id];
+  if (el.dataset.stamp) return '0 to 99,999';
+  if (el.dataset.vip) return '0 to 99,999';
+  if (el.dataset.currency) { const m = el.getAttribute('data-max'); return m ? `0 to ${Number(m).toLocaleString()}` : '0 or more'; }
+  if (el.dataset.qOrd !== undefined || el.dataset.qClr !== undefined) return '0 to 999,999';
+  if (el.type === 'number') {
+    const mn = el.getAttribute('min'), mx = el.getAttribute('max'), st = el.getAttribute('step');
+    if (mn !== null && mx !== null) return `${Number(mn).toLocaleString()} to ${Number(mx).toLocaleString()}${st && st !== '1' && st !== 'any' && Number(st) > 1 ? `, steps of ${Number(st)}` : ''}`;
+  }
+  return '';
+}
+function uiRangeHints() {
+  document.querySelectorAll('#app input[type="number"], #app input[type="text"][data-currency], #app #chr-name, #app #stew-seed, #app #rb-num').forEach(el => {
+    if (el.dataset.rngDone) return; el.dataset.rngDone = '1';
+    const h = uiHintFor(el); if (!h) return;
+    const host = el.closest('.field');
+    if (host && host.querySelectorAll('input, select').length === 1 && !host.querySelector('.rng')) { const d = document.createElement('div'); d.className = 'rng'; d.textContent = 'Allowed: ' + h; host.appendChild(d); }
+    else el.title = 'Allowed: ' + h + (el.title ? '. ' + el.title : '');
+  });
+}
+
+// ---- 9. theme --------------------------------------------------------------------------
+function uiApplyTheme(t) {
+  document.documentElement.setAttribute('data-theme', t === 'light' ? 'light' : 'dark');
+  const b = document.getElementById('btn-theme'); if (b) { b.textContent = t === 'light' ? '🌙' : '☀'; b.title = t === 'light' ? 'Switch to the dark theme' : 'Switch to the light theme'; }
+}
+// light theme: rarity and status colours are written inline for the dark theme; darken any that would be hard to read
+function uiRgb(c) { const m = String(c).match(/rgba?\(([^)]+)\)/); if (!m) return null; const v = m[1].split(',').map(x => parseFloat(x)); return { r: v[0], g: v[1], b: v[2], a: v.length > 3 ? v[3] : 1 }; }
+function uiLum(c) { const f = x => { x /= 255; return x <= .03928 ? x / 12.92 : Math.pow((x + .055) / 1.055, 2.4); }; return .2126 * f(c.r) + .7152 * f(c.g) + .0722 * f(c.b) + .05; }
+function uiRatio(a, b) { const x = uiLum(a), y = uiLum(b); return Math.max(x, y) / Math.min(x, y); }
+function uiBgOf(el) { for (let e = el; e; e = e.parentElement) { const c = uiRgb(getComputedStyle(e).backgroundColor); if (c && c.a >= .5) return c; } return uiRgb(getComputedStyle(document.body).backgroundColor) || { r: 255, g: 255, b: 255 }; }
+function uiFixLight() {
+  if (document.documentElement.getAttribute('data-theme') !== 'light') return;
+  document.querySelectorAll('#app [style*="color"], #app .stewRarBadge').forEach(el => {
+    if (el.dataset.lfix) return; el.dataset.lfix = '1';
+    const fg = uiRgb(getComputedStyle(el).color), bg = uiBgOf(el); if (!fg || !bg) return;
+    let c = { r: fg.r, g: fg.g, b: fg.b }, n = 0;
+    while (uiRatio(c, bg) < 4.5 && n < 8 && uiLum(bg) > .3) { c = { r: c.r * .8, g: c.g * .8, b: c.b * .8 }; n++; }
+    if (n) el.style.color = `rgb(${Math.round(c.r)}, ${Math.round(c.g)}, ${Math.round(c.b)})`;
+  });
+}
+let UI_FIX_T = 0;
+function uiObserveTheme() {
+  const app = document.getElementById('app');
+  new MutationObserver(() => { if (document.documentElement.getAttribute('data-theme') !== 'light') return; clearTimeout(UI_FIX_T); UI_FIX_T = setTimeout(uiFixLight, 120); }).observe(app, { childList: true, subtree: true });
+}
+function uiToggleTheme() { const t = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light'; uiApplyTheme(t); uiLsSet('lid.theme', t); if (SAVE) renderAll(); uiFixLight(); }
+
+// ---- 10. drag and drop ----------------------------------------------------------------------
+function uiDropFiles(files) {
+  const list = Array.from(files || []); if (!list.length) return;
+  const dbs = list.filter(f => /\.(db|sqlite3?)$/i.test(f.name)), saves = list.filter(f => /\.(sav|json)$/i.test(f.name));
+  if (!dbs.length && !saves.length) { toast('Drop a masters.db or a .sav / .json save', true); return; }
+  const go = async () => {
+    if (dbs.length) {
+      const dt = new DataTransfer(); dt.items.add(dbs[0]);
+      const inp = document.getElementById('file-masters'); inp.files = dt.files; inp.dispatchEvent(new Event('change', { bubbles: true }));
+      // wait for masters.db to finish before a save
+      for (let i = 0; i < 400 && !AP; i++) await new Promise(r => setTimeout(r, 100));
+    }
+    if (saves.length) {
+      if (!AP) { toast('Load masters.db first, then drop your save', true); return; }
+      await loadSaveFiles(saves);
+    }
+  };
+  go();
+}
+function uiWireDrop() {
+  let depth = 0;
+  const veil = document.getElementById('drop-veil');
+  const hasFiles = e => e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
+  window.addEventListener('dragenter', e => { if (!hasFiles(e)) return; e.preventDefault(); depth++; veil.style.display = 'flex'; });
+  window.addEventListener('dragover', e => { if (!hasFiles(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
+  window.addEventListener('dragleave', e => { if (!hasFiles(e)) return; depth = Math.max(0, depth - 1); if (!depth) veil.style.display = 'none'; });
+  window.addEventListener('drop', e => { if (!hasFiles(e)) return; e.preventDefault(); depth = 0; veil.style.display = 'none'; uiDropFiles(e.dataTransfer.files); });
+}
+
+// ---- hook that runs after every renderAll -------------------------------------------------------
+function uiAfterRender() {
+  uiWireTabs();
+  uiRangeHints();
+  // Max-everything button on the Account tab
+  const acc = document.querySelector('[data-tab-panel="account"] .block-body');
+  if (acc && !document.getElementById('btn-max-safe')) {
+    const w = document.createElement('div'); w.className = 'toolbar'; w.style.marginBottom = '12px';
+    w.innerHTML = '<button class="action" id="btn-max-safe" title="Raise coins, currencies, TDM points, mastery (and optionally fighters) to the game\'s limits">⚡ Max everything safe…</button><span class="id">Shows what will change first; each value can be undone afterwards.</span>';
+    acc.insertBefore(w, acc.firstChild);
+    document.getElementById('btn-max-safe').addEventListener('click', uiOpenMax);
+  }
+  if (RAW_SAV_ROOT && UI.origRoot !== RAW_SAV_ROOT) {
+    UI.origRoot = RAW_SAV_ROOT; UI.origObj = JSON.parse(JSON.stringify(SAVE)); UI.dlSig = null; UI.changes = null; UI.curSig = '';
+    uiSyncTabs();
+    if (!UI.restoring) { UI.restoring = true; try { uiRestoreLast(); } finally { UI.restoring = false; } }
+  }
+  uiRememberChar();
+  uiFixLight();
+  uiStatusUpdate();
+  uiScheduleStatus();
+}
+
+// ---- one-time wiring --------------------------------------------------------------------------------------
+(function uiInit() {
+  uiApplyTheme(uiLsGet('lid.theme') === 'light' ? 'light' : 'dark');
+  document.getElementById('btn-theme').addEventListener('click', uiToggleTheme);
+  document.getElementById('btn-keys').addEventListener('click', uiHelp);
+  document.getElementById('sb-chg').addEventListener('click', () => uiOpenChanges());
+  document.getElementById('sb-dl').addEventListener('click', () => { const b = document.getElementById('btn-download-sav'); if (b && !b.disabled) b.click(); });
+  uiWireSearch();
+  uiWireDrop();
+  uiObserveTheme();
+})();
 
 document.getElementById('btn-download-sav').addEventListener('click', () => reviewAndDownload('sav'));
 document.getElementById('btn-download-json').addEventListener('click', () => reviewAndDownload('json'));
