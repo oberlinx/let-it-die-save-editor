@@ -12027,11 +12027,7 @@ function uiOpenPsGuide() {
     </ol>
     <h3>Part 2: Decrypt it</h3>
     <ol>
-      <li>Go to <a href="https://garlicsaves.com" target="_blank" rel="noopener">garlicsaves.com</a>, <b>create a free account</b> and log in.</li>
-      <li>On the <b>Dashboard</b>, under <b>PS4 Profiles</b>, add your PSN account (once only):
-        <ul><li><b>Profile name:</b> your PSN online name.</li>
-        <li><b>Account ID:</b> the 16-character name of the folder on your USB drive. It is the folder inside <code>PS4/SAVEDATA/</code>, the one above <code>CUSA03769</code>. Copy it exactly. The site's <i>How do I find my Account ID?</i> link shows more.</li></ul>
-        Click <b>Add Profile</b>.</li>
+      <li>Go to <a href="https://garlicsaves.com" target="_blank" rel="noopener">garlicsaves.com</a>, <b>create a free account</b> and log in. Decrypting does <b>not</b> need a profile; you set one up in Part 4.</li>
       <li>Open <b>Decrypt</b> from the menu on the left. Drop in the two files from your USB copy, <code>savedata.bin</code> and its matching <code>savedata</code> file (the page says "<i>.bin + matching save file, or a .zip</i>"), or a zip that holds them. Leave <b>Include sce_sys folder</b> <b>ticked</b>, because Encrypt needs it later, and leave <b>Ignore second-layer checks</b> unticked. Click <b>Start Decrypt</b>.</li>
       <li>Download the result when it finishes. It is your decrypted save: <code>brggame.sav</code> plus an <code>sce_sys</code> folder. <b>Keep both together.</b></li>
     </ol>
@@ -12045,7 +12041,11 @@ function uiOpenPsGuide() {
     </ol>
     <h3>Part 4: Re-encrypt and copy back</h3>
     <ol>
-      <li>On Garlic, open <b>Encrypt</b>, choose your profile, and drop in the zip. It reads the save name and size from the zip by itself. <b>Leave "PS5 save" unticked</b>, because this is a PS4 game. Click <b>Encrypt</b>.</li>
+            <li>If you haven't yet, set up your profile. On the <b>Dashboard</b>, under <b>PS4 Profiles</b>, add your PSN account (once only):
+        <ul><li><b>Profile name:</b> your PSN online name.</li>
+        <li><b>Account ID:</b> the 16-character name of the folder on your USB drive. It is the folder inside <code>PS4/SAVEDATA/</code>, the one above <code>CUSA03769</code>. Copy it exactly. The site's <i>How do I find my Account ID?</i> link shows more.</li></ul>
+        Click <b>Add Profile</b>.</li>
+      <li>Open <b>Encrypt</b> and <b>choose your profile</b>, then drop in the zip. It reads the save name and size from the zip by itself. <b>Leave "PS5 save" unticked</b>, because this is a PS4 game. Click <b>Encrypt</b>.</li>
       <li>You get a zip named like <code>LET_IT_DIE_CUSA03769_enc.zip</code>. Garlic puts your own account back into the folder it builds.</li>
       <li>Extract it to the <b>root of the USB drive</b>, not into a folder. Afterwards the drive shows:
 <pre>PS4/
