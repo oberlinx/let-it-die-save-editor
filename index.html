@@ -11390,7 +11390,7 @@ async function reviewAndDownload(kind) {
   document.getElementById('review-backup').addEventListener('click', () => reviewDownloadOriginal(stamp));
   document.getElementById('review-go').addEventListener('click', async () => {
     try {
-      const data = kind === 'sav' ? await buildBrgSav(root) : JSON.stringify(root);
+      const data = kind === 'sav' ? await buildBrgSav(root) : JSON.stringify(root, null, 2);
       triggerDownload(data, fname, kind === 'sav' ? 'application/octet-stream' : 'application/json');
       toast(`Downloaded ${fname}`);
       reviewClose();
