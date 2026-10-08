@@ -6855,7 +6855,7 @@ function wireRun() {
 function wireStats() { if (activeTab === 'stats') renderStats(); }
 
 // ---------------------------------------------------------------------------
-// Jackals (EXPERIMENTAL): the loot each Jackal will drop.
+// Jackals (confirmed in game by the user, 2026-10-08): the loot each Jackal will drop.
 // Save: root.floor.jkls = [{type: JACKAL_X.., rwd: JSON text, killed}]. rwd =
 //   {"money":n,"spirit":0,"tbtp":"","pts":{} | [{"eptid"}],"msrs":{},"items":{} | [{"eitemid","itemId","gettime":0}]}
 // The loot instance lives in root.item.items (owner = the Jackal type) or root.part.pts[uid] (owner too).
@@ -6957,7 +6957,7 @@ function applyJackals(root) {
 }
 function blockJackals() {
   return `<section class="block">
-    <div class="block-head"><div><div class="eyebrow">Experimental</div><h2>Jackals</h2></div></div>
+    <div class="block-head"><div><div class="eyebrow">Confirmed in game</div><h2>Jackals</h2></div></div>
     <div class="block-body"><div id="jkl-body"></div></div>
   </section>`;
 }
@@ -6966,7 +6966,7 @@ function renderJackals() {
   if (!host || !SAVE || !RAW_SAV_ROOT) return;
   jklSync();
   const list = arr(RAW_SAV_ROOT.floor && RAW_SAV_ROOT.floor.jkls);
-  let h = `<div class="warnNote" style="margin:0 0 10px;"><b>Experimental — test on a backup first.</b> Changing Jackal loot hasn't been confirmed in game yet. Keep your original save.</div>
+  let h = `<div class="capNote" style="margin:0 0 10px;"><b>Tested in game.</b> Changing Jackal loot works as expected. As always, keep your original save.</div>
     <div class="capNote" style="margin-top:0;">Each Jackal carries one reward, rolled once and kept (also between runs) until you defeat it. Pick what it drops from what that Jackal can carry, or reroll it with the game's own odds. Weapons and armor drop at +0 with full durability and ammo. Blueprints can also be set to drop unrevealed ("pick only": the game does hand them out unrevealed, but how often isn't in its data, so a reroll never picks them).</div>`;
   if (!list.length) { host.innerHTML = h + '<div class="capNote">This save has no Jackals yet.</div>'; return; }
   if (JKL.msg) h += `<pre class="stewLog">${escapeHtml(JKL.msg)}</pre>`;
@@ -11281,7 +11281,7 @@ function reviewDiff(A, B, rawA, rawB) {
     const ch = [ ...new Set([ ...fa.keys(), ...fb.keys() ]) ].filter(id => fa.get(id) !== fb.get(id));
     if (ch.length) cl.lines.push(`${lbl}: ${ch.length} entr${ch.length === 1 ? 'y' : 'ies'} changed (${ch.slice(0, 6).map(nm).join(', ')}${ch.length > 6 ? ', …' : ''})`);
   }
-  const jk = sec('Jackals (experimental)');
+  const jk = sec('Jackals');
   const jA = new Map(arr(rawA.floor && rawA.floor.jkls).map(j => [ j.type, j.rwd ])), jB = arr(rawB.floor && rawB.floor.jkls);
   for (const j of jB) if (jA.get(j.type) !== j.rwd) { const l = (() => { const r = jklParse(j) || {}; if (arr(r.items).length) return itemDisplayName(r.items[0].itemId); if (arr(r.pts).length) { const i = jklPartsOf(rawB).find(p => p.eid === r.pts[0].eptid); return i ? (PT_INDEX[i.ptid] || {}).name || i.ptid : 'a part'; } return Number(r.money) ? `${Number(r.money).toLocaleString()} Kill Coins` : 'nothing'; })(); jk.lines.push(`${String(j.type).replace(/^JACKAL_/, 'Jackal ')}: now drops ${l}`); }
   const lc = sec('Location');
@@ -12294,7 +12294,7 @@ function uiTrackHeader() {
 // ---- changed-tab dots ----
 const UI_SECTION_TAB = {
   'Account': 'account', 'Weapon Mastery': 'account', 'Fighters': 'fighters', 'Armor Skins (unlocked by R&D at +4)': 'fighters', 'Decal stock': 'decals', 'Research': 'research',
-  'Stamp Rally': 'rally', 'Collection': 'collection', 'Jackals (experimental)': 'jackals', 'Location': 'location', 'Boss floor lock': 'location', 'Defense': 'defense',
+  'Stamp Rally': 'rally', 'Collection': 'collection', 'Jackals': 'jackals', 'Location': 'location', 'Boss floor lock': 'location', 'Defense': 'defense',
   'Reward Box': 'rewards', 'Storage Box': 'storage', 'Waiting Room': 'hub'
 };
 function uiDirtyTabs() {
@@ -12468,7 +12468,7 @@ const UI_TIPS = {
   rally: { 'Stamp Rally': 'Each floor is not stamped, perfect, or off by 1 to 16 (how far the stamp landed from perfect, as the game stores it).' },
   bags: { 'Lost Bags': 'Mystery bags from Tokyo Death Metro. Each rarity has its own reward pool; you can set a slot or reroll from the game\'s odds.' },
   boxes: { 'Death Boxes': 'Boxes waiting to be opened. Open one now, change or reroll its reward, or add and remove boxes.' },
-  jackals: { 'Jackals': 'Experimental. Each Jackal carries one reward, rolled once and kept until you beat it.' },
+  jackals: { 'Jackals': 'Each Jackal carries one reward, rolled once and kept until you beat it.' },
   graves: { 'Dead Fighter Archive': 'View only: dead fighters, yours and other players\'.' },
   photos: { 'Screenshots': 'View and export only. They can not be deleted because the game refers to them.' },
   compare: { 'Compare & Copy': 'Load a second save, see what differs, and copy ticked parts into the save you are editing.' },
