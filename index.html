@@ -392,6 +392,19 @@
   html[data-theme="light"] [style*="color:#e6b86a"] { color: #8a5a00 !important; }
   html[data-theme="light"] [style*="color:#f2d33a"] { color: #7a5f00 !important; border-color: #7a5f00 !important; }
   html[data-theme="light"] ::selection { color: #fff; }
+  /* ===== UI pack 2 ===== */
+  .stickyNav { background: var(--bg); }
+  @media (min-width: 641px) { .stickyNav { position: sticky; top: var(--hdrh, 0px); z-index: 45; padding-top: 6px; margin-top: -6px; box-shadow: 0 6px 8px -6px rgba(0,0,0,.45); } }
+  .healthRow, .block, .block-head { scroll-margin-top: 150px; }
+  .tabbtn.dirty::after, .grpbtn.dirty::after { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--warn); margin-left: 7px; vertical-align: middle; }
+  .tabbtn.dirty.active::after, .grpbtn.dirty.active::after { background: #fff; box-shadow: 0 0 0 1px var(--warn); }
+  .linkbtn { background: none; border: 0; padding: 0; font: inherit; color: inherit; text-decoration: underline dotted; cursor: pointer; min-height: 0 !important; }
+  .linkbtn:hover { text-decoration: underline; }
+  .tip { display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; margin-left: 6px; border-radius: 50%; border: 1px solid var(--panel-border-bright); color: var(--text-dim); font-size: 10px; font-style: normal; font-weight: bold; line-height: 1; cursor: help; position: relative; vertical-align: middle; text-transform: none; letter-spacing: 0; }
+  .tip:hover, .tip:focus { color: var(--text); border-color: var(--accent-bright); outline: none; }
+  .tip:hover::after, .tip:focus::after { content: attr(data-tip); position: absolute; left: 0; top: 20px; z-index: 300; width: max-content; max-width: min(280px, 80vw); padding: 7px 9px; background: var(--panel); color: var(--text); border: 1px solid var(--panel-border-bright); box-shadow: 0 6px 18px rgba(0,0,0,.4); font-size: 11.5px; font-weight: normal; line-height: 1.4; white-space: normal; text-align: left; }
+  @media (pointer: coarse), (max-width: 640px) { .tip { width: 22px; height: 22px; font-size: 12px; } .tip:hover::after, .tip:focus::after { position: fixed; left: 12px; right: 12px; top: auto; bottom: 70px; max-width: none; width: auto; } }
+
 </style>
 </head>
 <body>
@@ -406,6 +419,7 @@
     <button class="action" id="btn-download-sav" disabled title="Review your changes, then save them as brggame_date_time.sav">⬇ Download .sav</button>
     <button class="action" id="btn-download-json" disabled title="Review your changes, then save them as brggame_date_time.json (uncompressed)">⬇ Download .json</button>
     <button class="subtle" id="btn-report" disabled title="A summary of this save and its Save check, to paste when asking for help">📋 Save report</button>
+    <button class="subtle" id="btn-recent" title="The last saves you loaded, kept in this browser">📂 Recent saves</button>
     <button class="subtle" id="btn-history" title="Saves you downloaded with this editor, kept in this browser">🕘 Download history</button>
     <span class="qswrap"><input id="qs" type="text" placeholder="Search tabs &amp; settings (Ctrl+K)" autocomplete="off" aria-label="Search tabs and settings"><div id="qs-drop"></div></span>
     <button class="subtle" id="btn-keys" title="Keyboard shortcuts (?)">⌨</button>
@@ -422,7 +436,7 @@
 </main>
 
 <div class="toast" id="toast"></div>
-<div id="statusbar" role="status"><span class="sbfile" id="sb-file"></span><span class="sbsep"></span><span id="sb-state"></span><span class="sbsep"></span><span id="sb-check"></span><span class="sbspace"></span><button class="subtle" id="sb-chg" title="See and undo what you changed (C)">Changes</button><button class="action" id="sb-dl" title="Review changes and download (Ctrl+S)">⬇ Download .sav</button></div>
+<div id="statusbar" role="status"><span class="sbfile" id="sb-file"></span><span class="sbsep"></span><span id="sb-state"></span><span class="sbsep"></span><button class="linkbtn" id="sb-check" title="Jump to the next problem (click again for the next one)"></button><span class="sbspace"></span><button class="subtle" id="sb-chg" title="See and undo what you changed (C)">Changes</button><button class="action" id="sb-dl" title="Review changes and download (Ctrl+S)">⬇ Download .sav</button></div>
 <aside id="chg-drawer" aria-label="Changes"></aside>
 <div id="drop-veil">Drop a save (.sav / .json) or masters.db here</div>
 
@@ -10116,6 +10130,8 @@ function runSaveCheck() {
     if (bad.length) add('warning', `Waiting Room spot${bad.length === 1 ? '' : 's'} with no decoration (or more than one) in use: ${escapeHtml(bad.join(', '))}.`, 'hub');
   });
 
+  safe('masters.db match', () => { const t = uiMastersCheckItem(); if (t) add('warning', t); });
+
   const order = { problem: 0, warning: 1, note: 2 };
   out.sort((a, b) => order[a.level] - order[b.level]);
   for (const it of out) it.tabName = it.tab ? tabLabel(it.tab) : '';
@@ -10128,7 +10144,7 @@ function blockHealth() {
   const n = { problem: 0, warning: 0, note: 0 };
   for (const it of items) n[it.level]++;
   const bad = n.problem + n.warning;
-  const open = HEALTH.open != null ? HEALTH.open : bad > 0;
+  const open = HEALTH.open != null ? HEALTH.open : n.problem > 0;
   const color = n.problem ? 'var(--accent-bright)' : n.warning ? 'var(--warn)' : 'var(--good-bright)';
   const summary = !items.length ? 'No problems found' : [ n.problem && `${n.problem} problem${n.problem === 1 ? '' : 's'}`, n.warning && `${n.warning} warning${n.warning === 1 ? '' : 's'}`, n.note && `${n.note} note${n.note === 1 ? '' : 's'}` ].filter(Boolean).join(' · ');
   const badge = { problem: '<span class="hcBadge hcProblem">Problem</span>', warning: '<span class="hcBadge hcWarn">Warning</span>', note: '<span class="hcBadge hcNote">Note</span>' };
@@ -11625,7 +11641,7 @@ async function openHistory() {
     if (SAVE && !confirm('Open this copy in the editor? It replaces the save you are editing; edits you haven\'t downloaded are lost.')) return;
     const full = await histGet(e.id); if (!full || !full.data) { toast('That copy is gone', true); return; }
     reviewClose();
-    await loadSaveFiles([ new File([ await full.data.arrayBuffer() ], e.name, { type: 'application/octet-stream' }) ]);
+    { const hf = new File([ await full.data.arrayBuffer() ], e.name, { type: 'application/octet-stream' }); hf.__src = 'history:' + e.id; await loadSaveFiles([ hf ]); }
     // this copy is already in the history, so a download from it doesn't keep it again
     if (RAW_SAV_ROOT) HIST_LOADED = { root: RAW_SAV_ROOT, kept: true };
   }));
@@ -11669,8 +11685,8 @@ function uiTabbarHtml() {
   const vis = TABS.filter(t => !t.when || t.when()), byId = new Map(vis.map(t => [ t.id, t ]));
   const cur = uiGroupOf(activeTab);
   const ordered = uiVisibleTabIds().map(id => byId.get(id));
-  return `<div class="grpbar" role="tablist" aria-label="Sections">${TAB_GROUPS.map((g, i) => `<button class="grpbtn ${g.id === cur ? 'active' : ''}" data-grp="${g.id}" title="${g.label} (key ${i + 1})">${g.label}</button>`).join('')}</div>
-    <div class="tabbar">${ordered.map(t => `<button class="tabbtn ${activeTab === t.id ? 'active' : ''} ${uiGroupOf(t.id) === cur ? 'ingroup' : ''}" data-group="${uiGroupOf(t.id)}" data-tab-btn="${t.id}">${t.label}</button>`).join('')}</div>`;
+  return `<div class="stickyNav"><div class="grpbar" role="tablist" aria-label="Sections">${TAB_GROUPS.map((g, i) => `<button class="grpbtn ${g.id === cur ? 'active' : ''}" data-grp="${g.id}" title="${g.label} (key ${i + 1})">${g.label}</button>`).join('')}</div>
+    <div class="tabbar">${ordered.map(t => `<button class="tabbtn ${activeTab === t.id ? 'active' : ''} ${uiGroupOf(t.id) === cur ? 'ingroup' : ''}" data-group="${uiGroupOf(t.id)}" data-tab-btn="${t.id}">${t.label}</button>`).join('')}</div></div>`;
 }
 function uiSyncTabs() {
   const g = uiGroupOf(activeTab);
@@ -11855,8 +11871,10 @@ function uiStatusUpdate() {
   st.textContent = !pend ? 'Checking changes…' : !n ? 'No changes yet' : UI.curSig === UI.dlSig ? `✓ ${n} change${n === 1 ? '' : 's'}, downloaded` : `● ${n} unsaved change${n === 1 ? '' : 's'}`;
   const ck = document.getElementById('sb-check');
   ck.className = np ? 'sbprob' : nw ? 'sbdirty' : 'sbok';
+  uiStatusDots(); ck.disabled = !(np || nw); ck.style.cursor = (np || nw) ? 'pointer' : 'default';
   ck.textContent = np ? `Save check: ${np} problem${np === 1 ? '' : 's'}` : nw ? `Save check: ${nw} warning${nw === 1 ? '' : 's'}` : 'Save check: OK';
 }
+function uiStatusDots() { try { uiApplyDots(); } catch (e) { console.warn(e); } }
 window.addEventListener('beforeunload', e => { if (uiDirty()) { e.preventDefault(); e.returnValue = ''; return ''; } });
 
 // ---- 3. changes drawer ------------------------------------------------------
@@ -12151,8 +12169,10 @@ function uiAfterRender() {
   }
   uiRememberChar();
   uiFixLight();
+  uiAddTips();
   uiStatusUpdate();
   uiScheduleStatus();
+  if (UI.recRoot !== RAW_SAV_ROOT) { UI.recRoot = RAW_SAV_ROOT; if (RAW_SAV_ROOT) recRecord(); }
 }
 
 // ---- one-time wiring --------------------------------------------------------------------------------------
@@ -12160,12 +12180,228 @@ function uiAfterRender() {
   uiApplyTheme(uiLsGet('lid.theme') === 'light' ? 'light' : 'dark');
   document.getElementById('btn-theme').addEventListener('click', uiToggleTheme);
   document.getElementById('btn-keys').addEventListener('click', uiHelp);
+  document.getElementById('btn-recent').addEventListener('click', uiOpenRecent);
+  document.getElementById('sb-check').addEventListener('click', uiJumpProblem);
+  uiTrackHeader();
   document.getElementById('sb-chg').addEventListener('click', () => uiOpenChanges());
   document.getElementById('sb-dl').addEventListener('click', () => { const b = document.getElementById('btn-download-sav'); if (b && !b.disabled) b.click(); });
   uiWireSearch();
   uiWireDrop();
   uiObserveTheme();
 })();
+
+// ===========================================================================
+// UI PACK 2 (2026-10-08): sticky nav, changed-tab dots, jump to problem, recent saves, masters.db mismatch check, help tips
+// ===========================================================================
+
+// ---- sticky tab bar: keep the header height in a CSS variable so the nav can stick right under it ----
+function uiTrackHeader() {
+  const h = document.querySelector('header'); if (!h) return;
+  const set = () => document.documentElement.style.setProperty('--hdrh', (getComputedStyle(h).position === 'sticky' ? h.offsetHeight : 0) + 'px');
+  set(); window.addEventListener('resize', set);
+  if (window.ResizeObserver) new ResizeObserver(set).observe(h);
+}
+
+// ---- changed-tab dots ----
+const UI_SECTION_TAB = {
+  'Account': 'account', 'Weapon Mastery': 'account', 'Fighters': 'fighters', 'Armor Skins (unlocked by R&D at +4)': 'fighters', 'Decal stock': 'decals', 'Research': 'research',
+  'Stamp Rally': 'rally', 'Collection': 'collection', 'Jackals (experimental)': 'jackals', 'Location': 'location', 'Boss floor lock': 'location', 'Defense': 'defense',
+  'Reward Box': 'rewards', 'Storage Box': 'storage', 'Waiting Room': 'hub'
+};
+function uiDirtyTabs() {
+  const set = new Set();
+  for (const s of UI.changes || []) {
+    if (!s.lines.length) continue;
+    if (s.title === 'Account') { for (const l of s.lines) set.add(/^(Express|VIP|30-Day|1-Day)/.test(l) ? 'vip' : 'account'); continue; }
+    const t = UI_SECTION_TAB[s.title]; if (t) set.add(t);
+  }
+  try {
+    const r = RAW_SAV_ROOT;
+    if (r) {
+      if (FLOOR_MOVE.root === r && FLOOR_MOVE.target) set.add('location');
+      if (BOSS_LOCK.root === r && BOSS_LOCK.mode) set.add('location');
+      if (RUN_END.root === r && RUN_END.on) set.add('location');
+      if (REWIND.root === r && REWIND.on) set.add('location');
+      if (FREE_CONT.root === r && FREE_CONT.on) set.add('vip');
+    }
+  } catch (e) { /* ignore */ }
+  return set;
+}
+function uiApplyDots() {
+  const d = SAVE && RAW_SAV_ROOT ? uiDirtyTabs() : new Set();
+  document.querySelectorAll('[data-tab-btn]').forEach(b => { const on = d.has(b.dataset.tabBtn); b.classList.toggle('dirty', on); if (on) b.title = 'Changed since you loaded the save'; else if (b.title === 'Changed since you loaded the save') b.removeAttribute('title'); });
+  document.querySelectorAll('.grpbtn').forEach(b => { const g = TAB_GROUPS.find(x => x.id === b.dataset.grp); const on = !!g && g.tabs.some(t => d.has(t)); b.classList.toggle('dirty', on); });
+}
+
+// ---- jump to problem ----
+function uiJumpProblem() {
+  const it = (HEALTH && HEALTH.items) || [];
+  const idx = []; it.forEach((x, i) => { if (x.level === 'problem' || x.level === 'warning') idx.push(i); });
+  if (!idx.length) { toast('Save check: nothing to fix'); return; }
+  UI.jumpAt = ((UI.jumpAt == null ? -1 : UI.jumpAt) + 1) % idx.length;
+  const i = idx[UI.jumpAt], item = it[i];
+  HEALTH.open = true;
+  const panel = document.getElementById('health-panel'); if (panel) panel.open = true;
+  if (item.tab) { const b = document.querySelector(`[data-tab-btn="${item.tab}"]`); if (b && activeTab !== item.tab) b.click(); }
+  setTimeout(() => {
+    const row = document.querySelectorAll('#health-panel .healthRow')[i]; if (!row) return;
+    window.scrollTo({ top: 0 });
+    row.classList.add('flashHit'); setTimeout(() => row.classList.remove('flashHit'), 2300);
+  }, 90);
+}
+
+// ---- recent saves (kept only in this browser) ----
+const REC_IDB = { db: 'lid-editor-recent', store: 'files' }, REC_MAX = 4, REC_MAX_BYTES = 40 * 1048576, REC_PREF = 'lid.recent.on';
+function recOn() { return uiLsGet(REC_PREF) !== '0'; }
+function recOpenDb() {
+  return new Promise((resolve, reject) => {
+    if (typeof indexedDB === 'undefined') { reject(new Error('this browser has no IndexedDB')); return; }
+    const req = indexedDB.open(REC_IDB.db, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore(REC_IDB.store, { keyPath: 'id', autoIncrement: true });
+    req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
+  });
+}
+async function recTx(mode, fn) {
+  const idb = await recOpenDb();
+  try {
+    return await new Promise((resolve, reject) => {
+      const tx = idb.transaction(REC_IDB.store, mode); let out;
+      Promise.resolve(fn(tx.objectStore(REC_IDB.store), v => { out = v; })).catch(reject);
+      tx.oncomplete = () => resolve(out); tx.onerror = () => reject(tx.error); tx.onabort = () => reject(tx.error || new Error('aborted'));
+    });
+  } finally { idb.close(); }
+}
+const recList = () => recTx('readonly', (st, done) => { const r = st.getAll(); r.onsuccess = () => done((r.result || []).sort((a, b) => b.when - a.when)); });
+const recGet = id => recTx('readonly', (st, done) => { const r = st.get(id); r.onsuccess = () => done(r.result || null); });
+const recDelete = id => recTx('readwrite', st => { st.delete(id); });
+const recClear = () => recTx('readwrite', st => { st.clear(); });
+async function recRecord() {
+  if (!recOn() || !ORIG_SAVE.file || !RAW_SAV_ROOT) return;
+  const f = ORIG_SAVE.file;
+  if (f.size > REC_MAX_BYTES || /^(history|recent):/.test(f.__src || '')) return;
+  try {
+    const account = (RAW_SAV_ROOT.user && RAW_SAV_ROOT.user.nm) || '';
+    const base = { name: f.name, size: f.size, mtime: f.lastModified || 0, account, fighters: histFighters(), platform: isPsSave() ? 'PS' : 'PC', when: Date.now() };
+    const all = await recList();
+    const same = all.find(e => e.name === f.name && e.size === f.size && e.mtime === base.mtime && e.account === account);
+    if (same) { await recTx('readwrite', st => { st.put(Object.assign({}, same, { when: base.when })); }); return; }
+    const data = new Blob([ await f.arrayBuffer() ]);
+    await recTx('readwrite', st => { st.add(Object.assign({ data }, base)); });
+    for (const e of (await recList()).slice(REC_MAX)) await recDelete(e.id);
+  } catch (err) { console.warn('Recent saves:', err); }
+}
+async function uiOpenRecent() {
+  uiCloseOverlay();
+  const ov = document.createElement('div'); ov.className = 'uiOverlay'; ov.id = 'ui-overlay';
+  document.body.appendChild(ov);
+  ov.addEventListener('click', e => { if (e.target === ov) uiCloseOverlay(); });
+  let list = [], err = '';
+  try { list = await recList(); } catch (e) { err = e.message; }
+  const row = e => `<div class="listRow" style="flex-wrap:wrap; gap:6px; align-items:flex-start;"><div style="flex:1; min-width:240px;"><div><b>${UI_ESC(e.name)}</b></div>
+      <div class="id">${UI_ESC(new Date(e.when).toLocaleString())} · ${UI_ESC(e.account || '—')} · ${e.platform || ''} · ${e.fighters} fighter${e.fighters === 1 ? '' : 's'} · ${histSize(e.size || 0)}</div></div>
+      <div class="toolbar" style="margin:0;"><button class="subtle" data-rec-open="${e.id}">Open in editor</button><button class="subtle" data-rec-del="${e.id}" title="Remove from this list">✕</button></div></div>`;
+  ov.innerHTML = `<section class="block"><div class="block-head"><div><div class="eyebrow">Kept in this browser</div><h2>Recent saves</h2></div><div class="id">${list.length} of ${REC_MAX}</div></div><div class="block-body">
+    <div class="capNote" style="margin-top:0;">The last ${REC_MAX} saves you loaded, as you loaded them, so you can reopen one without finding the file again. They stay only in this browser and nothing is uploaded.</div>
+    <label style="cursor:pointer; display:inline-block; margin:4px 0 8px;"><input type="checkbox" id="rec-on" ${recOn() ? 'checked' : ''} style="width:auto; margin-right:6px;">Remember the saves I load</label>
+    ${err ? `<div class="capNote">Recent saves aren't available in this browser (${UI_ESC(err)}). Private windows often block them.</div>` : ''}
+    <div class="listBlock" style="max-height:50vh; overflow:auto;">${list.length ? list.map(row).join('') : '<div style="padding:10px; color:var(--text-faint); font-size:12px;">Nothing yet. Saves you load appear here.</div>'}</div>
+    <div class="toolbar" style="margin-top:10px;">${list.length ? '<button class="subtle" id="rec-clear">Forget all</button>' : ''}<button class="subtle" id="rec-close">Close</button></div></div></section>`;
+  document.getElementById('rec-close').addEventListener('click', uiCloseOverlay);
+  document.getElementById('rec-on').addEventListener('change', e => { uiLsSet(REC_PREF, e.target.checked ? '1' : '0'); toast(e.target.checked ? 'Loaded saves will be remembered' : 'Loaded saves will no longer be remembered (the list stays until you forget it)'); });
+  const clr = document.getElementById('rec-clear');
+  if (clr) clr.addEventListener('click', async () => { if (!confirm('Forget every recent save? Your files are not affected.')) return; try { await recClear(); } catch (e) { /* ignore */ } uiOpenRecent(); });
+  ov.querySelectorAll('[data-rec-del]').forEach(b => b.addEventListener('click', async () => { try { await recDelete(Number(b.dataset.recDel)); } catch (e) { /* ignore */ } uiOpenRecent(); }));
+  ov.querySelectorAll('[data-rec-open]').forEach(b => b.addEventListener('click', async () => {
+    const e = list.find(x => x.id === Number(b.dataset.recOpen)); if (!e) return;
+    if (!AP) { toast('Load masters.db first', true); return; }
+    if (uiDirty() && !confirm('Open this save? It replaces the save you are editing; edits you have not downloaded are lost.')) return;
+    const full = await recGet(e.id); if (!full || !full.data) { toast('That copy is gone', true); return; }
+    uiCloseOverlay();
+    const file = new File([ await full.data.arrayBuffer() ], e.name, { type: 'application/octet-stream', lastModified: e.mtime || Date.now() });
+    file.__src = 'recent:' + e.id;
+    await loadSaveFiles([ file ]);
+  }));
+}
+
+// ---- masters.db mismatch: ids in the save that the loaded masters.db doesn't know ----
+function uiMastersMismatch() {
+  const soul = (SAVE && SAVE.soul) || {}, miss = { parts: new Set(), decals: new Set(), beasts: new Set() }, seen = new Set();
+  const part = id => { if (!id) return; seen.add('p' + id); if (!PT_INDEX[id]) miss.parts.add(id); };
+  const decal = id => { if (!id) return; seen.add('d' + id); if (!SKL_INDEX[id]) miss.decals.add(id); };
+  const beast = id => { if (!id) return; seen.add('b' + id); if (!BST_INDEX[id]) miss.beasts.add(id); };
+  for (const c of arr(soul.chrs)) {
+    if (!c || c.state === 'ENEMY' || c.state === 'DUMMY') continue;
+    for (const p of arr(c.pspts)) part(p && p.ptid);
+    for (const e of arr(c.eqskls)) decal(e && e.sklid);
+    for (const b of arr(c.psbsts)) beast(b && b.bstid);
+  }
+  for (const s of arr(soul.psskls)) decal(s && s.id);
+  for (const r of arr(SAVE.user_research)) part(r && r.ptid);
+  const n = miss.parts.size + miss.decals.size + miss.beasts.size;
+  return { n, total: seen.size, miss };
+}
+function uiMastersCheckItem() {
+  const m = uiMastersMismatch();
+  if (m.n < 5 || m.n / Math.max(1, m.total) < 0.02) return null;
+  const sample = [ ...m.miss.parts, ...m.miss.decals, ...m.miss.beasts ].slice(0, 4).map(x => escapeHtml(x)).join(', ');
+  return `The loaded masters.db doesn't know ${m.n} of the ${m.total} parts, decals and beasts this save uses (for example ${sample}). It is probably an older or different masters.db than the one this save was made with. Names, limits and Funshots may be wrong, and edits could write values the game doesn't accept. Load the masters.db from your game's current Content folder (a PlayStation save needs a PC masters.db from a matching game version).`;
+}
+
+// ---- help tips on the less obvious settings ----
+const UI_TIPS = {
+  account: { 'TDM Points': () => `Tokyo Death Metro points. Your TDM rank is worked out from these. Highest allowed: ${tdmPointMax().toLocaleString()} (from masters.db).`,
+    'Bank Level': 'How much the bank can hold. The held amount can not go above the cap for this level; the game drops anything over it.',
+    'Bloodnium': 'The highest value the game allows is shown in brackets (from masters.db).',
+    'Weapon Mastery': 'Setting a level also sets the mastery points behind it, which is what the game reads.' },
+  vip: { 'Express Pass': 'None, 1-Day or 30-Day. Changing it also sets the matching pass type, and the VIP level when that matched.',
+    'Auto-renew': 'Whether the game renews the pass itself when it runs out.',
+    'Expires': 'The date the pass ends. The game can not store dates after 2037, so the editor only accepts 2020 to 2037.',
+    'Free Continues': 'How many free continues the continue screen offers each day. Confirmed in game.' },
+  dates: { 'Use this PC': 'Every date in the save is compared with this time to spot dates in the future, past 2038 or overflowed.' },
+  fighters: { 'Limit Break': 'Raises the ceiling for stats, decal slots, Death Bag and rage. Each class has its own limit break levels (from masters.db).',
+    'Grade': 'Fighter grade (from masters.db). Grade and Limit Break together set how high stats and slots can go.',
+    'Level (from stats)': 'Worked out from the stat levels, so it can not be set directly.',
+    'Decal Slots': 'How many decals the fighter can wear. The range is the lowest and highest possible for this grade and limit break.',
+    'Death Bag': 'Slots for items carried in a run. The range is the limit for this fighter\'s grade and limit break.',
+    'Rage Bars': 'How many rage bars the fighter has. The range comes from masters.db.' },
+  research: { 'Research Stamp': 'Each researched part adds its Funshot once (Slash and Shoot +0.4, Hit +0.8, Head, Body and Legs +0.2). Amounts come from masters.db.',
+    'Include PS-only': 'Parts that only exist on PlayStation. Leave off for a PC save unless your masters.db is modded to include them.' },
+  decals: { 'Include PS-only': 'Decals that only exist on PlayStation. Leave off for a PC save unless your masters.db is modded to include them.' },
+  stews: { 'Seed (optional': 'The same seed gives the same rolls every time. Leave it blank for random rolls.',
+    'Queue length': 'How many pulls the stew queue holds. Blank keeps the current length.' },
+  location: { 'Show rewards': 'Shows what each floor\'s chests will hold. Off by default so you can stay surprised.',
+    'End the run (confirmed': 'Ends the run when you download: the fighter goes back to the Waiting Room. Confirmed in game.',
+    'Boss floor lock': 'Plans the boss floors ahead of the fighter so they are the kind you pick. Applied when you download.',
+    'Go back to the last boss floor': 'For a run that crashed on a normal floor: puts the fighter back on the last boss floor. Confirmed in game on regular Heaven.' },
+  rewards: { 'Reward Box': () => `Rewards sent here arrive in the game's reward box. The game starts to complain above ${constIntOf('PRESENT_BOX_LIMIT', 50)} entries (from masters.db).` },
+  storage: { 'Capacity': () => `Storage Box slots, added in steps of ${storageBoxStep()} up to ${storageBoxMax().toLocaleString()} (from masters.db).` },
+  defense: { 'Alarm': 'The Tokyo Death Metro defense alarm: how long it runs and which defender carries it.' },
+  rally: { 'Stamp Rally': 'Each floor is not stamped, perfect, or off by 1 to 16 (how far the stamp landed from perfect, as the game stores it).' },
+  bags: { 'Lost Bags': 'Mystery bags from Tokyo Death Metro. Each rarity has its own reward pool; you can set a slot or reroll from the game\'s odds.' },
+  boxes: { 'Death Boxes': 'Boxes waiting to be opened. Open one now, change or reroll its reward, or add and remove boxes.' },
+  jackals: { 'Jackals': 'Experimental. Each Jackal carries one reward, rolled once and kept until you beat it.' },
+  graves: { 'Dead Fighter Archive': 'View only: dead fighters, yours and other players\'.' },
+  photos: { 'Screenshots': 'View and export only. They can not be deleted because the game refers to them.' },
+  compare: { 'Compare & Copy': 'Load a second save, see what differs, and copy ticked parts into the save you are editing.' },
+  raw: { 'Raw data': 'Read-only view of the whole save the way the game stores it. For advanced users.' },
+  jdiff: { 'JSON compare': 'Read-only, field by field comparison of two saves the way the game stores them. For advanced users.' }
+};
+function uiAddTips() {
+  for (const tab in UI_TIPS) {
+    const panel = document.querySelector(`[data-tab-panel="${tab}"]`); if (!panel) continue;
+    const keys = Object.keys(UI_TIPS[tab]);
+    panel.querySelectorAll('label, h2, .eyebrow, summary').forEach(el => {
+      if (el.dataset.tipDone || el.closest('table')) return;
+      const tx = (el.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+      const k = keys.find(x => tx.startsWith(x.toLowerCase())); if (!k) return;
+      el.dataset.tipDone = '1';
+      let t = UI_TIPS[tab][k]; try { if (typeof t === 'function') t = t(); } catch (e) { return; }
+      if (!t) return;
+      const s = document.createElement('span'); s.className = 'tip'; s.tabIndex = 0; s.setAttribute('role', 'note'); s.setAttribute('data-tip', t); s.setAttribute('aria-label', t); s.textContent = '?';
+      el.appendChild(s);
+    });
+  }
+}
 
 document.getElementById('btn-download-sav').addEventListener('click', () => reviewAndDownload('sav'));
 document.getElementById('btn-download-json').addEventListener('click', () => reviewAndDownload('json'));

@@ -27,6 +27,11 @@ You can also download `index.html` and open it straight from your PC.
 - **Changes** (button or `C`): everything that differs from the save as you loaded it. **Undo** puts one value, or one fighter, back. Floor moves, boss locks, End the run, Rewind and Free continues are listed under *Applied when you download* with a Cancel button. **Start over** reloads the original file.
 - **Max everything safe** (Account tab): shows exactly what will be raised to the game's own limits (from masters.db), lets you untick anything, then applies it. Fighters are an extra, unticked option.
 - **Allowed ranges** are shown under number boxes. The editor only accepts values the game can hold.
+- **Pinned tab bar:** the section and tab buttons stay on screen while you scroll (on a computer; on a phone they scroll away to save room). A small dot on a tab or section means you changed something there.
+- **Save check** in the status bar is a button: click it to jump to the next problem or warning (click again for the one after). The panel stays closed unless there is a real problem.
+- **Recent saves** (header button): the last 4 saves you loaded, kept in this browser only, so you can reopen one without finding the file. There is a switch to stop remembering, and Forget all.
+- **masters.db mismatch warning:** if the save uses many parts, decals or beasts your masters.db does not know, the Save check says it is probably an older or different masters.db.
+- **? help tips** next to the less obvious settings (hover, tap or tab to one).
 - **Keyboard:** Ctrl+S download, `[` `]` previous/next tab, `1`-`4` groups, `?` help.
 - **Light or dark theme** (button in the header), larger touch targets on phones, and you can **drop** a `.sav`, `.json` or `masters.db` anywhere on the page.
 
