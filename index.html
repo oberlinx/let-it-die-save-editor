@@ -8264,7 +8264,7 @@ function stewName(id) {
 
 // Every decal id the player already has (so duplicates can be flagged).
 // Same rule as the script: any string value starting "SKL_" under soul,
-// except the queue itself. psskl/eqskl come from the editor's live state so
+// except the queue itself and other players' fighters. psskl/eqskl come from the editor's live state so
 // edits made on the Decals / Fighters tabs are reflected.
 function stewOwnedDecals() {
   const got = new Set();
@@ -8282,7 +8282,8 @@ function stewOwnedDecals() {
   for (const k in soul) if (k !== 'skl') walk(soul[k]);
   const skl = soul.skl || {};
   for (const k in skl) if (k !== 'psskl' && k !== 'eqskl' && k !== 'gacha') walk(skl[k]);
-  if (skl.eqskl && typeof skl.eqskl === 'object') for (const k in skl.eqskl) if (String(k) !== String(RAW_SAV_MAIN_UID)) walk(skl.eqskl[k]);
+  // Only YOUR fighters' decals count. The other groups in eqskl (negative ids) are other players' fighters stored in the save;
+  // they are not in your inventory, so they must not make a decal look owned. Your own group (the main uid) comes from the live state below.
   const hadEntry = new Set(arr(skl.psskl).map(e => e && e.sklid));
   for (const e of arr(SAVE && SAVE.soul && SAVE.soul.psskls)) {
     if (!e || !e.id) continue;
