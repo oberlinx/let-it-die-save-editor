@@ -864,7 +864,7 @@ function adaptFullDumpToLegacyShape(root) {
         if (inst) psmsrs.push({
           emsrid: inst.eid,
           msrid: inst.msrid,
-          cooked: false,
+          cooked: Number(inst.state) === 1,
           gettime: inst.gettime
         });
       } else if (s.type === 2 && s.eid) {
@@ -872,7 +872,7 @@ function adaptFullDumpToLegacyShape(root) {
         if (inst) psbsts.push({
           ebstid: inst.eid,
           bstid: inst.bstid,
-          cooked: false,
+          cooked: Number(inst.state) === 1,
           lvl: inst.lvl,
           gettime: inst.gettime
         });
@@ -960,13 +960,13 @@ function adaptFullDumpToLegacyShape(root) {
   const clMsrs = arr(root.mushroom && root.mushroom.msrs).filter(m => m.owner === 'COIN_LOCKER').map(m => ({
     emsrid: m.eid,
     msrid: m.msrid,
-    cooked: false,
+    cooked: Number(m.state) === 1,
     gettime: m.gettime
   }));
   const clBsts = arr(root.beast && root.beast.bsts).filter(b => b.owner === 'COIN_LOCKER').map(b => ({
     ebstid: b.eid,
     bstid: b.bstid,
-    cooked: false,
+    cooked: Number(b.state) === 1,
     lvl: b.lvl,
     gettime: b.gettime
   }));
@@ -1212,7 +1212,8 @@ function buildRawSavRootFromSave(SAVE, rawRoot, mainUid) {
         uid: Number(mainUid),
         eid: m.emsrid,
         owner: 'USER',
-        msrid: m.msrid
+        msrid: m.msrid,
+        ...(m.cooked ? { state: 1 } : {})
       });
       slots.push({
         uid: Number(mainUid),
@@ -1229,7 +1230,8 @@ function buildRawSavRootFromSave(SAVE, rawRoot, mainUid) {
         uid: Number(mainUid),
         eid: b.ebstid,
         owner: 'USER',
-        bstid: b.bstid
+        bstid: b.bstid,
+        ...(b.cooked ? { state: 1 } : {})
       });
       slots.push({
         uid: Number(mainUid),
@@ -1356,13 +1358,15 @@ function buildRawSavRootFromSave(SAVE, rawRoot, mainUid) {
     uid: Number(mainUid),
     eid: m.emsrid,
     owner: 'COIN_LOCKER',
-    msrid: m.msrid
+    msrid: m.msrid,
+    ...(m.cooked ? { state: 1 } : {})
   });
   for (const b of SAVE.cl && SAVE.cl.bsts || []) pushInst(newBsts, oldBstsByEid, b.ebstid, {
     uid: Number(mainUid),
     eid: b.ebstid,
     owner: 'COIN_LOCKER',
-    bstid: b.bstid
+    bstid: b.bstid,
+    ...(b.cooked ? { state: 1 } : {})
   });
   for (const it of SAVE.cl && SAVE.cl.items || []) pushInst(newItems, oldItemsByEid, it.eitemid, {
     uid: Number(mainUid),
@@ -7519,7 +7523,7 @@ function depositToStorage(rec) {
         gettime: Math.floor(Date.now() / 1e3),
         eefcid: '',
         tefcid: '',
-        state: 0,
+        state: actuallyCooked ? 1 : 0,
         cooked: actuallyCooked
       });
       cl.slots[emptyIdx] = {
@@ -7537,7 +7541,7 @@ function depositToStorage(rec) {
         bstid: rec.id,
         gettime: Math.floor(Date.now() / 1e3),
         lvl: 1,
-        state: 0,
+        state: cooked ? 1 : 0,
         cooked: cooked
       });
       cl.slots[emptyIdx] = {
