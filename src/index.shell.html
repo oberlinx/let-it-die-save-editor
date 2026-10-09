@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LET IT DIE Offline Editor v4</title>
+<style>
+@@INCLUDE(styles.css)@@
+</style>
+</head>
+<body>
+
+<header>
+  <h1>LET IT DIE <span class="rest">Offline Editor v4</span></h1>
+  <div class="loadbar">
+    <label class="loadchip" id="chip-masters"><span class="dot"></span><span id="masters-label">1. Load masters.db</span><input type="file" id="file-masters" accept=".db,.sqlite,.sqlite3"></label>
+    <button class="subtle" id="btn-forget-masters" style="display:none;" title="Stop loading masters.db automatically in this browser">Forget masters.db</button>
+    <label class="loadchip" id="chip-save"><span class="dot"></span>2. Load your save (.sav or .json)<input type="file" id="file-save" accept=".sav,.json"></label>
+    <div class="sep"></div>
+    <button class="action" id="btn-download-sav" disabled title="Review your changes, then save them as brggame_date_time.sav">⬇ Download .sav</button>
+    <button class="action" id="btn-download-json" disabled title="Review your changes, then save them as brggame_date_time.json (uncompressed)">⬇ Download .json</button>
+    <button class="subtle" id="btn-report" disabled title="A summary of this save and its Save check, to paste when asking for help">📋 Save report</button>
+    <button class="subtle" id="btn-recent" title="The last saves you loaded, kept in this browser">📂 Recent saves</button>
+    <button class="subtle" id="btn-history" title="Saves you downloaded with this editor, kept in this browser">🕘 Download history</button>
+    <span class="qswrap"><input id="qs" type="text" placeholder="Search tabs &amp; settings (Ctrl+K)" autocomplete="off" aria-label="Search tabs and settings"><div id="qs-drop"></div></span>
+    <button class="subtle" id="btn-keys" title="Keyboard shortcuts (?)">⌨</button>
+    <button class="subtle" id="btn-tour" title="A short tour of the editor">Take the tour</button>
+    <button class="subtle" id="btn-theme" title="Switch theme">☀</button>
+    <div class="psnNote"><button class="subtle" id="btn-psguide" title="Step by step: copy a PS4/PS5 save to USB, decrypt, edit, re-encrypt, copy back">🎮 PlayStation users: how-to</button><br>PSN saves must first be decrypted. Use <a href="https://garlicsaves.com" target="_blank" rel="noopener">garlicsaves.com</a> or read <a href="https://discord.com/channels/256677044174323713/1544630372208480316/1547464159804002397" target="_blank" rel="noopener">this guide</a></div>
+  </div>
+</header>
+
+<main>
+  <div id="app-locked">
+    <div class="big">Load masters.db, then load your save</div>
+  </div>
+  <div id="app" style="display:none;"></div>
+</main>
+
+<div class="toast" id="toast"></div>
+<div id="statusbar" role="status"><span class="sbfile" id="sb-file"></span><span class="sbsep"></span><span id="sb-state"></span><span class="sbsep"></span><button class="linkbtn" id="sb-check" title="Jump to the next problem (click again for the next one)"></button><span class="sbspace"></span><button class="subtle" id="sb-chg" title="See and undo what you changed (C)">Changes</button><button class="action" id="sb-dl" title="Review changes and download (Ctrl+S)">⬇ Download .sav</button></div>
+<aside id="chg-drawer" aria-label="Changes"></aside>
+<div id="drop-veil">Drop a save (.sav / .json) or masters.db here</div>
+
+<script id="templates-data" type="application/json">@@INCLUDE(data/templates.json)@@</script>
+<script>
+@@INCLUDE(js/01-core-state-and-tables.js)@@
+@@INCLUDE(js/02-save-codec.js)@@
+@@INCLUDE(js/03-load-adapter.js)@@
+@@INCLUDE(js/04-save-writeback.js)@@
+@@INCLUDE(js/05-masters-db-and-loading.js)@@
+@@INCLUDE(js/06-names-session-factories.js)@@
+@@INCLUDE(js/07-tabs-and-render.js)@@
+@@INCLUDE(js/08-account.js)@@
+@@INCLUDE(js/09-fighters-data.js)@@
+@@INCLUDE(js/10-fighters-tab.js)@@
+@@INCLUDE(js/11-research.js)@@
+@@INCLUDE(js/12-quests.js)@@
+@@INCLUDE(js/13-stamp-rally.js)@@
+@@INCLUDE(js/14-location-floors-runs.js)@@
+@@INCLUDE(js/15-collection-and-stats.js)@@
+@@INCLUDE(js/16-layouts.js)@@
+@@INCLUDE(js/17-raw-data-and-json-compare.js)@@
+@@INCLUDE(js/18-current-run.js)@@
+@@INCLUDE(js/19-jackals.js)@@
+@@INCLUDE(js/20-skill-decals.js)@@
+@@INCLUDE(js/21-storage.js)@@
+@@INCLUDE(js/22-reward-box.js)@@
+@@INCLUDE(js/23-funshots.js)@@
+@@INCLUDE(js/24-vip.js)@@
+@@INCLUDE(js/25-stews.js)@@
+@@INCLUDE(js/26-dates.js)@@
+@@INCLUDE(js/27-lost-bags-death-boxes.js)@@
+@@INCLUDE(js/28-waiting-room-screenshots-photos.js)@@
+@@INCLUDE(js/29-save-check.js)@@
+@@INCLUDE(js/30-dead-fighter-archive.js)@@
+@@INCLUDE(js/31-compare-and-copy.js)@@
+@@INCLUDE(js/32-download-pipeline.js)@@
+@@INCLUDE(js/33-download-history.js)@@
+@@INCLUDE(js/34-ui-pack.js)@@
+@@INCLUDE(js/35-ui-pack-2.js)@@
+@@INCLUDE(js/36-startup.js)@@
+</script>
+</body>
+</html>

@@ -165,7 +165,10 @@ This repo is a plain static site: `index.html` at the root, plus `.nojekyll`.
 ## Repo layout
 
 ```
-index.html                 the editor (single file)
+index.html                 the editor (single file, BUILT from src/ - don't edit it directly)
+src/                       the editor's source, split into small files (see src/README.md)
+build.js                   stitches src/ back into index.html
+.github/workflows/         checks on every push that index.html matches src/
 tools/stew_luck_rarity.py  original command-line stew tool (reference)
 README.md                  this file
 LICENSE                    GPL-3.0 licence
@@ -175,3 +178,13 @@ LICENSE                    GPL-3.0 licence
 ```
 
 `.gitignore` blocks `.sav`, `.db` and save `.json` files. Don't commit your save or the game's masters.db.
+
+## Changing the editor
+
+The page people use is the single file `index.html`, but it is built from the pieces in `src/` so the code is easier to read and edit. To make a change:
+
+1. Edit the right file in `src/` (`src/README.md` lists what each file holds).
+2. Run `node build.js` (needs [Node.js](https://nodejs.org/)). This rewrites `index.html`.
+3. Commit both the `src/` change and the new `index.html`.
+
+`node build.js --check` tells you whether `index.html` is up to date, and GitHub runs the same check on every push.

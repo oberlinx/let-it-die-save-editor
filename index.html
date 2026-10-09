@@ -977,10 +977,16 @@ async function buildBrgSav(rootObj) {
  * Side effect: records RAW_EMPTY_SHAPES (which empty collections were {} vs []) before anything else.
  * The returned object also carries __rawSavRoot / __rawSavMainUid so loadSaveFiles can keep the
  * untouched original for the later merge in buildRawSavRootFromSave().
- * @param {object} root parsed JSON of the save
+ * @param {object} rawRoot parsed JSON of the save (never modified; the adapter works on a deep copy)
  */
-function adaptFullDumpToLegacyShape(root) {
-  RAW_EMPTY_SHAPES = captureEmptyShapes(root);
+function adaptFullDumpToLegacyShape(rawRoot) {
+  // Work on a deep copy so nothing in the editor shape (SAVE) shares objects with the raw save.
+  // Without this, edits to SAVE (mastery, research, defense, quests...) also changed RAW_SAV_ROOT,
+  // which is meant to stay exactly as loaded (Raw data view, JSON compare, change detection).
+  const root = JSON.parse(JSON.stringify(rawRoot));
+  // Shapes are recorded against the raw root itself: restoreEmptyShapes only runs when RAW_EMPTY_SHAPES.root
+  // is the RAW_SAV_ROOT being downloaded.
+  RAW_EMPTY_SHAPES = captureEmptyShapes(rawRoot);
   // main account uid: items are keyed by it throughout the save
   const mainUid = String(root.soul && root.soul.uid || root.user && root.user.uid || '');
   const chrTable = root.soul && root.soul.chr || {};
@@ -1213,7 +1219,7 @@ function adaptFullDumpToLegacyShape(root) {
     teams: arr(root.team),
     user_research: arr(root.soul && root.soul.partresearch && root.soul.partresearch.user),
     accountId: mainUid,
-    __rawSavRoot: root,
+    __rawSavRoot: rawRoot,
     __rawSavMainUid: mainUid
   };
 }
@@ -1235,6 +1241,11 @@ function adaptFullDumpToLegacyShape(root) {
  * @returns {object} new root (rawRoot is not mutated)
  */
 function buildRawSavRootFromSave(SAVE, rawRoot, mainUid) {
+  // the on-screen placeholder fighter of a save with no fighters (see startSave) is never written
+  if (arr(SAVE.soul && SAVE.soul.chrs).some(c => c && c.__placeholder)) {
+    const chrs = SAVE.soul.chrs.filter(c => !(c && c.__placeholder));
+    SAVE = Object.assign({}, SAVE, { soul: Object.assign({}, SAVE.soul, { chrs, crntcid: chrs.some(c => c.cid === SAVE.soul.crntcid) ? SAVE.soul.crntcid : '' }) });
+  }
   // work on a deep copy so the raw root stays pristine
   const root = JSON.parse(JSON.stringify(rawRoot));
   const now = Math.floor(Date.now() / 1e3);
@@ -1359,7 +1370,16 @@ function buildRawSavRootFromSave(SAVE, rawRoot, mainUid) {
       created: old ? old.created : now,
       modified: now
     }, old, base);
-    if (old) for (const k of Object.keys(row)) if (!(k in old)) delete row[k];
+    if (old) {
+      for (const k of Object.keys(row)) if (!(k in old)) delete row[k];
+    } else if (list === newMsrs || list === newItems) {
+      // brand-new mushroom / item rows get exactly the fields the game writes for them
+      // (mushroom: eid gettime msrid owner state eefcid tefcid posonce; item: eid gettime itemid owner)
+      const shape = list === newMsrs ? { eid: '', gettime: now, msrid: '', owner: '', state: 0, eefcid: '', tefcid: '', posonce: 0 } : { eid: '', gettime: now, itemid: '', owner: '' };
+      for (const k of Object.keys(shape)) if (k in row) shape[k] = row[k];
+      list.push(shape);
+      return;
+    }
     list.push(row);
   }
   // previous rows by eid, used to preserve unknown fields on rebuilt items
@@ -1424,7 +1444,7 @@ function buildRawSavRootFromSave(SAVE, rawRoot, mainUid) {
         eid: m.emsrid,
         owner: 'USER',
         msrid: m.msrid,
-        ...(m.cooked ? { state: 1 } : {})
+        state: m.cooked ? 1 : 0
       });
       slots.push({
         uid: Number(mainUid),
@@ -1442,7 +1462,7 @@ function buildRawSavRootFromSave(SAVE, rawRoot, mainUid) {
         eid: b.ebstid,
         owner: 'USER',
         bstid: b.bstid,
-        ...(b.cooked ? { state: 1 } : {})
+        state: b.cooked ? 1 : 0
       });
       slots.push({
         uid: Number(mainUid),
@@ -1559,7 +1579,16 @@ function buildRawSavRootFromSave(SAVE, rawRoot, mainUid) {
       eid: ''
     };
   });
-  for (const p of SAVE.cl && SAVE.cl.pts || []) pushInst(newPts, oldPtsByEid, p.eptid, {
+  // Only write Storage Box instances that a slot still points to: removing an item (✕, Clear all, shrinking
+  // the box) only empties its slot, and game-written saves have no unreferenced COIN_LOCKER rows. Rows that
+  // were already unreferenced in the loaded save are kept as they were, so an unedited save round-trips exactly.
+  const boxRefs = new Set();
+  for (const s of clSrc) for (const k of [ 'eptid', 'emsrid', 'ebstid', 'eitemid' ]) if (s[k] && s[k] !== '-1') boxRefs.add(s[k]);
+  const rawBoxRefs = new Set(arr(rawRoot.soul && rawRoot.soul.cl).map(s => s && s.eid).filter(Boolean));
+  const rawLockerRows = [].concat(arr(rawRoot.part && rawRoot.part.pts && rawRoot.part.pts[mainUid]), arr(rawRoot.mushroom && rawRoot.mushroom.msrs), arr(rawRoot.beast && rawRoot.beast.bsts), arr(rawRoot.item && rawRoot.item.items));
+  const rawBoxOrphans = new Set(rawLockerRows.filter(r => r && r.owner === 'COIN_LOCKER' && !rawBoxRefs.has(r.eid)).map(r => r.eid));
+  const inBox = id => boxRefs.has(id) || rawBoxOrphans.has(id);
+  for (const p of SAVE.cl && SAVE.cl.pts || []) if (inBox(p.eptid)) pushInst(newPts, oldPtsByEid, p.eptid, {
     uid: Number(mainUid),
     eid: p.eptid,
     owner: 'COIN_LOCKER',
@@ -1570,21 +1599,21 @@ function buildRawSavRootFromSave(SAVE, rawRoot, mainUid) {
     dur: p.dur,
     lvl: p.lvl
   });
-  for (const m of SAVE.cl && SAVE.cl.msrs || []) pushInst(newMsrs, oldMsrsByEid, m.emsrid, {
+  for (const m of SAVE.cl && SAVE.cl.msrs || []) if (inBox(m.emsrid)) pushInst(newMsrs, oldMsrsByEid, m.emsrid, {
     uid: Number(mainUid),
     eid: m.emsrid,
     owner: 'COIN_LOCKER',
     msrid: m.msrid,
-    ...(m.cooked ? { state: 1 } : {})
+    state: m.cooked ? 1 : 0
   });
-  for (const b of SAVE.cl && SAVE.cl.bsts || []) pushInst(newBsts, oldBstsByEid, b.ebstid, {
+  for (const b of SAVE.cl && SAVE.cl.bsts || []) if (inBox(b.ebstid)) pushInst(newBsts, oldBstsByEid, b.ebstid, {
     uid: Number(mainUid),
     eid: b.ebstid,
     owner: 'COIN_LOCKER',
     bstid: b.bstid,
-    ...(b.cooked ? { state: 1 } : {})
+    state: b.cooked ? 1 : 0
   });
-  for (const it of SAVE.cl && SAVE.cl.items || []) pushInst(newItems, oldItemsByEid, it.eitemid, {
+  for (const it of SAVE.cl && SAVE.cl.items || []) if (inBox(it.eitemid)) pushInst(newItems, oldItemsByEid, it.eitemid, {
     uid: Number(mainUid),
     eid: it.eitemid,
     owner: 'COIN_LOCKER',
@@ -1931,7 +1960,12 @@ async function loadSaveFiles(files) {
         }
       } catch (err) {
         console.warn(`Skipped ${f.name}, could not read as a save file:`, err);
-        readErrors.push(`${f.name}: ${err.message}`);
+        // plain-language reason instead of a raw parser / decompression error
+        const why = /not a LET IT DIE save/.test(err.message) ? err.message
+          : f.size === 0 ? 'the file is empty'
+          : isBrgSav(new Uint8Array(await readFileAsArrayBuffer(f).catch(() => new ArrayBuffer(0))).slice(0, 16)) ? 'the save file looks damaged and could not be unpacked (the technical reason is in the browser console)'
+          : 'not a LET IT DIE save (expected brggame.sav, or the .json made by decompressing one)';
+        readErrors.push(`${f.name}: ${why}`);
       }
     }
     // account id of a parsed file, used to detect files from a different account
@@ -2328,7 +2362,10 @@ function startSave(soul) {
     teams: []
   };
   // a brand-new account needs at least one fighter
-  if (!soul.chrs.length) soul.chrs.push(freshCharacter());
+  // A save with no fighters still gets one on-screen placeholder so the Fighters tab can draw, but it is
+  // marked __placeholder and buildRawSavRootFromSave() never writes it: its minimal shape is not one the
+  // game accepts, and an unedited save must download unchanged.
+  if (!soul.chrs.length) soul.chrs.push(Object.assign(freshCharacter(), { __placeholder: true }));
   // freezer_level missing: pick the lowest level whose capacity fits the fighters
   if (soul.freezer_level == null) {
     let inferred = 1;
@@ -4507,8 +4544,9 @@ function wireBlueprints() {
     });
     document.querySelectorAll('[data-bp]').forEach(cb => {
       cb.addEventListener('change', () => {
+        const before = stampTotalsNow();
         setUnlocked(cb.dataset.bp, cb.checked);
-        syncStampFromResearch();
+        adjustStampFromResearch(before);
         renderList(document.getElementById('bp-filter').value);
       });
     });
@@ -4522,10 +4560,11 @@ function wireBlueprints() {
         if (v > hi) toast(`Clamped to this part's max (+${hi})`);
         if (v < lo) toast(`Clamped to this part's lowest level (+${lo})`);
         v = Math.max(lo, Math.min(hi, v));
+        const before = stampTotalsNow();
         const err = setLevel(inp.dataset.bpLevel, rawFromDisplay(rec, v));
         if (err) toast(err, true);
         // re-render so the "next level" markers and research stamps follow
-        syncStampFromResearch();
+        adjustStampFromResearch(before);
         renderList(document.getElementById('bp-filter').value);
       });
     });
@@ -4543,6 +4582,7 @@ function wireBlueprints() {
     const filter = document.getElementById('bp-filter').value;
     const shown = blueprintableParts().filter(p => (!filter || norm(p.name).includes(norm(filter))) && partSlotLabel(p) === researchSubTab);
     const parts = shown.filter(p => isResearchBulkAllowed(p.id));
+    const before = stampTotalsNow();
     const done = new Set;
     for (const p of parts) {
       for (const id of chainOf(p.id)) {
@@ -4553,7 +4593,7 @@ function wireBlueprints() {
         if (id === p.id) break;
       }
     }
-    syncStampFromResearch();
+    adjustStampFromResearch(before);
     renderList(filter);
     const skipped = shown.length - parts.length;
     toast(`Maxed ${parts.length} visible ${researchSubTab} research item${parts.length === 1 ? '' : 's'}${skipped ? ` (skipped ${skipped} ${RESEARCH_FORM.includePs ? 'with no blueprint' : 'PS-only / no blueprint'})` : ''}`);
@@ -4575,23 +4615,25 @@ function wireBlueprints() {
       if (!targets.has(p.id)) targets.set(p.id, rawFromDisplay(PT_INDEX[p.id], 5));
     }
     let changed = 0, alreadyAbove = 0;
+    const before = stampTotalsNow();
     for (const [id, target] of targets) {
       const cur = entryFor(id) ? entryFor(id).lvl : 0;
       if (cur > target) { alreadyAbove++; continue; }
       if (cur !== target) { writeLadder(id, target); changed++; }
     }
-    syncStampFromResearch();
+    adjustStampFromResearch(before);
     renderList(filter);
     const skipped = shown.length - parts.length;
     toast(`Set ${changed} visible ${researchSubTab} research item${changed === 1 ? '' : 's'} to +5 (normal parts max out at +4)${alreadyAbove ? ` (left ${alreadyAbove} already higher untouched)` : ''}${skipped ? ` (skipped ${skipped} ${RESEARCH_FORM.includePs ? 'with no blueprint' : 'PS-only / no blueprint'})` : ''}`);
   });
   // Remove all: wipe research, then restore the starting blueprints at level 1
   document.getElementById('bp-remove-all').addEventListener('click', () => {
+    const before = stampTotalsNow();
     research.length = 0;
     // every new game starts with these researched; keep them at their first level
     for (const id of INITIAL_PTIDS) if (PT_INDEX[id]) writeLadder(id, 1);
     researchDirty = true;
-    syncStampFromResearch();
+    adjustStampFromResearch(before);
     renderList(document.getElementById('bp-filter').value);
     toast(`All research removed (starting blueprints kept at +0)`);
   });
@@ -8492,6 +8534,8 @@ function wireStorageBox() {
     bulkDeposit(legitBlueprintItemIds(), 'obtainable blueprints');
   });
   document.getElementById('sb-add-ps-bp').addEventListener('click', () => {
+    // same rule as Research's "Include PS-only": on a PC save these only work in PC games modded to have them
+    if (!isPsSave() && psOnlyFirstTierBlueprintItemIds().length && !confirm('This is a PC save. PlayStation-only blueprints only work on PC games modded to have them. Add them anyway?')) return;
     bulkDeposit(psOnlyFirstTierBlueprintItemIds(), 'PS-only blueprints');
   });
   document.getElementById('sb-add-travis-bp').addEventListener('click', () => {
@@ -8503,7 +8547,7 @@ function wireStorageBox() {
   renderSbForm();
 }
 
-// Grow (add empty slots at the end) or shrink (truncate; any occupied slots past the end are lost) the box, then re-render.
+// Grow (add empty slots at the end) or shrink (drop empty slots from the end, never an occupied one) the box, then re-render.
 function resizeStorageBox(target) {
   const cl = SAVE.cl;
   if (target > cl.slots.length) {
@@ -8515,8 +8559,17 @@ function resizeStorageBox(target) {
       eitemid: '-1'
     });
   } else if (target < cl.slots.length) {
-    cl.slots.length = target;
-    toast('Storage shrunk -- any occupied slots past the new capacity were removed', true);
+    // never drop occupied slots: stop at the last slot that holds something (rounded up to the box's step)
+    const used = s => s && [ s.eptid, s.emsrid, s.ebstid, s.eitemid ].some(v => v && v !== '-1');
+    let last = -1;
+    cl.slots.forEach((s, i) => { if (used(s)) last = i; });
+    const step = storageBoxStep();
+    const floor = Math.max(STORAGE_BOX_MIN, Math.ceil((last + 1) / step) * step);
+    if (target < floor) {
+      toast(`Can't shrink below ${floor}: slot ${last + 1} holds an item. Remove items from the end of the box first.`, true);
+      target = floor;
+    }
+    if (target < cl.slots.length) cl.slots.length = target;
   }
   renderAll();
 }
@@ -9255,6 +9308,31 @@ function syncStampFromResearch() {
   return true;
 }
 
+// stampTotalsNow(): computeStampTotals() when masters.db is loaded, else null. Call it BEFORE a research edit
+// and pass the result to adjustStampFromResearch() afterwards.
+function stampTotalsNow() { return AP && AP.pts && AP.pts.length ? computeStampTotals() : null; }
+// adjustStampFromResearch(before): after a research edit, move each Funshot by exactly what that edit added or
+// removed (research totals after minus before), keeping the save's own figure as the base. A full re-sync
+// (syncStampFromResearch) would instead replace the game's values with the editor's totals, which differ from
+// the game's on some saves (cause unknown), so a single blueprint change could jump the Funshots by dozens.
+// The explicit "Sync all from Research" button and the Save check fixes still do the full re-sync.
+function adjustStampFromResearch(before) {
+  const after = stampTotalsNow();
+  if (!before || !after) return syncStampFromResearch();
+  const moved = RESEARCH_STAMP_TYPES.filter(t => Math.abs((after[t] || 0) - (before[t] || 0)) > 0.001);
+  if (!moved.length) { if (REFRESH_STAMP_GRID) REFRESH_STAMP_GRID(); return true; }
+  if (RAW_SAV_ROOT && !stampInitDone()) STAMP_MARK = { root: RAW_SAV_ROOT, on: true };   // see syncStampFromResearch
+  SAVE.soul.researchstamp = arr(SAVE.soul.researchstamp);
+  for (const type of moved) {
+    let e = SAVE.soul.researchstamp.find(r => r.type === type);
+    if (!e) { e = { type: type, rate: 0 }; SAVE.soul.researchstamp.push(e); }
+    const v = (Number(e.rate) || 0) + (after[type] || 0) - (before[type] || 0);
+    e.rate = Math.min(99999, Math.max(0, Math.round(v * 10) / 10));
+  }
+  if (REFRESH_STAMP_GRID) REFRESH_STAMP_GRID();
+  return true;
+}
+
 // Wires the Research Stamp block: renders the grid (one number input per Funshot type, highlighting
 // values that differ from what research implies), handles manual edits (clamped, 1 decimal) and the sync button.
 function wireStamp() {
@@ -9480,20 +9558,35 @@ let STEW_STATE = { root: null, original: null, hadQueue: false, lastMsg: '' };
 // Persistent UI form state for the Stews tab (selected rarity, length, RNG seed, listing options, highlights).
 const STEW_FORM = { rarity: null, count: '', seed: '', ahead: 10, showAll: false, showOdds: false, hl: [], hlOnly: false, zeroOwned: true };
 
-// Returns the live stew queue array (RAW_SAV_ROOT.soul.skl.gacha.normal.sklids) or null if absent.
-// The game consumes it from the END, so the last element is the next pull.
-function stewQueue() {
-  const g = RAW_SAV_ROOT && RAW_SAV_ROOT.soul && RAW_SAV_ROOT.soul.skl && RAW_SAV_ROOT.soul.skl.gacha && RAW_SAV_ROOT.soul.skl.gacha.normal;
+// The stew queue as stored in a save root (soul.skl.gacha.normal.sklids), or null if absent. Read-only.
+function rawStewQueue(root) {
+  const g = root && root.soul && root.soul.skl && root.soul.skl.gacha && root.soul.skl.gacha.normal;
   return g && Array.isArray(g.sklids) ? g.sklids : null;
 }
-
-// Replaces the queue in RAW_SAV_ROOT, creating the soul/skl/gacha/normal path if needed.
-function setStewQueue(q) {
-  const soul = RAW_SAV_ROOT.soul = RAW_SAV_ROOT.soul || {};
+// Working copy of the queue for the loaded save. Edits go here, never into RAW_SAV_ROOT (which must stay
+// exactly as loaded); applyStews() writes the queue into the download at build time.
+let STEW_WORK = { root: null, q: null };
+// Returns the editable stew queue array (a copy of the save's queue, taken on first use) or null if absent.
+// The game consumes it from the END, so the last element is the next pull.
+function stewQueue() {
+  if (STEW_WORK.root !== RAW_SAV_ROOT) { const r = rawStewQueue(RAW_SAV_ROOT); STEW_WORK = { root: RAW_SAV_ROOT, q: r ? r.slice() : null }; }
+  return STEW_WORK.q;
+}
+// Replaces the editable queue (null = no queue, as in a save that never had one).
+function setStewQueue(q) { stewQueue(); STEW_WORK.q = q; }
+// Download-pipeline step: write the edited queue into root (creating soul/skl/gacha/normal if needed).
+// Does nothing when the queue was not touched for this save or still equals the loaded one. Returns root.
+function applyStews(root) {
+  if (STEW_WORK.root !== RAW_SAV_ROOT || !root) return root;
+  const q = STEW_WORK.q, loaded = rawStewQueue(root);
+  if (JSON.stringify(q) === JSON.stringify(loaded)) return root;
+  if (q === null) { if (loaded) delete root.soul.skl.gacha.normal.sklids; return root; }
+  const soul = root.soul = root.soul || {};
   soul.skl = soul.skl || {};
   soul.skl.gacha = soul.skl.gacha || {};
   soul.skl.gacha.normal = soul.skl.gacha.normal || {};
-  soul.skl.gacha.normal.sklids = q;
+  soul.skl.gacha.normal.sklids = q.slice();
+  return root;
 }
 
 // Snapshots the original queue the first time a given save is seen (so "Undo all stew changes" works).
@@ -9812,7 +9905,7 @@ function stewCsv() {
 }
 
 // Executes one Stews tab action: 'revert' | 'front' | 'dedupe' | 'clear' | 'regen' | 'stack'.
-// Mutates the queue in RAW_SAV_ROOT via setStewQueue, writes a human-readable log to STEW_STATE.lastMsg,
+// Changes the editable queue via setStewQueue, writes a human-readable log to STEW_STATE.lastMsg,
 // re-renders and toasts. Throws (caught by the click handler) on e.g. missing odds.
 function runStewAction(mode) {
   stewSyncState();
@@ -9826,7 +9919,7 @@ function runStewAction(mode) {
   length = Math.min(length, STEW_MAX_LEN);
   if (mode === 'revert') {
     if (STEW_STATE.hadQueue) setStewQueue(STEW_STATE.original.slice());
-    else if (RAW_SAV_ROOT.soul && RAW_SAV_ROOT.soul.skl && RAW_SAV_ROOT.soul.skl.gacha && RAW_SAV_ROOT.soul.skl.gacha.normal) delete RAW_SAV_ROOT.soul.skl.gacha.normal.sklids;
+    else setStewQueue(null);
     lines.push('Stew queue restored to how it was when you loaded the save.');
   } else if (mode === 'front') {
     const pick = cur.filter(s => stewRarity(s) === rarity);
@@ -10134,7 +10227,8 @@ function applyDateRules(root) {
 
 // Builds the would-be download root (without the stamp/other download hooks) and applies date rules, for display.
 function dtBuildRoot() {
-  const root = buildRawSavRootFromSave(SAVE, RAW_SAV_ROOT, RAW_SAV_MAIN_UID);
+  // deep copy: the built root shares objects with SAVE, and the rules must not edit SAVE (see buildDownloadRoot)
+  const root = JSON.parse(JSON.stringify(buildRawSavRootFromSave(SAVE, RAW_SAV_ROOT, RAW_SAV_MAIN_UID)));
   return applyDateRules(root);
 }
 
@@ -11914,10 +12008,11 @@ function cmpChrSummary(c) {
   const items = arr(c.pspts).length + arr(c.psmsrs).length + arr(c.psbsts).length + arr(c.psitems).length;
   return `${CLASS_NAMES[c.type] || c.type} g${c.grade}${c.limit_break ? ' LB' + c.limit_break : ''} · Lv${c.lvl != null ? c.lvl : '?'} · ${items} items · ${arr(c.eqskls).length} decals${c.state && c.state !== 'FREE' ? ' · ' + c.state : ''}`;
 }
-// Comparison key for a fighter: its JSON without 'state', so state-only differences are ignored.
+// Comparison key for a fighter: its JSON without 'state' and without the owning account's uid (on the fighter and
+// on anything nested under it), so state-only differences and comparing two different accounts are ignored.
 function cmpChrKey(c) {
   const strip = x => { const o = cmpClone(x); delete o.state; return o; };
-  return JSON.stringify(strip(c));
+  return JSON.stringify(strip(c), (k, v) => k === 'uid' ? undefined : v);
 }
 // Human label for a Reward Box (present) entry: money/SPLithium amounts, or the item/part/decal/mushroom/beast name plus count.
 function cmpPresentLabel(p) {
@@ -12642,6 +12737,7 @@ function reviewFileName(ext, stamp) { return `brggame_${stamp || reviewStamp()}.
 //  10. applyBossLock                      pre-plan upcoming boss floors in soul.hvntrinfo.
 //  11. applyJackals                       write per-Jackal reward edits into floor.jkls (and item/part tables).
 //  12. applyFreeCont                      free-continue counters.
+//  12b. applyStews                        the edited stew queue (kept out of RAW_SAV_ROOT until download).
 //  13. applyShutdownReset                 zero chosen fighters' force-shutdown (force-close) counts.
 //  14. applyRewind                        put a crashed run back on its last boss floor.
 //  15. applyRunEnd                        end the run entirely (fighter goes home, run data cleared).
@@ -12658,7 +12754,10 @@ function buildDownloadRoot() {
   normalizePresents(SAVE.presents);
   questOrdForSave();
   // Build the clone from SAVE, then apply each opt-in transform; innermost call runs first.
-  return applyRunEnd(applyRewind(applyShutdownReset(applyFreeCont(applyJackals(applyBossLock(applyFloorMove(applyStampRally(applyStampMark(applyAccountChoice(restoreEmptyShapes(applyDateRules(buildRawSavRootFromSave(SAVE, RAW_SAV_ROOT, RAW_SAV_MAIN_UID)), RAW_SAV_ROOT)))))))))));
+  // buildRawSavRootFromSave shares some objects with SAVE (e.g. soul.present IS SAVE.presents), so the result is
+  // deep-copied before the transforms run: otherwise a transform (Dates rules, ...) would edit SAVE itself, and the
+  // edit would stick even after "Undo" and show up in every later build.
+  return applyRunEnd(applyRewind(applyShutdownReset(applyStews(applyFreeCont(applyJackals(applyBossLock(applyFloorMove(applyStampRally(applyStampMark(applyAccountChoice(restoreEmptyShapes(applyDateRules(JSON.parse(JSON.stringify(buildRawSavRootFromSave(SAVE, RAW_SAV_ROOT, RAW_SAV_MAIN_UID)))), RAW_SAV_ROOT))))))))))));
 }
 
 // Friendly labels for soul (account) keys shown in the review list; unknown keys fall back to reviewKeyLabel().
@@ -12744,7 +12843,7 @@ function reviewDecalName(id) { return (SKL_INDEX[id] || {}).name || id; }
 // Builds the human-readable "what changed" list. A/B are editor-shaped saves (before/after, via reviewAdapt); rawA/rawB
 // are the matching raw-format roots, needed for data the adapter hides (floor.stamp, floor.jkls, soul.flrid, uid...).
 // Sections: Account (+VIP), Weapon Mastery, Fighters, Decal stock, Research, Stamp Rally, Weapon/armor levels,
-// Collection, Jackals, Location, Boss floor lock, Armor Skins, Waiting Room, Reward Box, Storage Box, Defense, Other parts.
+// Collection, Jackals, Location, Boss floor lock, Armor Skins, Waiting Room, Reward Box, Storage Box, Stews, Defense, Other parts.
 // The exact line text is also used as a key by uiReverts() to attach Undo buttons, so do not reword lines casually.
 // Read-only: never mutates its inputs.
 function reviewDiff(A, B, rawA, rawB) {
@@ -12772,18 +12871,22 @@ function reviewDiff(A, B, rawA, rawB) {
   for (const k of new Set(Object.keys(va).concat(Object.keys(vb)))) if (JSON.stringify(va[k]) !== JSON.stringify(vb[k])) acc.lines.push(`${vipLabel[k] || 'VIP ' + k}: ${reviewVal(k, va[k])} → ${reviewVal(k, vb[k])}`);
   // Weapon mastery: compare level per weapon category (missing = level 1).
   // weapon mastery
-  const ma = {}, mb = {};
-  for (const m of arr(aS.mstlvl)) ma[m.ptarmtp] = m.lvl;
-  for (const m of arr(bS.mstlvl)) mb[m.ptarmtp] = m.lvl;
+  const ma = {}, mb = {}, pa0 = {}, pb0 = {};
+  for (const m of arr(aS.mstlvl)) { ma[m.ptarmtp] = m.lvl; pa0[m.ptarmtp] = Number(m.abp) || 0; }
+  for (const m of arr(bS.mstlvl)) { mb[m.ptarmtp] = m.lvl; pb0[m.ptarmtp] = Number(m.abp) || 0; }
   const mst = sec('Weapon Mastery');
   const mstName = id => { const r = arr(AP && AP.ptarmtps).find(x => x.id === id); return (r && resolveName(r.name)) || id; };
-  for (const id of new Set(Object.keys(ma).concat(Object.keys(mb)))) if ((ma[id] || 1) !== (mb[id] || 1)) mst.lines.push(`${mstName(id)}: Lv ${ma[id] || 1} → Lv ${mb[id] || 1}`);
+  for (const id of new Set(Object.keys(ma).concat(Object.keys(mb)))) {
+    if ((ma[id] || 1) !== (mb[id] || 1)) mst.lines.push(`${mstName(id)}: Lv ${ma[id] || 1} → Lv ${mb[id] || 1}`);
+    else if ((pa0[id] || 0) !== (pb0[id] || 0)) mst.lines.push(`${mstName(id)}: mastery points ${(pa0[id] || 0).toLocaleString()} → ${(pb0[id] || 0).toLocaleString()} (Lv ${mb[id] || 1})`);
+  }
   // Fighters: added/removed by cid, then per-fighter field-by-field changes. uid is ignored when comparing (re-keying the account must not look like a change).
   // fighters
   const fs = sec('Fighters');
   const byA = new Map(arr(aS.chrs).map(c => [ c.cid, c ])), byB = new Map(arr(bS.chrs).map(c => [ c.cid, c ]));
   for (const [cid, c] of byB) if (!byA.has(cid)) fs.lines.push(`Added: ${c.name || '?'} (${cmpChrSummary(c)})`);
   for (const [cid, c] of byA) if (!byB.has(cid)) fs.lines.push(`Removed: ${c.name || '?'} (${cmpChrSummary(c)})`);
+  if (arr(aS.chrslots).length !== arr(bS.chrslots).length) fs.lines.push(`Freezer hangers: ${arr(aS.chrslots).length} → ${arr(bS.chrslots).length}`);
   // Fighter state codes as stored by the game -> wording.
   const STATES = { FREE: 'in the freezer', GUARD: 'on defense', USE: 'being played', ENEMY: 'dead (Hater)', DUMMY: 'dummy' };
   for (const [cid, b] of byB) {
@@ -12940,6 +13043,9 @@ function reviewDiff(A, B, rawA, rawB) {
   const pd = reviewMapDiff(pa, pb);
   if (pd.added.length) rw.lines.push(`Added: ${reviewGroup(pd.added)}`);
   if (pd.removed.length) rw.lines.push(`Removed: ${reviewGroup(pd.removed)}`);
+  { const ra = new Map(arr(A.presents).map(p => [ p.pid, p ])), changed = [];
+    for (const p of arr(B.presents)) { const o = ra.get(p.pid); if (o && JSON.stringify(o) !== JSON.stringify(p)) changed.push(pl(p)); }
+    if (changed.length) rw.lines.push(`Changed: ${reviewGroup(changed)}`); }
   // Storage Box: slots keyed by entity id, plus repaired items and capacity change.
   // storage
   const sg = sec('Storage Box');
@@ -12950,9 +13056,25 @@ function reviewDiff(A, B, rawA, rawB) {
   if (sd.changed.length) sg.lines.push(`Changed: ${sd.changed.join(', ')}`);
   const srep = reviewRepaired(A.cl && A.cl.pts, B.cl && B.cl.pts);
   if (srep) sg.lines.push(`${srep} item${srep === 1 ? '' : 's'} repaired / ammo refilled`);
+  { const m = new Map(arr(A.cl && A.cl.pts).map(p => [ p.eptid, JSON.stringify(p) ]));
+    const n = arr(B.cl && B.cl.pts).filter(p => m.has(p.eptid) && m.get(p.eptid) !== JSON.stringify(p)).length - srep;
+    if (n > 0) sg.lines.push(`${n} stored weapon${n === 1 ? '' : 's'} / armor changed (level, durability or ammo)`); }
   if (arr(A.cl && A.cl.slots).length !== arr(B.cl && B.cl.slots).length) sg.lines.push(`Capacity: ${arr(A.cl && A.cl.slots).length} → ${arr(B.cl && B.cl.slots).length}`);
   // Defense: TDM lineup as "W<wave>#<order> <fighter>" (stored wave/order are 0-based).
   // defense lineup (named)
+  // Stews: the queue lives in raw soul.skl.gacha.normal.sklids (the adapter hides it), so compare the raw roots.
+  // The game pulls from the END of the queue, so the last entry is the next stew.
+  const sw = sec('Stews');
+  { const q = r => { const g = r && r.soul && r.soul.skl && r.soul.skl.gacha && r.soul.skl.gacha.normal; return g && Array.isArray(g.sklids) ? g.sklids : []; };
+    const qa = q(rawA), qb = q(rawB);
+    if (JSON.stringify(qa) !== JSON.stringify(qb)) {
+      let n = 0;
+      for (let i = 0; i < Math.max(qa.length, qb.length); i++) if (qa[i] !== qb[i]) n++;
+      sw.lines.push(qa.length === qb.length ? `Stew queue: ${n.toLocaleString()} of ${qb.length.toLocaleString()} upcoming stews changed` : `Stew queue: ${qa.length.toLocaleString()} → ${qb.length.toLocaleString()} stews`);
+      const next = x => x.length ? reviewDecalName(x[x.length - 1]) : 'none (empty queue)';
+      if (next(qa) !== next(qb)) sw.lines.push(`Next stew: ${next(qa)} → ${next(qb)}`);
+    }
+  }
   const df = sec('Defense');
   const fl = x => arr(x).map(e => `W${Number(e.wave) + 1}#${Number(e.order) + 1} ${chrName(e.cid)}${Number(e.is_equip_whistle) ? ' (alarm)' : ''}`).sort().join(', ') || 'nobody';
   if (fl(A.fortsetting) !== fl(B.fortsetting)) df.lines.push(`Lineup: ${fl(A.fortsetting)} → ${fl(B.fortsetting)}`);
@@ -12968,6 +13090,7 @@ function reviewDiff(A, B, rawA, rawB) {
     if (JSON.stringify(a) !== JSON.stringify(b)) note(k);
   }
   for (const k of [ 'all_quests', 'prison', 'playlog', 'hitchart', 'teams', 'dests' ]) if (JSON.stringify(A[k]) !== JSON.stringify(B[k])) note(k);
+  if (JSON.stringify(rawA.force_shutdown_counts || {}) !== JSON.stringify(rawB.force_shutdown_counts || {})) note('force_shutdown_counts');
   if (DATE_RULES.length) ot.lines.push('Dates fixed by the Dates tab rules');
   if (REWIND.root === RAW_SAV_ROOT && REWIND.on && !(RUN_END.root === RAW_SAV_ROOT && RUN_END.on)) { const rw = rewindInfo(RAW_SAV_ROOT); if (rw) ot.lines.push(`Run put back on its last boss floor (${rw.floor.no}F, boss beaten; ${rw.dropped} floor${rw.dropped === 1 ? '' : 's'} after it dropped)`); }
   if (RUN_END.root === RAW_SAV_ROOT && RUN_END.on) { const ri = runEndInfo(RAW_SAV_ROOT); if (ri) ot.lines.push(`Run ended: the run's floor data (${ri.floors} floors), its force-close count and ${ri.made.toLocaleString()} items it left on floors, in chests and on Jackals cleared`); }
@@ -14024,7 +14147,7 @@ function uiTrackHeader() {
 // Review section title -> tab id, used to put a "changed" dot on tabs.
 const UI_SECTION_TAB = {
   'Account': 'account', 'Weapon Mastery': 'account', 'Fighters': 'fighters', 'Armor Skins (unlocked by R&D at +4)': 'fighters', 'Decal stock': 'decals', 'Research': 'research',
-  'Stamp Rally': 'rally', 'Collection': 'collection', 'Jackals': 'jackals', 'Location': 'location', 'Boss floor lock': 'location', 'Defense': 'defense',
+  'Stamp Rally': 'rally', 'Collection': 'collection', 'Jackals': 'jackals', 'Stews': 'stews', 'Location': 'location', 'Boss floor lock': 'location', 'Defense': 'defense',
   'Reward Box': 'rewards', 'Storage Box': 'storage', 'Waiting Room': 'hub'
 };
 // uiDirtyTabs() -> Set of tab ids with changes (from review sections and pending operations).
