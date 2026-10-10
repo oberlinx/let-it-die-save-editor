@@ -401,15 +401,31 @@ function runSaveCheck() {
     } else {
       // long-played saves often hold less than their research gives (seen in many real saves, never more)
       const low = RESEARCH_STAMP_TYPES.filter(t => (cur[t] || 0) < (comp[t] || 0) - 0.05);
-      if (low.length) add('note', `Funshots are lower than your research gives: ${low.map(t => `${STAMP_LABELS[t]} ${cur[t] || 0} (research gives ${comp[t]})`).join(', ')}. Long-played saves often have this; the game shows what's saved. Any research change on the Research tab sets all six to what research gives.`, 'research', {
+      if (low.length) add('note', `Funshots are lower than your research gives: ${low.map(t => `${STAMP_LABELS[t]} ${cur[t] || 0} (research gives ${comp[t]})`).join(', ')}. Long-played saves often have this; the game shows what's saved. Research changes on the Research tab only add or remove what that change gives; the fix below sets all six to what research gives.`, 'research', {
         label: 'Set Funshots from research', run: () => { syncStampFromResearch(); return 'Funshots set from research.'; }
       });
     }
   });
 
+  // weapon mastery above the game's top level (20): written by other tools; the game has no data for those levels
+  safe('mastery-max', () => {
+    const over = mstOverMax(), zov = mstZombieOverMax(RAW_SAV_ROOT);
+    const capped = MASTERY_CAP.root === RAW_SAV_ROOT && MASTERY_CAP.on;
+    if (!over.length && (!zov.length || capped)) return;
+    const nm = id => { const r = arr(AP && AP.ptarmtps).find(x => x.id === id); return (r && resolveName(r.name)) || id; };
+    const list = over.slice(0, 4).map(e => `${escapeHtml(nm(e.ptarmtp))} Lv ${e.lvl}`).join(', ') + (over.length > 4 ? ', …' : '');
+    add('problem', `Weapon mastery is above the game's highest level (${mstMaxLevel((over[0] || {}).ptarmtp)})${over.length ? ` on ${over.length} weapon type${over.length === 1 ? '' : 's'} (${list})` : ''}${zov.length && !capped ? `${over.length ? ', and' : ' on'} ${zov.length} entr${zov.length === 1 ? 'y' : 'ies'} copied into your Haters` : ''}. The game has no data for those levels, which can break the save; another editor probably wrote them.`, 'account', {
+      label: 'Set them to the top level', run: () => {
+        for (const e of over) mstSetLevel(e, mstMaxLevel(e.ptarmtp));
+        if (zov.length) MASTERY_CAP.root = RAW_SAV_ROOT, MASTERY_CAP.on = true;
+        return `Weapon mastery capped at the top level (${over.length} weapon type${over.length === 1 ? '' : 's'}${zov.length ? `, ${zov.length} Hater entr${zov.length === 1 ? 'y' : 'ies'} on download` : ''}). Points over the top are kept, as the game does.`;
+      }
+    });
+  });
+
   // weapon mastery: the level must match the mastery points (the game works it out from them)
   safe('mastery', () => {
-    const bad = mstMismatches();
+    const bad = mstMismatches().filter(e => Number(e.lvl) <= mstMaxLevel(e.ptarmtp));
     if (!bad.length) return;
     const nm = id => { const r = arr(AP && AP.ptarmtps).find(x => x.id === id); return (r && resolveName(r.name)) || id; };
     add('warning', `Weapon mastery level doesn't match its mastery points on ${bad.length} weapon type${bad.length === 1 ? '' : 's'} (${bad.slice(0, 4).map(e => `${escapeHtml(nm(e.ptarmtp))} Lv ${e.lvl} with ${Number(e.abp)} pts`).join(', ')}${bad.length > 4 ? ', …' : ''}). Older editor versions set only the level; the game goes by the points.`, 'account', {
@@ -527,7 +543,34 @@ function runSaveCheck() {
     const dup = [ ...seen.entries() ].filter(([, w]) => w.length > 1);
     if (dup.length) add('problem', `${dup.length} item${dup.length === 1 ? ' is' : 's are'} in two places at once (for example: ${escapeHtml([ ...new Set(dup[0][1]) ].join(' and '))}). The game expects each item to exist once.`, 'storage');
     const u = [ ...new Set(unknown) ];
-    if (u.length) add('warning', `${u.length} item type${u.length === 1 ? '' : 's'} in your inventory ${u.length === 1 ? "isn't" : "aren't"} in this masters.db (${escapeHtml(u.slice(0, 3).join(', '))}${u.length > 3 ? ', ...' : ''}). They may come from another game version or a PlayStation save.`, 'storage');
+    if (u.length) add('warning', `${u.length} item type${u.length === 1 ? '' : 's'} in your inventory ${u.length === 1 ? "isn't" : "aren't"} in this masters.db (${escapeHtml(u.slice(0, 3).join(', '))}${u.length > 3 ? ', ...' : ''}). They may come from another game version or a PlayStation save, or another tool added them (an item the game doesn't have can stop the save loading). If the masters.db you loaded is your game's current one, remove them.`, 'fighters', {
+      label: 'Remove those items', run: () => {
+        // parts / mushrooms / beasts / items whose id masters.db doesn't know, from every fighter and the Storage Box.
+        // Fighters' rows are dropped from the save's item tables too (as when a fighter is deleted); a Storage Box
+        // row is dropped at download once no slot points to it.
+        if (FIGHTER_DELETES.root !== RAW_SAV_ROOT) FIGHTER_DELETES = { root: RAW_SAV_ROOT, cids: new Set, eids: new Set };
+        const unk = { pspts: [ 'eptid', 'ptid', PT_INDEX ], psmsrs: [ 'emsrid', 'msrid', MSR_INDEX ], psbsts: [ 'ebstid', 'bstid', BST_INDEX ], psitems: [ 'eitemid', 'itemId', ITEM_INDEX ] };
+        let n = 0;
+        for (const c of arr(SAVE.soul.chrs)) {
+          for (const [list, [eidKey, idKey, index]] of Object.entries(unk)) {
+            const bad = new Set(arr(c[list]).filter(x => x && x[idKey] && !index[x[idKey]]).map(x => x[eidKey]));
+            if (!bad.size) continue;
+            c[list] = arr(c[list]).filter(x => !bad.has(x[eidKey]));
+            if (list === 'pspts') {
+              c.eqpts = arr(c.eqpts).filter(e => !bad.has(e.eptid));
+              if (c.armslots) for (const k of Object.keys(c.armslots)) if (bad.has(c.armslots[k])) delete c.armslots[k];
+            }
+            for (const e of bad) FIGHTER_DELETES.eids.add(e);
+            n += bad.size;
+          }
+        }
+        const clBad = new Set();
+        for (const p of arr(cl.pts)) if (p.ptid && !PT_INDEX[p.ptid]) clBad.add(p.eptid);
+        for (const it of arr(cl.items)) if (it.itemId && !ITEM_INDEX[it.itemId]) clBad.add(it.eitemid);
+        for (const sl of arr(cl.slots)) for (const k of [ 'eptid', 'eitemid' ]) if (clBad.has(sl[k])) { sl[k] = '-1'; n++; }
+        return `Removed ${n} item${n === 1 ? '' : 's'} the loaded masters.db doesn't know.`;
+      }
+    });
   });
 
   // fighters the old "Add Character" created (no freezer slot, missing fields)
@@ -544,12 +587,51 @@ function runSaveCheck() {
     });
   });
 
+  // negative or overflowed numbers (another tool set a value past what the game's 32-bit numbers hold, so it wrapped
+  // round to a negative); the game can't use them
+  safe('negative-values', () => {
+    const INT_MAX = 2147483647, bad = [];
+    // big64 = the game stores it as a 64-bit number (rank points run to 18 billion and more), so only negatives count
+    const look = (obj, key, label, where, big64) => { const v = Number(obj && obj[key]); if (obj && key in obj && (v < 0 || (!big64 && v > INT_MAX))) bad.push({ obj, key, label, where, v }); };
+    for (const [k, label, big] of [ [ 'free_money', 'Kill Coins' ], [ 'spirit', 'SPLithium' ], [ 'bloodnium_point', 'Bloodnium' ], [ 'recycle_point', 'Recycle Points' ], [ 'tdm_point', 'TDM points' ], [ 'rank_point', 'rank points', true ] ]) look(soul, k, label, 'account', big);
+    for (const c of arr(soul.chrs)) for (const [k, label, big] of [ [ 'money', 'Kill Coins carried' ], [ 'spirit', 'SPLithium carried' ], [ 'bloodnium', 'Bloodnium carried' ], [ 'total_exp', 'experience', true ], [ 'rest_exp', 'experience', true ] ]) look(c, k, label, c.name || 'a fighter', big);
+    if (!bad.length) return;
+    add('problem', `${bad.length} value${bad.length === 1 ? ' is' : 's are'} negative or too big for the game: ${bad.slice(0, 4).map(b => `${escapeHtml(b.where)}: ${b.label} ${b.v.toLocaleString()}`).join('; ')}${bad.length > 4 ? '; …' : ''}. A number like this usually means another tool set it past the game's limit and it wrapped round to a negative.`, 'fighters', {
+      label: 'Set them to 0', run: () => { for (const b of bad) b.obj[b.key] = 0; return `Set ${bad.length} value${bad.length === 1 ? '' : 's'} to 0.`; }
+    });
+  });
+
+  // research (R&D) for parts that don't exist in the loaded masters.db
+  safe('research-unknown', () => {
+    if (!PT_INDEX || !Object.keys(PT_INDEX).length) return;
+    const bad = arr(SAVE.user_research).filter(r => r && ((r.ptid && !PT_INDEX[r.ptid]) || (r.before_ptid && !PT_INDEX[r.before_ptid])));
+    if (!bad.length) return;
+    const ids = [ ...new Set(bad.map(r => PT_INDEX[r.ptid] ? r.before_ptid : r.ptid)) ];
+    add('problem', `${bad.length} research (R&D) entr${bad.length === 1 ? 'y is' : 'ies are'} for part${ids.length === 1 ? '' : 's'} the game doesn't have (${ids.slice(0, 4).map(escapeHtml).join(', ')}${ids.length > 4 ? ', …' : ''}). If the masters.db you loaded is your game's current one, another tool added these and they can break R&D. (If you loaded an older masters.db, load the game's own first: then these may be real.)`, 'research', {
+      label: 'Remove them', run: () => {
+        const drop = new Set(bad);
+        SAVE.user_research = SAVE.user_research.filter(r => !drop.has(r));
+        normalizeResearchMarkers(SAVE.user_research);
+        return `Removed ${bad.length} research entr${bad.length === 1 ? 'y' : 'ies'} for parts the game doesn't have.`;
+      }
+    });
+  });
+
   // currencies over bank capacity
   safe('bank', () => {
     const rows = [ [ 'free_money', 'safe_level', 'Kill Coins' ], [ 'spirit', 'spirit_tank_level', 'SPLithium' ] ];
     for (const [v, l, label] of rows) {
       const cap = bankCapacityForLevel(soul[l] != null ? soul[l] : 1, l);
-      if (cap && (soul[v] || 0) > cap) add('warning', `${label} (${Number(soul[v]).toLocaleString()}) is over the bank limit for its level (${cap.toLocaleString()}).`, 'account');
+      if (cap && (soul[v] || 0) > cap) {
+        // smallest bank level that holds the amount; if even the top level can't, top level and the amount cut to its cap
+        const top = bankMaxLevel(l), held = Number(soul[v]);
+        let fit = null;
+        for (let lv = Number(soul[l]) || 1; lv <= top; lv++) { const c = bankCapacityForLevel(lv, l); if (c && c >= held) { fit = lv; break; } }
+        const topCap = bankCapacityForLevel(top, l);
+        add('warning', `${label} (${held.toLocaleString()}) is over the bank limit for its level (${cap.toLocaleString()})${fit ? '' : `, and over the limit of the top level too (${Number(topCap).toLocaleString()})`}.`, 'account', fit
+          ? { label: `Raise the bank to level ${fit}`, run: () => { soul[l] = fit; const lk = l.replace('_level', '_limit'); if (lk in soul) soul[lk] = bankCapacityForLevel(fit, l); return `${label} bank raised to level ${fit} (holds ${Number(bankCapacityForLevel(fit, l)).toLocaleString()}).`; } }
+          : { label: `Top level, ${label} at its limit`, run: () => { soul[l] = top; const lk = l.replace('_level', '_limit'); if (lk in soul) soul[lk] = topCap; soul[v] = topCap; return `${label} bank at level ${top}; ${label} set to ${Number(topCap).toLocaleString()} (${(held - topCap).toLocaleString()} over the limit removed).`; } });
+      }
     }
   });
 

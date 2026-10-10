@@ -372,13 +372,41 @@ function mstLevelFromAbp(ptarmtp, abp) {
   return L;
 }
 // Set a mastery level and keep points consistent (abp -1 = never used is preserved at level 1).
+// Highest mastery level the game has for a weapon type (master_expert_lvl_reward; 20 for every type today).
+function mstMaxLevel(ptarmtp) {
+  let top = 1;
+  for (const r of arr(AP && AP.expertLvl)) if (r.ptarmtp === ptarmtp && Number(r.lvl) > top) top = Number(r.lvl);
+  return top > 1 ? top : 20;
+}
 function mstSetLevel(e, lvl) {
+  if (mstHasTable(e.ptarmtp)) lvl = Math.min(lvl, mstMaxLevel(e.ptarmtp));   // the game has no level above its table
   e.lvl = lvl;
   if (!mstHasTable(e.ptarmtp)) return;
   const abp = Number(e.abp);
   if (mstLevelFromAbp(e.ptarmtp, abp) === lvl) return;   // points already fit this level
   if (lvl <= 1) { e.abp = abp < 0 ? abp : 0; return; }
   e.abp = mstThreshold(e.ptarmtp, lvl);
+}
+// Mastery entries above the game's top level (written by other tools; the game's table stops at 20).
+function mstOverMax() {
+  return arr(SAVE && SAVE.soul && SAVE.soul.mstlvl).filter(e => e && mstHasTable(e.ptarmtp) && Number(e.lvl) > mstMaxLevel(e.ptarmtp));
+}
+// Haters (zombie.mstlvls[uid][cid] = [{ptarmtp, lvl, ...}]) copy the mastery of the fighter they came from, so a
+// level above the top shows up there too. Returns [{list, i}] for each entry over the top in the raw save.
+function mstZombieOverMax(root) {
+  const out = [], z = root && root.zombie && root.zombie.mstlvls;
+  if (!z || typeof z !== 'object') return out;
+  for (const u of Object.values(z)) if (u && typeof u === 'object') for (const list of Object.values(u)) arr(list).forEach((e, i) => {
+    if (e && mstHasTable(e.ptarmtp) && Number(e.lvl) > mstMaxLevel(e.ptarmtp)) out.push({ list, i });
+  });
+  return out;
+}
+// Download step: when the Save check fix was used, cap the Haters' copies too (they are not part of SAVE).
+const MASTERY_CAP = { root: null, on: false };
+function applyMasteryCap(root) {
+  if (MASTERY_CAP.root !== RAW_SAV_ROOT || !MASTERY_CAP.on || !root) return root;
+  for (const { list, i } of mstZombieOverMax(root)) list[i].lvl = mstMaxLevel(list[i].ptarmtp);
+  return root;
 }
 // Mastery entries whose level disagrees with their points.
 function mstMismatches() {

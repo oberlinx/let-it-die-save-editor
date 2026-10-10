@@ -100,6 +100,7 @@ function reviewFileName(ext, stamp) { return `brggame_${stamp || reviewStamp()}.
 //  11. applyJackals                       write per-Jackal reward edits into floor.jkls (and item/part tables).
 //  12. applyFreeCont                      free-continue counters.
 //  12b. applyStews                        the edited stew queue (kept out of RAW_SAV_ROOT until download).
+//  12c. applyMasteryCap                   Haters' copies of weapon mastery capped at the game's top level (Save check fix).
 //  13. applyShutdownReset                 zero chosen fighters' force-shutdown (force-close) counts.
 //  14. applyRewind                        put a crashed run back on its last boss floor.
 //  15. applyRunEnd                        end the run entirely (fighter goes home, run data cleared).
@@ -119,7 +120,7 @@ function buildDownloadRoot() {
   // buildRawSavRootFromSave shares some objects with SAVE (e.g. soul.present IS SAVE.presents), so the result is
   // deep-copied before the transforms run: otherwise a transform (Dates rules, ...) would edit SAVE itself, and the
   // edit would stick even after "Undo" and show up in every later build.
-  return applyRunEnd(applyRewind(applyShutdownReset(applyStews(applyFreeCont(applyJackals(applyBossLock(applyFloorMove(applyStampRally(applyStampMark(applyAccountChoice(restoreEmptyShapes(applyDateRules(JSON.parse(JSON.stringify(buildRawSavRootFromSave(SAVE, RAW_SAV_ROOT, RAW_SAV_MAIN_UID)))), RAW_SAV_ROOT))))))))))));
+  return applyRunEnd(applyRewind(applyShutdownReset(applyMasteryCap(applyStews(applyFreeCont(applyJackals(applyBossLock(applyFloorMove(applyStampRally(applyStampMark(applyAccountChoice(restoreEmptyShapes(applyDateRules(JSON.parse(JSON.stringify(buildRawSavRootFromSave(SAVE, RAW_SAV_ROOT, RAW_SAV_MAIN_UID)))), RAW_SAV_ROOT)))))))))))));
 }
 
 // Friendly labels for soul (account) keys shown in the review list; unknown keys fall back to reviewKeyLabel().
