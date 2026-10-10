@@ -13777,7 +13777,7 @@ function uiSig(sections) { return sections ? JSON.stringify(sections.map(s => s.
 // cheap fingerprint of everything that can differ from the loaded save; the (slow) change list is only rebuilt when it moves
 function uiInputSig() {
   try {
-    return JSON.stringify([ SAVE, FLOOR_MOVE.root === RAW_SAV_ROOT && FLOOR_MOVE.target, BOSS_LOCK.root === RAW_SAV_ROOT && [ BOSS_LOCK.mode, BOSS_LOCK.which, BOSS_LOCK.extend, BOSS_LOCK.rewards ], LUCKY.root === RAW_SAV_ROOT && LUCKY.seed, RUN_END.root === RAW_SAV_ROOT && RUN_END.on,
+    return JSON.stringify([ SAVE, FLOOR_MOVE.root === RAW_SAV_ROOT && FLOOR_MOVE.target, BOSS_LOCK.root === RAW_SAV_ROOT && [ BOSS_LOCK.mode, BOSS_LOCK.which, BOSS_LOCK.extend, BOSS_LOCK.rewards ], LUCKY.root === RAW_SAV_ROOT && [ LUCKY.seed, LUCKY.masks ], RUN_END.root === RAW_SAV_ROOT && RUN_END.on,
       REWIND.root === RAW_SAV_ROOT && REWIND.on, FREE_CONT.root === RAW_SAV_ROOT && [ FREE_CONT.on, FREE_CONT.perDay ], STAMP_MARK.root === RAW_SAV_ROOT && STAMP_MARK.on, JKL.root === RAW_SAV_ROOT && JKL.edits,
       SHUTDOWN_RESET.root === RAW_SAV_ROOT && [ ...SHUTDOWN_RESET.cids ], FIGHTER_DELETES.root === RAW_SAV_ROOT && [ [ ...FIGHTER_DELETES.cids ], [ ...FIGHTER_DELETES.eids ] ], FIGHTER_RECOVERS.root === RAW_SAV_ROOT && [ ...FIGHTER_RECOVERS.cids ],
       RALLY.root === RAW_SAV_ROOT && [ RALLY.stamps, RALLY.bonus ], RAW_VIEW.edAt, DATE_RULES, RAW_SAV_ROOT === UI.origRoot ]);
@@ -14560,13 +14560,17 @@ function uiTourAuto() {
 //  - One hidden seed per press, kept in memory only. Every build of the download root derives the same plan from it
 //    (Math.random is swapped for a seeded generator while applyLucky runs), so review, drawer and file always agree.
 //    Pressing again just takes a new seed.
+//  - "Include masks" (NEO only, drawn next to the button while at least one of the 8 mask blueprints is unknown; off on every page
+//    load): if the press places anything, ONE of the placements is a mask instead of a regular blueprint (counts toward k and the
+//    ceiling). Masks have no drop rows on NEO floors, and boss floor plans have no medium-box slots, so the mask goes into a built
+//    large box / treasure enemy slot, deliberately outside the normal loot pool. Zero stays zero; the flag lives in LUCKY.masks.
 
 // LUCKY: root = the save the seed belongs to, seed = 0 when nothing is pending.
-let LUCKY = { root: null, seed: 0 };
+let LUCKY = { root: null, seed: 0, masks: false };
 // True when the last applyLucky() call actually changed the download (read by the review / masking helpers).
 let LUCKY_LAST = false;
 // luckySync(): forget the seed when a different save is loaded.
-function luckySync() { if (LUCKY.root !== RAW_SAV_ROOT) LUCKY = { root: RAW_SAV_ROOT, seed: 0 }; }
+function luckySync() { if (LUCKY.root !== RAW_SAV_ROOT) LUCKY = { root: RAW_SAV_ROOT, seed: 0, masks: false }; }
 // luckyPending(): a press is waiting to be applied at download time.
 function luckyPending() { return LUCKY.root === RAW_SAV_ROOT && !!LUCKY.seed; }
 
@@ -14711,6 +14715,18 @@ function luckyPlacedRewards(entries) {
   }
   return out;
 }
+// luckyMaskPool(have, planned, isPs): the mask blueprints (ITMP_GAS_HEAD_0N1..0N8) still unknown and not already in a planned
+// reward. Masks have no drop rows on any NEO floor; the "Include masks" box places one outside the floor's own loot table.
+function luckyMaskPool(have, planned, isPs) {
+  const inPlan = new Set();
+  luckyScan(luckyPlacedRewards(planned), '', inPlan, 0);
+  const out = [];
+  for (let n = 1; n <= 8; n++) {
+    const id = 'ITMP_GAS_HEAD_0N' + n;
+    if (rwdIsBlueprint(id) && isRealBlueprint(id) && !rewardUnfit('bp', id, isPs) && luckyUnknown(id, have) && !inPlan.has(id)) out.push(id);
+  }
+  return out;
+}
 // luckyRoute(floorId): 'neo' for the four NEO routes, 'main' for regular Heaven.
 function luckyRoute(id) { return hvnRoute(id).key === 'main' ? 'main' : 'neo'; }
 
@@ -14729,7 +14745,9 @@ function luckyAvailable() {
   const entries = new Map(blkExisting(from));
   if (BOSS_LOCK.root === r && BOSS_LOCK.mode) { const p = blkPlanFresh(); if (p) for (const it of p.items) if (it.entry) entries.set(it.floor.id, it.entry); }
   const a = luckyAnalyze({ ahead, entryOf: f => entries.get(f.id) || null, have, isPs: isPsSave(), route: luckyRoute(from), planned: [ ...entries.values() ] });
-  return Object.assign(a, { ok: a.pool.size > 0 && a.room > 0 });
+  const ok = a.pool.size > 0 && a.room > 0;
+  const masks = ok && luckyRoute(from) === 'neo' ? luckyMaskPool(have, [ ...entries.values() ], isPsSave()).length : 0;
+  return Object.assign(a, { ok, masks });
 }
 
 // ---- the download step ----
@@ -14804,11 +14822,19 @@ function applyLucky(root) {
     const ws = [ ...a.pool.values() ].map(v => v.w).sort((x, y) => x - y);
     const rareCut = ws.length >= 4 ? ws[Math.floor(0.25 * (ws.length - 1))] : -1;
     const used = new Set();
+    // "Include masks" (NEO only): one of the k placements is a mask instead of a regular blueprint (it counts toward k and the ceiling)
+    const maskIds = LUCKY.masks && luckyRoute(cur.id) === 'neo' ? luckyMaskPool(have, list, savePlatform(root) === 'PS') : [];
+    const maskAt = maskIds.length ? Math.floor(Math.random() * k) : -1;
     let placed = 0;
     for (const fl of floors) {
       if (placed >= k) break;
       const slotOrder = fl.slots.slice();
       for (let n = slotOrder.length - 1; n > 0; n--) { const j = Math.floor(Math.random() * (n + 1)); [ slotOrder[n], slotOrder[j] ] = [ slotOrder[j], slotOrder[n] ]; }
+      if (placed === maskAt) {
+        fl.e.rwds[slotOrder[0].i].rwdid = maskIds[Math.floor(Math.random() * maskIds.length)];
+        placed++;
+        continue;
+      }
       for (const sl of slotOrder) {
         const opts = [ ...sl.c ].filter(([ b ]) => a.pool.has(b) && !used.has(b)).map(([ b, v ]) => ({ b, id: v.id, w: v.w * (a.pool.get(b).w <= rareCut ? LUCKY_RARE_BOOST : 1) }));
         const pick = luckyPick(opts);
@@ -14852,7 +14878,11 @@ function renderLucky() {
   }
   host.innerHTML = `<h3 style="margin:18px 0 6px;">I'm feeling lucky</h3>
     <div class="capNote" style="margin:0 0 10px;">Plans the rest of this run's boss floors and hides some blueprints you don't have among their rewards. You won't be told how many or where. Press again to roll it again. Applied when you download. If you load the downloaded save here with <b>Show rewards (spoilers)</b> ticked, the Location tab can show them.</div>
-    <div class="toolbar"><button class="action" id="lucky-go">I'm feeling lucky</button></div>`;
+    <div class="toolbar"><button class="action" id="lucky-go">I'm feeling lucky</button></div>
+    ${a.masks > 0 ? `<label style="cursor:pointer; display:block; margin:8px 0 2px;"><input type="checkbox" id="lucky-masks" ${LUCKY.masks ? 'checked' : ''} style="width:auto; margin-right:6px;">Include masks</label>
+    <div class="capNote" style="margin:0 0 6px;">If the press hides anything, one of the blueprints can be a mask you don't have. Masks don't drop on NEO floors in the normal game, so this puts one in a box outside the usual loot pool. It counts toward the limit.</div>` : ''}`;
+  const mk = document.getElementById('lucky-masks');
+  if (mk) mk.addEventListener('change', () => { luckySync(); LUCKY.masks = mk.checked; renderAll(); });
   document.getElementById('lucky-go').addEventListener('click', () => {
     luckySync();
     LUCKY.seed = luckyNewSeed();

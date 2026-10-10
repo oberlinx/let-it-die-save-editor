@@ -197,7 +197,7 @@ function uiSig(sections) { return sections ? JSON.stringify(sections.map(s => s.
 // cheap fingerprint of everything that can differ from the loaded save; the (slow) change list is only rebuilt when it moves
 function uiInputSig() {
   try {
-    return JSON.stringify([ SAVE, FLOOR_MOVE.root === RAW_SAV_ROOT && FLOOR_MOVE.target, BOSS_LOCK.root === RAW_SAV_ROOT && [ BOSS_LOCK.mode, BOSS_LOCK.which, BOSS_LOCK.extend, BOSS_LOCK.rewards ], LUCKY.root === RAW_SAV_ROOT && LUCKY.seed, RUN_END.root === RAW_SAV_ROOT && RUN_END.on,
+    return JSON.stringify([ SAVE, FLOOR_MOVE.root === RAW_SAV_ROOT && FLOOR_MOVE.target, BOSS_LOCK.root === RAW_SAV_ROOT && [ BOSS_LOCK.mode, BOSS_LOCK.which, BOSS_LOCK.extend, BOSS_LOCK.rewards ], LUCKY.root === RAW_SAV_ROOT && [ LUCKY.seed, LUCKY.masks ], RUN_END.root === RAW_SAV_ROOT && RUN_END.on,
       REWIND.root === RAW_SAV_ROOT && REWIND.on, FREE_CONT.root === RAW_SAV_ROOT && [ FREE_CONT.on, FREE_CONT.perDay ], STAMP_MARK.root === RAW_SAV_ROOT && STAMP_MARK.on, JKL.root === RAW_SAV_ROOT && JKL.edits,
       SHUTDOWN_RESET.root === RAW_SAV_ROOT && [ ...SHUTDOWN_RESET.cids ], FIGHTER_DELETES.root === RAW_SAV_ROOT && [ [ ...FIGHTER_DELETES.cids ], [ ...FIGHTER_DELETES.eids ] ], FIGHTER_RECOVERS.root === RAW_SAV_ROOT && [ ...FIGHTER_RECOVERS.cids ],
       RALLY.root === RAW_SAV_ROOT && [ RALLY.stamps, RALLY.bonus ], RAW_VIEW.edAt, DATE_RULES, RAW_SAV_ROOT === UI.origRoot ]);
