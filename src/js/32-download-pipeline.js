@@ -97,6 +97,7 @@ function reviewFileName(ext, stamp) { return `brggame_${stamp || reviewStamp()}.
 //   8. applyStampRally                    write Stamp Rally edits (floor.stamp.stamps + bonus game flag).
 //   9. applyFloorMove                     move the paused floor (soul.flrid) and rewrite floor ids everywhere.
 //  10. applyBossLock                      pre-plan upcoming boss floors in soul.hvntrinfo.
+//  10b. applyLucky                        "I'm feeling lucky": plan the whole run and hide unknown blueprints in it (seeded, spoiler free).
 //  11. applyJackals                       write per-Jackal reward edits into floor.jkls (and item/part tables).
 //  12. applyFreeCont                      free-continue counters.
 //  12b. applyStews                        the edited stew queue (kept out of RAW_SAV_ROOT until download).
@@ -120,7 +121,7 @@ function buildDownloadRoot() {
   // buildRawSavRootFromSave shares some objects with SAVE (e.g. soul.present IS SAVE.presents), so the result is
   // deep-copied before the transforms run: otherwise a transform (Dates rules, ...) would edit SAVE itself, and the
   // edit would stick even after "Undo" and show up in every later build.
-  return applyRunEnd(applyRewind(applyShutdownReset(applyMasteryCap(applyStews(applyFreeCont(applyJackals(applyBossLock(applyFloorMove(applyStampRally(applyStampMark(applyAccountChoice(restoreEmptyShapes(applyDateRules(JSON.parse(JSON.stringify(buildRawSavRootFromSave(SAVE, RAW_SAV_ROOT, RAW_SAV_MAIN_UID)))), RAW_SAV_ROOT)))))))))))));
+  return applyRunEnd(applyRewind(applyShutdownReset(applyMasteryCap(applyStews(applyFreeCont(applyJackals(applyLucky(applyBossLock(applyFloorMove(applyStampRally(applyStampMark(applyAccountChoice(restoreEmptyShapes(applyDateRules(JSON.parse(JSON.stringify(buildRawSavRootFromSave(SAVE, RAW_SAV_ROOT, RAW_SAV_MAIN_UID)))), RAW_SAV_ROOT))))))))))))));
 }
 
 // Friendly labels for soul (account) keys shown in the review list; unknown keys fall back to reviewKeyLabel().
@@ -366,6 +367,7 @@ function reviewDiff(A, B, rawA, rawB) {
   const locLbl = id => !id ? 'none' : hvnFloor(id) ? hvnFloorLabel(hvnFloor(id)) : id;
   if (fa !== fb) lc.lines.push(`Paused floor: ${locLbl(fa)} → ${locLbl(fb)}`);
   if (fa !== fb && FLOOR_MOVE.root === RAW_SAV_ROOT && FLOOR_MOVE.target === fb && flmSwapRef(fb)) lc.lines.push(`Screamer Pit turned into its ${flmPitNo(flmSwapRef(fb)) > 5 ? '100F+' : 'below-100F'} twin (RUSH${flmPitNo(flmCurRef())} → RUSH${flmPitNo(flmSwapRef(fb))}) so it can be on ${hvnFloor(fb).no}F (EXPERIMENTAL)`);
+  if (LUCKY_LAST && luckyPending()) lc.lines.push('Lucky run planned');
   // Boss lock is shown only if it will actually be written (a run end overrides it); hvntrinfo is the per-floor area plan.
   if (BOSS_LOCK.root === RAW_SAV_ROOT && BOSS_LOCK.mode && !(RUN_END.root === RAW_SAV_ROOT && RUN_END.on)) {
     // compare with the planned floors as they'd be after any floor move (the paused floor is never locked); the lock

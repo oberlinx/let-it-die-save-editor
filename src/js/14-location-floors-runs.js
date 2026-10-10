@@ -708,7 +708,7 @@ function blockLocation() {
     <div class="block-head"><div><div class="eyebrow">Heaven</div><h2>Location</h2></div></div>
     <div class="block-body">
       <label style="cursor:pointer; display:inline-block; margin:0 0 10px;" title="Rolled rewards are hidden until this is ticked"><input type="checkbox" id="loc-spoil" ${LOC_SPOIL ? 'checked' : ''} style="width:auto; margin-right:6px;">Show rewards (spoilers)</label>
-      <div id="loc-body"></div><div id="loc-lock"></div></div>
+      <div id="loc-body"></div><div id="loc-lock"></div><div id="loc-lucky"></div></div>
   </section>`;
 }
 
@@ -964,6 +964,7 @@ function renderLocation() {
   // refresh the floor-move model from the current SAVE, then the Lock boss floors panel
   flmSync();
   renderBossLock();
+  renderLucky();
   const cur = flmCurrent();
   const f = cur && hvnFloor(cur.flrid);
   let h = `<div class="capNote" style="margin-top:0;">Move a fighter paused on a Heaven boss floor to another boss floor of the same route and map (confirmed in game). Keep a backup of your save. The run's Exploration Bonus is based on the floor you end on, so moving deeper raises the Bloodnium bonus.</div>`;

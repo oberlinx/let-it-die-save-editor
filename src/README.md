@@ -32,7 +32,8 @@ You need [Node.js](https://nodejs.org/) (any current version). The build only st
 | `js/32-download-pipeline.js` | `{}`/`[]` shape restore, review diff, `buildDownloadRoot()` |
 | `js/33-download-history.js` | Download history (IndexedDB) |
 | `js/34-ui-pack.js`, `js/35-ui-pack-2.js` | Search, status bar, changes drawer, shortcuts, themes, tour, recent saves |
-| `js/36-startup.js` | Start-up wiring (runs last) |
+| `js/36-lucky-run.js` | "I'm feeling lucky" (Location tab): pool, ceilings, seeded plan, download step |
+| `js/37-startup.js` | Start-up wiring (runs last) |
 
 ## Rules worth keeping
 

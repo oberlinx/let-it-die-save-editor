@@ -14,7 +14,7 @@ function rawReset() { RAW_VIEW = { root: RAW_SAV_ROOT, src: 'loaded', ed: null, 
 // The data being browsed: the loaded raw root, or a cached deep copy of buildDownloadRoot() ("with your edits").
 function rawData() {
   if (RAW_VIEW.src !== 'edited') return RAW_SAV_ROOT;
-  if (!RAW_VIEW.ed) { RAW_VIEW.ed = JSON.parse(JSON.stringify(buildDownloadRoot())); RAW_VIEW.edAt = Date.now(); }
+  if (!RAW_VIEW.ed) { RAW_VIEW.ed = luckyMaskCopy(JSON.parse(JSON.stringify(buildDownloadRoot()))); RAW_VIEW.edAt = Date.now(); }
   return RAW_VIEW.ed;
 }
 // Follow a key path into data; undefined if any step is missing.
@@ -177,7 +177,7 @@ let JD = { root: null, aSrc: 'loaded', bSrc: 'file', fileRoot: null, fileName: '
 function jdSync() { if (JD.root !== RAW_SAV_ROOT) Object.assign(JD, { root: RAW_SAV_ROOT, edA: null, res: null, view: null, hits: null, page: 0, msg: '' }); }
 // "with your edits" is the save exactly as Download would write it now (built once per Compare)
 // Cached deep copy of the save as Download would write it.
-function jdEdited() { if (!JD.edA) JD.edA = JSON.parse(JSON.stringify(buildDownloadRoot())); return JD.edA; }
+function jdEdited() { if (!JD.edA) JD.edA = luckyMaskCopy(JSON.parse(JSON.stringify(buildDownloadRoot()))); return JD.edA; }
 // Resolve compare side 'A' or 'B' to a root object (edited, loaded, Compare-tab save or loaded file).
 function jdSide(which) {
   const src = which === 'A' ? JD.aSrc : JD.bSrc;

@@ -197,7 +197,7 @@ function uiSig(sections) { return sections ? JSON.stringify(sections.map(s => s.
 // cheap fingerprint of everything that can differ from the loaded save; the (slow) change list is only rebuilt when it moves
 function uiInputSig() {
   try {
-    return JSON.stringify([ SAVE, FLOOR_MOVE.root === RAW_SAV_ROOT && FLOOR_MOVE.target, BOSS_LOCK.root === RAW_SAV_ROOT && [ BOSS_LOCK.mode, BOSS_LOCK.which, BOSS_LOCK.extend, BOSS_LOCK.rewards ], RUN_END.root === RAW_SAV_ROOT && RUN_END.on,
+    return JSON.stringify([ SAVE, FLOOR_MOVE.root === RAW_SAV_ROOT && FLOOR_MOVE.target, BOSS_LOCK.root === RAW_SAV_ROOT && [ BOSS_LOCK.mode, BOSS_LOCK.which, BOSS_LOCK.extend, BOSS_LOCK.rewards ], LUCKY.root === RAW_SAV_ROOT && LUCKY.seed, RUN_END.root === RAW_SAV_ROOT && RUN_END.on,
       REWIND.root === RAW_SAV_ROOT && REWIND.on, FREE_CONT.root === RAW_SAV_ROOT && [ FREE_CONT.on, FREE_CONT.perDay ], STAMP_MARK.root === RAW_SAV_ROOT && STAMP_MARK.on, JKL.root === RAW_SAV_ROOT && JKL.edits,
       SHUTDOWN_RESET.root === RAW_SAV_ROOT && [ ...SHUTDOWN_RESET.cids ], FIGHTER_DELETES.root === RAW_SAV_ROOT && [ [ ...FIGHTER_DELETES.cids ], [ ...FIGHTER_DELETES.eids ] ], FIGHTER_RECOVERS.root === RAW_SAV_ROOT && [ ...FIGHTER_RECOVERS.cids ],
       RALLY.root === RAW_SAV_ROOT && [ RALLY.stamps, RALLY.bonus ], RAW_VIEW.edAt, DATE_RULES, RAW_SAV_ROOT === UI.origRoot ]);
@@ -253,6 +253,7 @@ function uiPending() {
   const out = [], r = RAW_SAV_ROOT; if (!r) return out;
   if (FLOOR_MOVE.root === r && FLOOR_MOVE.target) out.push({ text: `Move to floor ${hvnFloor(FLOOR_MOVE.target) ? hvnFloorLabel(hvnFloor(FLOOR_MOVE.target)) : FLOOR_MOVE.target}`, cancel: () => { FLOOR_MOVE.target = ''; FLOOR_MOVE.armed = false; FLOOR_MOVE.msg = ''; FLOOR_MOVE.rolls = null; } });
   if (BOSS_LOCK.root === r && BOSS_LOCK.mode) out.push({ text: `Boss floor lock: ${(BLK_MODES[BOSS_LOCK.mode] || {}).label || BOSS_LOCK.mode}`, cancel: () => { BOSS_LOCK.mode = ''; BOSS_LOCK.which = ''; BOSS_LOCK.plan = null; } });
+  if (luckyPending()) out.push({ text: 'Lucky run planned', cancel: () => { LUCKY.seed = 0; } });
   if (RUN_END.root === r && RUN_END.on) out.push({ text: 'End the run (fighter goes home)', cancel: () => { RUN_END.on = false; } });
   if (REWIND.root === r && REWIND.on) out.push({ text: 'Rewind the run', cancel: () => { REWIND.on = false; } });
   if (FREE_CONT.root === r && FREE_CONT.on) out.push({ text: `Free continues (${FREE_CONT.perDay} a day)`, cancel: () => { FREE_CONT.on = false; } });
