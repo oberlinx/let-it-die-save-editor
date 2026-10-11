@@ -1,0 +1,31 @@
+name: Feature request
+description: Suggest something the editor could do
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: What do you want to do in the game?
+      description: Describe the goal, not only the button you imagine.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: How could the editor help?
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Does it matter for PC, PlayStation or both?
+      options:
+        - Both
+        - PC only
+        - PlayStation only
+        - Not sure
+  - type: checkboxes
+    id: offline
+    attributes:
+      label: Checks
+      options:
+        - label: This is for offline saves only (it does not help cheat other players)
+          required: true

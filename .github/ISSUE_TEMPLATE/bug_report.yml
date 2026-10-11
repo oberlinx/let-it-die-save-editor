@@ -1,0 +1,62 @@
+name: Bug report
+description: Something in the editor doesn't work, or an edited save misbehaves in the game
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. **Please do not attach your whole save here**; it holds your account data. If I need it, I'll ask.
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Save platform
+      options:
+        - PC (Steam)
+        - PlayStation
+        - Not sure
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and version
+      placeholder: Chrome 130, Firefox 131, Edge ...
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: What did you do?
+      description: Which tab or button, in order.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect, and what happened instead?
+      description: Paste any error message. A screenshot helps.
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where did the problem show up?
+      options:
+        - In the editor (loading, a tab, or downloading)
+        - In the game, when loading the edited save
+        - In the game, later (on a floor, in a menu, in a run)
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: savecheck
+    attributes:
+      label: What did the Save check panel say after you loaded your save?
+  - type: checkboxes
+    id: backup
+    attributes:
+      label: Checks
+      options:
+        - label: I closed the game before loading the save, and I have a backup of the original
+          required: true
+        - label: The same save loaded fine in the game before I edited it
