@@ -321,7 +321,7 @@ function wireEquipEditor(chr) {
 // skillChip(): HTML chip for one equipped decal with a remove button (data-remove-skill = index).
 function skillChip(s, i) {
   const rec = SKL_INDEX[s.id || s.sklid];
-  return `<div class="chip">${rec ? escapeHtml(rec.name) : escapeHtml(s.id || s.sklid || '?')}<button data-remove-skill="${i}">✕</button></div>`;
+  return `<div class="chip">${decalIcon(s.id || s.sklid, 22)}${rec ? escapeHtml(rec.name) : escapeHtml(s.id || s.sklid || '?')}<button data-remove-skill="${i}">✕</button></div>`;
 }
 
 // escapeHtml(): escape & < > " ' for safe insertion into HTML; null/undefined become ''.

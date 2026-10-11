@@ -21,6 +21,19 @@ function decalNameP(id) {
   if (!r) return id;
   return r.name + (Number(r.premium) ? ' (Premium)' : '');
 }
+// Decal icons: every icon is a cell in one embedded sprite sheet (CSS --decal-atlas), so they work offline.
+// DECAL_ATLAS = { cell, cols, names } where names[i] is the icon in cell i (left to right, top to bottom).
+const DECAL_ATLAS = JSON.parse(document.getElementById('decal-atlas-data').textContent);
+const DECAL_ICON_AT = Object.fromEntries(DECAL_ATLAS.names.map((n, i) => [n, i]));
+// decalIcon(): <span> showing a decal's icon at px size, or '' if it has none. A premium decal
+// ("..._P") shares the icon of its normal version.
+function decalIcon(id, px) {
+  let i = DECAL_ICON_AT[id];
+  if (i == null) i = DECAL_ICON_AT[String(id).replace(/_P$/, '')];
+  if (i == null) return '';
+  const c = DECAL_ATLAS.cols;
+  return `<span class="dicon" style="width:${px}px; height:${px}px; background-size:${c * px}px auto; background-position:-${(i % c) * px}px -${Math.floor(i / c) * px}px;"></span>`;
+}
 // 'PS-only' for PlayStation-only decals, else ''.
 function decalOddTag(id) {
   const r = SKL_INDEX[id];
@@ -79,7 +92,7 @@ function wireSkillDecals() {
       const e = entryFor(s.id);
       const cnt = e ? Math.min(Math.max(e.cnt || 0, 0), DECAL_CAP) : 0;
       const tag = decalOddTag(s.id);
-      return `<div class="listRow"><div class="name">${escapeHtml(s.name)}${Number(s.premium) ? ' <span class="badge" style="margin-left:4px;" title="Kept when the fighter dies or the decal is taken off">Premium</span>' : ''}${tag ? ` <span class="badge" style="margin-left:4px;">${tag}</span>` : ''}</div><div class="id">${s.id}</div>\n        <input type="number" class="decal-cnt" data-decal="${s.id}" min="0" max="${DECAL_CAP}" value="${cnt}" style="width:55px;">\n        <button class="subtle" data-decal-max="${s.id}">Max</button>\n      </div>`;
+      return `<div class="listRow"><a class="diconLink" href="${MODEL_VIEWER_URL}decals.html#${encodeURIComponent(s.id)}" target="_blank" rel="noopener" title="Open in the decal catalogue (needs internet)">${decalIcon(s.id, 32)}</a><div class="name">${escapeHtml(s.name)}${Number(s.premium) ? ' <span class="badge" style="margin-left:4px;" title="Kept when the fighter dies or the decal is taken off">Premium</span>' : ''}${tag ? ` <span class="badge" style="margin-left:4px;">${tag}</span>` : ''}</div><div class="id">${s.id}</div>\n        <input type="number" class="decal-cnt" data-decal="${s.id}" min="0" max="${DECAL_CAP}" value="${cnt}" style="width:55px;">\n        <button class="subtle" data-decal-max="${s.id}">Max</button>\n      </div>`;
     }).join('') || '<div style="padding:10px; color:var(--text-faint); font-size:12px;">No matches.</div>';
     document.querySelectorAll('.decal-cnt').forEach(inp => {
       inp.addEventListener('change', () => {
