@@ -419,3 +419,17 @@
   #ui-tour .tourStep { font-size: 11px; color: var(--text-faint); }
   #ui-tour .tourBtns { display: flex; gap: 8px; align-items: center; }
 
+  /* Model picker (Fighters tab): thumbnail button beside the model select, and its pop-up grid of faces */
+  .body-pick { flex: none; width: 34px; height: 34px; padding: 0; overflow: hidden; cursor: pointer; background: #2a2d33; border: 1px solid var(--panel-border); color: var(--text-dim); }
+  .body-pick:hover:not(:disabled) { border-color: var(--accent-bright); }
+  .body-pick:disabled { cursor: default; opacity: 0.5; }
+  .body-pick img { display: block; width: 100%; height: 100%; object-fit: cover; }
+  #body-picker { position: fixed; z-index: 800; max-width: calc(100vw - 16px); max-height: calc(100vh - 16px); overflow: auto; padding: 10px; background: var(--panel); border: 1px solid var(--panel-border-bright); box-shadow: 0 8px 28px rgba(0,0,0,0.6); }
+  #body-picker .bp-row { display: grid; grid-template-columns: repeat(8, 72px); gap: 6px; margin-bottom: 6px; }
+  #body-picker button { padding: 0; cursor: pointer; background: #2a2d33; border: 1px solid var(--panel-border); color: var(--text-dim); font-family: var(--mono); font-size: 10.5px; }
+  #body-picker button:hover { border-color: var(--accent-bright); color: var(--text); }
+  #body-picker button.on { border-color: var(--accent-bright); color: var(--text); box-shadow: inset 0 0 0 1px var(--accent-bright); }
+  #body-picker button img { display: block; width: 100%; aspect-ratio: 1; }
+  #body-picker button span { display: block; padding: 2px 0 3px; background: var(--bg-raised); }
+  #body-picker a { font-size: 11px; color: var(--text-dim); }
+  @media (max-width: 660px) { #body-picker .bp-row { grid-template-columns: repeat(4, 72px); } }

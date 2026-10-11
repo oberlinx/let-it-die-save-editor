@@ -317,6 +317,12 @@ function fighterFitNote(before, chr) {
 function bodyGender(id) { const b = arr(AP && AP.bodies).find(x => x.id === id); return b ? b.gender : (/MALE_/.test(id) && !/FEMALE/.test(id) ? 'GENDER_MALE' : 'GENDER_FEMALE'); }
 // bodyLabel(): friendly label such as "Female 3" for a body id.
 function bodyLabel(id) { const b = arr(AP && AP.bodies).find(x => x.id === id); return b ? `${b.gender === 'GENDER_MALE' ? 'Male' : 'Female'} ${Number(String(b.id).slice(-3))}` : String(id); }
+// Model thumbnails: one small face render per master_body id (the game shows no name or picture for a model).
+// They are embedded so the picker works offline; MODEL_VIEWER_URL has the full-size views.
+const BODY_THUMBS = JSON.parse(document.getElementById('body-thumbs-data').textContent);
+const MODEL_VIEWER_URL = 'https://oberlinx.github.io/let-it-die-model-viewer/';
+// bodyThumbSrc(): data URL of the thumbnail for a body id, or '' if there is none.
+function bodyThumbSrc(id) { return BODY_THUMBS[id] ? 'data:image/webp;base64,' + BODY_THUMBS[id] : ''; }
 // setFighterBody(): change a fighter's model. If the current gas mask belongs to the other gender it is
 // swapped for the mask with the same trailing number (or the first one) of the new gender.
 // Also mirrors the new body into the defense lineup entry (SAVE.fortsetting) for that cid.

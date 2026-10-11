@@ -20,6 +20,7 @@ You need [Node.js](https://nodejs.org/) (any current version). The build only st
 | `index.shell.html` | Page skeleton: header buttons, status bar, include markers |
 | `styles.css` | All CSS (the background image lives in `assets/background.jpg.b64`) |
 | `data/templates.json` | Blank records the game uses for new entries (kept byte-for-byte) |
+| `data/body-thumbs.json` | Face thumbnail (base64 WebP) per fighter model id, for the model picker; rendered by the let-it-die-model-viewer repo's tools |
 | `js/01-core-state-and-tables.js` | File overview, global state, game constants and lookup tables |
 | `js/02-save-codec.js` | `.sav` read/write: BRG header + zlib chunks |
 | `js/03-load-adapter.js` | Raw save JSON → the editor's `SAVE` shape (works on a copy) |
