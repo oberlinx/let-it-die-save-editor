@@ -8312,7 +8312,7 @@ function runCsv(d) {
   const lines = [ [ 'Section', 'Field', 'Value' ].join(',') ];
   for (const r of runRows(d)) lines.push(r.map(q).join(','));
   // reward names only with "Show rewards (spoilers)" ticked, like the tab
-  if (d.upcoming.length && !LOC_SPOIL) lines.push('', [ 'Map rewards', `${d.upcoming.length} boss floors with rewards on the map (hidden: tick "Show rewards (spoilers)" on the Location tab to export them)` ].map(q).join(','));
+  if (d.upcoming.length && !LOC_SPOIL) lines.push('', [ 'Map rewards', `${d.upcoming.length} boss floors with rewards on the map (hidden: tick "Show run rewards (spoilers)" on this tab to export them)` ].map(q).join(','));
   else if (d.upcoming.length) {
     lines.push('', [ 'Map rewards', 'Floor', 'Legendary Chest', 'Rare', 'Other rewards' ].join(','));
     for (const e of d.upcoming) { const hf = hvnFloor(e.flrid); lines.push([ 'Map rewards', hf ? hf.no + 'F' : e.flrid, e.rwdid ? itemDisplayName(e.rwdid) : '', Number(e.is_rare) ? 'yes' : '', runRewardText(e) ].map(q).join(',')); }
@@ -8330,7 +8330,7 @@ function blockRun() {
   </section>`;
 }
 // Render the Current Run tab into #run-body (read-only). Shows a notice when the save isn't in a run.
-// Also wires the Jackal spoiler checkbox, which persists its choice and re-renders.
+// Also wires the run rewards and Jackal spoiler checkboxes, which persist their choice and re-render.
 function renderRun() {
   const host = document.getElementById('run-body');
   if (!host) return;
@@ -8358,14 +8358,18 @@ function renderRun() {
   h += `<h3>Run details</h3><table class="runTable"><tbody>${runRows(d).filter(r => [ 'Where', 'Time', 'Health', 'Fighter' ].includes(r[0])).map(r => `<tr><td>${escapeHtml(r[1])}</td><td class="n">${escapeHtml(typeof r[2] === 'number' ? runN(r[2]) : String(r[2]))}</td></tr>`).join('')}</tbody></table>`;
   h += runExtraHtml(d);
   if (d.upcoming.length) {
-    h += `<h3>Map rewards</h3>`;
-    if (!LOC_SPOIL) h += `<div class="capNote" style="margin-top:0;">${d.upcoming.length} boss floor${d.upcoming.length === 1 ? '' : 's'} with rewards on the map. Tick "Show rewards (spoilers)" on the Location tab to list them here.</div>`;
+    h += `<h3 style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">Map rewards
+      <label style="margin-left:auto; font-weight:400; font-size:13px; cursor:pointer; display:flex; align-items:center; gap:6px;" title="Off by default. The same setting as &quot;Show rewards (spoilers)&quot; on the Location tab"><input type="checkbox" id="run-rwd-spoil" ${LOC_SPOIL ? 'checked' : ''} style="width:auto;"> Show run rewards (spoilers)</label></h3>`;
+    if (!LOC_SPOIL) h += `<div class="capNote" style="margin-top:0;">${d.upcoming.length} boss floor${d.upcoming.length === 1 ? '' : 's'} with rewards on the map. Tick the box to list them.</div>`;
     else h += `<table class="runTable"><thead><tr><th>Floor</th><th>Legendary Chest</th><th>Other rewards</th></tr></thead><tbody>${d.upcoming.map(e => { const hf = hvnFloor(e.flrid); return `<tr><td>${escapeHtml(hf ? hf.no + 'F' : e.flrid)}${Number(e.is_rare) ? legendTag() : ''}</td><td>${e.rwdid ? rwdNameHtml(e.rwdid) : '—'}</td><td class="muted">${runRewardText(e, true)}</td></tr>`; }).join('')}</tbody></table>`;
   }
   h += `<details class="subDetails" style="margin-top:16px;"><summary>▸ Floors visited (${d.floors.length})</summary><div class="subDetailsBody"><table class="runTable"><thead><tr><th>#</th><th>Floor</th><th>Map used</th><th>Entered this run</th><th style="text-align:right;">Haters</th><th>First ever cleared</th></tr></thead><tbody>${d.floors.slice().reverse().map(x => `<tr><td class="muted">${x.n}</td><td>${escapeHtml(x.label)}${x.boss ? ' <span class="runBadge ok" style="font-size:10.5px; padding:1px 7px;">boss</span>' : ''}</td><td class="muted">${escapeHtml(x.ref)}</td><td>${x.entered ? escapeHtml(dtFmt(x.entered)) : '<span class="muted">—</span>'}</td><td class="n">${x.haters || '<span class="muted">0</span>'}</td><td class="muted">${x.cleared ? escapeHtml(dtFmt(x.cleared)) : '—'}</td></tr>`).join('')}</tbody></table></div></details>`;
   h += `<div class="capNote" style="margin-top:12px;">Read from the save as loaded. "Run began" is when the game built the run's first floor; "last started or resumed" is when it last picked the run up. "First ever cleared" is the game's record of the first time each floor was cleared, in any run. Changes made on the Location tab (moving or ending the run) apply on download and aren't shown here.</div>`;
   host.innerHTML = h;
   const js = document.getElementById('run-jkl-spoil');
+  // the run rewards checkbox shares the Location tab's spoiler setting (LOC_SPOIL), which also gates the CSV export
+  const rs = document.getElementById('run-rwd-spoil');
+  if (rs) rs.addEventListener('change', () => { locSetSpoil(rs.checked); const sp = document.getElementById('loc-spoil'); if (sp) sp.checked = rs.checked; renderRun(); });
   if (js) js.addEventListener('change', () => { RUN_JKL_SPOIL = js.checked; try { localStorage.setItem('lid.runJackalSpoilers', js.checked ? '1' : '0'); } catch (err) {} renderRun(); });
 }
 // Tab wiring: render when the tab is active and hook the CSV export button (file name includes fighter and timestamp).
