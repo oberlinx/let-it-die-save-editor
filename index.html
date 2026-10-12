@@ -474,7 +474,7 @@
     <button class="subtle" id="btn-keys" title="Keyboard shortcuts (?)">⌨</button>
     <button class="subtle" id="btn-tour" title="A short tour of the editor">Take the tour</button>
     <button class="subtle" id="btn-theme" title="Switch theme">☀</button>
-    <div class="psnNote"><button class="subtle" id="btn-psguide" title="Step by step: copy a PS4/PS5 save to USB, decrypt, edit, re-encrypt, copy back">🎮 PlayStation users: how-to</button> <button class="subtle" id="btn-steamguide" title="Step by step: copy a PS4/PS5 save to USB, decrypt, clone it onto your Steam save, put it in the Steam folder">💻 PlayStation to Steam: how-to</button><br>PSN saves must first be decrypted. Use <a href="https://garlicsaves.com" target="_blank" rel="noopener">garlicsaves.com</a> or read <a href="https://discord.com/channels/256677044174323713/1544630372208480316/1547464159804002397" target="_blank" rel="noopener">this guide</a></div>
+    <div class="psnNote"><button class="subtle" id="btn-pcguide" title="Step by step: back up your Steam save, load it, edit, check, download and put it back">🖥️ Steam users: how-to</button> <button class="subtle" id="btn-psguide" title="Step by step: copy a PS4/PS5 save to USB, decrypt, edit, re-encrypt, copy back">🎮 PlayStation users: how-to</button> <button class="subtle" id="btn-steamguide" title="Step by step: copy a PS4/PS5 save to USB, decrypt, clone it onto your Steam save, put it in the Steam folder">💻 PlayStation to Steam: how-to</button><br>PSN saves must first be decrypted. Use <a href="https://garlicsaves.com" target="_blank" rel="noopener">garlicsaves.com</a> or read <a href="https://discord.com/channels/256677044174323713/1544630372208480316/1547464159804002397" target="_blank" rel="noopener">this guide</a></div>
   </div>
 </header>
 
@@ -14428,6 +14428,68 @@ function uiHelp() {
   document.getElementById('ui-ov-close').addEventListener('click', uiCloseOverlay);
 }
 
+// uiOpenPcGuide(): static how-to overlay for editing a Steam (PC) save (back up, load masters.db and the save, edit,
+// check, download, put it back). Pure content.
+function uiOpenPcGuide() {
+  uiCloseOverlay();
+  const ov = document.createElement('div'); ov.className = 'uiOverlay'; ov.id = 'ui-overlay';
+  ov.innerHTML = `<section class="block wide"><div class="block-head"><div><div class="eyebrow">Steam</div><h2>Edit your Steam save, step by step</h2></div></div><div class="block-body">
+    <div class="psIntro">Everything happens in this page, on your computer. Your save and <code>masters.db</code> are read here and are never uploaded. Nothing in your game folder changes until you put the downloaded file there yourself.</div>
+    <div class="psGuide">
+    <p><b>You need:</b> LET IT DIE Offline Edition installed on Steam, and a save from it. If you have never played, start the game, play until you reach the Waiting Room and quit, so there is a save to edit.</p>
+    <p><b>Coming from PlayStation?</b> To bring your console progress to Steam, read the <a href="#" data-steam-guide>PlayStation to Steam guide</a> instead.</p>
+    <h3>Part 1: Close the game and back up your save</h3>
+    <ol>
+      <li><b>Close LET IT DIE.</b> The game writes the save when it exits and would overwrite your edits.</li>
+      <li>In Steam, right-click the game and choose <b>Manage &gt; Browse local files</b>.</li>
+      <li>Open <code>Savedata</code>, then the folder named with a 17-digit number. That number is your Steam ID. Your save is <code>brggame.sav</code>:
+<pre>...\\steamapps\\common\\LET IT DIE\\Savedata\\
+  &lt;your 17-digit Steam ID&gt;\\
+    brggame.sav</pre></li>
+      <li><b>Copy <code>brggame.sav</code> somewhere safe. This is your backup. Never edit or overwrite it.</b></li>
+    </ol>
+    <h3>Part 2: Load masters.db and your save</h3>
+    <ol>
+      <li>Click <b>1. Load masters.db</b> and pick it from <code>...\\steamapps\\common\\LET IT DIE\\BrgGame\\Content\\masters.db</code>. It tells the editor what the game allows, so your edits stay in range. The browser remembers it after the first time; <b>Forget masters.db</b> stops that.</li>
+      <li>Click <b>2. Load your save</b> and pick <code>brggame.sav</code> from the Steam ID folder. You can also drop the file anywhere on the page.</li>
+      <li>Look at the <b>Save check</b> in the status bar at the bottom. It lists anything already wrong with the save before you change it.</li>
+    </ol>
+    <h3>Part 3: Make your changes</h3>
+    <ol>
+      <li>The tabs are in five groups: <b>Account</b>, <b>Items</b>, <b>Fighters</b>, <b>Run &amp; Floors</b> and <b>Tools</b>. Press <b>Ctrl+K</b> to search for a tab or a setting by name.</li>
+      <li>Change what you want. The range the game accepts is shown under each number box.</li>
+      <li>The status bar counts your unsaved changes. <b>Changes</b> lists every edit with an <b>Undo</b> for each, and <b>Start over</b> reloads the original file.</li>
+    </ol>
+    <h3>Part 4: Check and download</h3>
+    <ol>
+      <li>Click the <b>Save check</b> again and step through anything marked Problem or Warning. Many have a button that fixes them.</li>
+      <li>Click <b>Download .sav</b> (or press <b>Ctrl+S</b>). A review window lists everything that will change. Read it before you accept.</li>
+      <li>The download is named like <code>brggame_2026-10-08_063000.sav</code>, so older downloads are never replaced. The editor also keeps a copy in <b>Download history</b>.</li>
+    </ol>
+    <h3>Part 5: Put it back into the game</h3>
+    <ol>
+      <li>Make sure the game is still closed.</li>
+      <li><b>Rename the download to <code>brggame.sav</code></b> and copy it into the Steam ID folder from Part 1, replacing the file there.</li>
+      <li>Start the game. If Steam says your local save and the cloud save differ, choose the <b>local</b> file. Choosing the cloud copy brings back the save from before your edits.</li>
+      <li>Check your fighters and what you changed <b>before</b> you delete your backup.</li>
+    </ol>
+    <h3>If something goes wrong</h3>
+    <ul>
+      <li><b>The game shows the save from before your edits.</b> The game was open when you copied the file, the file isn't named exactly <code>brggame.sav</code>, or Steam Cloud put the old one back (Part 5, step 3).</li>
+      <li><b>The game starts a new account.</b> The file is not inside the folder named with your 17-digit Steam ID.</li>
+      <li><b>The game crashes or resets the save.</b> Close it and copy your backup from Part 1 back. Then load the edited file here and see what the Save check says.</li>
+      <li><b>The editor warns about masters.db.</b> Load the <code>masters.db</code> from the same game install as the save.</li>
+      <li><b>You want an earlier version back.</b> Open <b>Download history</b> in the header. It keeps the last 12 saves you downloaded in this browser, plus the save as you first loaded it.</li>
+      <li><b>Anything else.</b> Open <b>Save report</b> in the header and send what it says when you ask for help. It holds no account or Steam ids.</li>
+    </ul>
+    </div>
+
+    <div class="toolbar" style="margin-top:10px;"><button class="subtle" id="ui-ov-close">Close</button></div></div></section>`;
+  document.body.appendChild(ov);
+  ov.addEventListener('click', e => { if (e.target === ov) uiCloseOverlay(); });
+  document.getElementById('ui-ov-close').addEventListener('click', uiCloseOverlay);
+}
+
 // uiOpenSteamGuide(): static how-to overlay for moving a PlayStation save to the Steam (PC) game (copy to USB, decrypt,
 // clone onto a Steam save here, clean up, put it in the Steam folder). Pure content; docs/ps-to-steam.md is the same guide.
 function uiOpenSteamGuide() {
@@ -14789,6 +14851,7 @@ function uiAfterRender() {
   document.getElementById('btn-keys').addEventListener('click', uiHelp);
   document.getElementById('btn-recent').addEventListener('click', uiOpenRecent);
   document.getElementById('btn-psguide').addEventListener('click', uiOpenPsGuide);
+  document.getElementById('btn-pcguide').addEventListener('click', uiOpenPcGuide);
   document.getElementById('btn-steamguide').addEventListener('click', uiOpenSteamGuide);
   // links elsewhere in the page that open the PlayStation to Steam guide (PlayStation how-to, the Clone box)
   document.addEventListener('click', e => { const a = e.target.closest && e.target.closest('[data-steam-guide]'); if (a) { e.preventDefault(); uiOpenSteamGuide(); } });

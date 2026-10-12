@@ -17,6 +17,8 @@ You can also download `index.html` and open it straight from your PC.
    `...\steamapps\common\LET IT DIE\Savedata\`.
 5. Check the **Save check** panel (see below), make your changes, then click **Download .sav**. A list of everything you changed appears first so you can check it; you can also save a backup of the original from there. The file downloads as `brggame_<date>_<time>.sav` so older downloads are never replaced. Rename it to your save's name (e.g. `brggame.sav`) and put it in place of your save. A copy is also kept in **Download history** (see below), so you can go back if an edit goes wrong.
 
+These steps are also in the editor under **Steam users: how-to**.
+
 **Moving from PlayStation to Steam?** See [Moving a PlayStation save to Steam](docs/ps-to-steam.md) for the whole process, step by step. The same guide is in the editor under **PlayStation to Steam: how-to**.
 
 **PSN players:** your save has to be decrypted first (see [PlayStation saves: step by step](#playstation-saves-step-by-step), also in the editor under **PlayStation users: how-to**). You'll also need a copy of `masters.db`, which only comes with the PC version. If you don't have the PC game, ask in the [LET IT DIE Discord](https://discordapp.com/invite/gdMZBbK) or DM u/Oberlinx on Reddit.
