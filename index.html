@@ -474,7 +474,7 @@
     <button class="subtle" id="btn-keys" title="Keyboard shortcuts (?)">⌨</button>
     <button class="subtle" id="btn-tour" title="A short tour of the editor">Take the tour</button>
     <button class="subtle" id="btn-theme" title="Switch theme">☀</button>
-    <div class="psnNote"><button class="subtle" id="btn-psguide" title="Step by step: copy a PS4/PS5 save to USB, decrypt, edit, re-encrypt, copy back">🎮 PlayStation users: how-to</button> <button class="subtle" id="btn-steamguide" title="Step by step: take your PlayStation progress to the Steam (PC) game. Opens the guide in a new tab">💻 PlayStation to Steam: how-to</button><br>PSN saves must first be decrypted. Use <a href="https://garlicsaves.com" target="_blank" rel="noopener">garlicsaves.com</a> or read <a href="https://discord.com/channels/256677044174323713/1544630372208480316/1547464159804002397" target="_blank" rel="noopener">this guide</a></div>
+    <div class="psnNote"><button class="subtle" id="btn-psguide" title="Step by step: copy a PS4/PS5 save to USB, decrypt, edit, re-encrypt, copy back">🎮 PlayStation users: how-to</button> <button class="subtle" id="btn-steamguide" title="Step by step: copy a PS4/PS5 save to USB, decrypt, clone it onto your Steam save, put it in the Steam folder">💻 PlayStation to Steam: how-to</button><br>PSN saves must first be decrypted. Use <a href="https://garlicsaves.com" target="_blank" rel="noopener">garlicsaves.com</a> or read <a href="https://discord.com/channels/256677044174323713/1544630372208480316/1547464159804002397" target="_blank" rel="noopener">this guide</a></div>
   </div>
 </header>
 
@@ -12911,7 +12911,7 @@ function cloneBlockHtml() {
   const ps = psOnlyContent(CMP.adB);
   const psCount = ps.reduce((n, g) => n + g.names.length, 0);
   let warn = '';
-  if (platB === 'PS' && platA !== 'PS') warn = `<div class="warnNote" style="margin:6px 0;"><b>${escapeHtml(nmB)}'s save is a PlayStation save</b> and this account is ${platformName(platA)}. ${psCount ? `It has ${psCount} PlayStation-only thing${psCount === 1 ? '' : 's'} an unmodded PC game doesn't have (${ps.map(g => escapeHtml(g.where)).slice(0, 5).join('; ')}${ps.length > 5 ? '…' : ''}). They'll be listed after cloning so you can clean them up.` : 'No PlayStation-only weapons, armor, decals, research, decorations or rewards were found in it.'} The <a href="https://github.com/oberlinx/let-it-die-save-editor/blob/main/docs/ps-to-steam.md" target="_blank" rel="noopener">PlayStation to Steam guide</a> walks through the whole move.</div>`;
+  if (platB === 'PS' && platA !== 'PS') warn = `<div class="warnNote" style="margin:6px 0;"><b>${escapeHtml(nmB)}'s save is a PlayStation save</b> and this account is ${platformName(platA)}. ${psCount ? `It has ${psCount} PlayStation-only thing${psCount === 1 ? '' : 's'} an unmodded PC game doesn't have (${ps.map(g => escapeHtml(g.where)).slice(0, 5).join('; ')}${ps.length > 5 ? '…' : ''}). They'll be listed after cloning so you can clean them up.` : 'No PlayStation-only weapons, armor, decals, research, decorations or rewards were found in it.'} The <a href="#" data-steam-guide>PlayStation to Steam guide</a> walks through the whole move.</div>`;
   else if (psCount && platA !== 'PS') warn = `<div class="warnNote" style="margin:6px 0;">${escapeHtml(nmB)}'s save has ${psCount} PlayStation-only thing${psCount === 1 ? '' : 's'} an unmodded PC game doesn't have. They'll be listed after cloning.</div>`;
   return `<div class="subDetails" style="padding:10px; margin-bottom:12px;"><div class="eyebrow" style="margin-bottom:6px;">Clone the whole save</div>
     <div class="capNote" style="margin-top:0;">Replace everything in the save you're editing with <b>${escapeHtml(nmB)}</b>'s save (${platformName(platB)}): fighters, gear, research, decals, money, quests, settings and flags. Only the account stays <b>${escapeHtml(nmA)}</b>'s (uid ${escapeHtml(cmpUidA())}, ${platformName(platA)}): the account id is moved everywhere the save uses it, and the name, Steam/PSN ids and login ids are kept. Changes you made to this save that you haven't downloaded are lost. Nothing is written until you download.</div>
@@ -14428,6 +14428,91 @@ function uiHelp() {
   document.getElementById('ui-ov-close').addEventListener('click', uiCloseOverlay);
 }
 
+// uiOpenSteamGuide(): static how-to overlay for moving a PlayStation save to the Steam (PC) game (copy to USB, decrypt,
+// clone onto a Steam save here, clean up, put it in the Steam folder). Pure content; docs/ps-to-steam.md is the same guide.
+function uiOpenSteamGuide() {
+  uiCloseOverlay();
+  const ov = document.createElement('div'); ov.className = 'uiOverlay'; ov.id = 'ui-overlay';
+  ov.innerHTML = `<section class="block wide"><div class="block-head"><div><div class="eyebrow">PlayStation to Steam</div><h2>Move your PlayStation save to Steam, step by step</h2></div></div><div class="block-body">
+    <div class="psIntro">This takes your progress from a PS4 or PS5 to the Steam (PC) Offline Edition: fighters, gear, research, decals, money, quests and everything else. It is a <b>one-way copy</b>. Your PlayStation save is not changed, and the two saves do not stay in sync afterwards.</div>
+    <div class="psGuide">
+    <p><b>How it works:</b> a save holds your progress and the account it belongs to. A PlayStation save carries your PlayStation account's ids, not your Steam ones, so it should not be dropped into the Steam folder as it is. The editor's <b>Clone</b> button builds a new save with all the progress from PlayStation on your Steam account.</p>
+    <p><b>You need:</b> a USB drive formatted <b>FAT32 or exFAT</b> (not set up as "extended storage"), LET IT DIE Offline Edition on Steam, and a free account on <a href="https://garlicsaves.com" target="_blank" rel="noopener">garlicsaves.com</a>. No PlayStation Plus subscription is needed.</p>
+    <p><b>Before you start:</b> on the console, take your fighter back to the Waiting Room. A save taken in the middle of a run can be moved, but it is the most likely kind to cause trouble.</p>
+    <h3>Part 1: Copy your save from the console to USB</h3>
+    <ol>
+      <li>Plug the USB drive into the console.</li>
+      <li>Go to <b>Settings &gt; Saved Data and Game/App Settings &gt; Saved Data (PS4)</b>.</li>
+      <li><b>PS4:</b> choose <i>Upload or Delete from Console Storage</i>, then <i>Copy to USB Drive</i>.<br><b>PS5:</b> choose <i>Console Storage</i>, then the <i>Copy to USB Drive</i> tab.</li>
+      <li>Pick LET IT DIE, tick the save and press <b>Copy</b>.</li>
+      <li>Plug the drive into your computer. You will see a <code>PS4</code> folder. <b>Copy that whole folder somewhere safe. This is your PlayStation backup. Never edit or overwrite it.</b></li>
+    </ol>
+    <h3>Part 2: Decrypt it</h3>
+    <ol>
+      <li>Go to <a href="https://garlicsaves.com" target="_blank" rel="noopener">garlicsaves.com</a>, <b>create a free account</b> and log in. Decrypting does <b>not</b> need a profile.</li>
+      <li>Open <b>Decrypt</b> from the menu on the left. Drop in the two files from your USB copy, <code>savedata.bin</code> and its matching <code>savedata</code> file, or a zip that holds them. They are inside <code>PS4/SAVEDATA/&lt;a 16-character folder&gt;/CUSA03769/</code>. Leave <b>Include sce_sys folder</b> ticked and <b>Ignore second-layer checks</b> unticked. Click <b>Start Decrypt</b>.</li>
+      <li>Download the result and unzip it. The <code>brggame.sav</code> inside is your <b>PlayStation save</b>. Rename it to something you will recognise, such as <code>playstation.sav</code>, so you don't mix it up with the Steam save.</li>
+    </ol>
+    <h3>Part 3: Get a save from your own Steam game</h3>
+    <ol>
+      <li>If you have never played the Steam version, start it, play until you reach the Waiting Room, and quit from the game's menu. The game writes the save when it exits.</li>
+      <li>In Steam, right-click the game and choose <b>Manage &gt; Browse local files</b>.</li>
+      <li>Open <code>Savedata</code>, then the folder named with a 17-digit number. That number is your Steam ID. The save is <code>brggame.sav</code>:
+<pre>...\\steamapps\\common\\LET IT DIE\\Savedata\\
+  &lt;your 17-digit Steam ID&gt;\\
+    brggame.sav</pre></li>
+      <li><b>Copy <code>brggame.sav</code> somewhere safe. This is your Steam backup.</b></li>
+      <li>Make sure the game is closed before you go on.</li>
+    </ol>
+    <h3>Part 4: Clone the PlayStation save onto your Steam account</h3>
+    <ol>
+      <li>Click <b>1. Load masters.db</b> here and pick it from <code>...\\steamapps\\common\\LET IT DIE\\BrgGame\\Content\\masters.db</code>.</li>
+      <li>Click <b>2. Load your save</b> and pick your <b>Steam</b> <code>brggame.sav</code> from Part 3. It must be the Steam one: it decides which account the result belongs to.</li>
+      <li>Open the <b>Tools</b> group and the <b>Compare</b> tab.</li>
+      <li>Click <b>Load second save (.sav or .json)</b> and pick your <b>PlayStation</b> save from Part 2.</li>
+      <li>Read the <b>Clone the whole save</b> box. It should say the other save is a PlayStation save and that your account is PC (Steam). If it has them the wrong way round, reload the page and start Part 4 again.</li>
+      <li>Click the <b>Clone ...</b> button, then click it again to confirm. Nothing is written to disk yet.</li>
+    </ol>
+    <h3>Part 5: Clean up PlayStation-only content</h3>
+    <p>Some weapons, armor, decals and decorations exist only on PlayStation. After cloning, the notice at the top of the Compare tab lists every one it found. If the list is empty, or your PC game is modded to include them, skip this part.</p>
+    <ul>
+      <li><b>Decals:</b> on <b>Items &gt; Decals</b>, a warning lists the PlayStation-only decals. Use <b>Set them to 0</b>.</li>
+      <li><b>Reward Box:</b> the Save check lists the items the PC game can't hand over, with a button to remove them.</li>
+      <li><b>Gear:</b> remove PlayStation-only weapons and armor from <b>Items &gt; Storage</b> and from each fighter's Death Bag on the <b>Fighters</b> tab. Unequip a piece first if a fighter is wearing it.</li>
+      <li><b>Decals on fighters:</b> take PlayStation-only decals off any fighter that has them equipped.</li>
+      <li><b>Research and Waiting Room decorations</b> are listed too, but there is no one-click removal for them.</li>
+    </ul>
+    <h3>Part 6: Check and download</h3>
+    <ol>
+      <li>Click the <b>Save check</b> in the status bar at the bottom to step through anything marked Problem or Warning, and use the fix buttons it offers.</li>
+      <li>Click <b>Download .sav</b>. The review window lists what changes compared with the Steam save you loaded. Because you cloned a whole save, the list is long. That is expected.</li>
+      <li>The download is named like <code>brggame_2026-10-08_063000.sav</code>.</li>
+    </ol>
+    <h3>Part 7: Put it into the Steam game</h3>
+    <ol>
+      <li>Make sure the game is closed.</li>
+      <li><b>Rename the download to <code>brggame.sav</code></b> and copy it into the Steam ID folder from Part 3, replacing the file there.</li>
+      <li>Start the game. If Steam says your local save and the cloud save differ, choose the <b>local</b> file. Choosing the cloud copy brings back your old Steam save.</li>
+      <li>Check your fighters, Kill Coins, SPLithium and Storage Box, then quit and start the game again to confirm it still loads. <b>Keep both backups</b> until you have played for a while without trouble.</li>
+    </ol>
+    <h3>If something goes wrong</h3>
+    <ul>
+      <li><b>The game starts a new account, or shows your old Steam progress.</b> The file must be called exactly <code>brggame.sav</code> and sit inside the folder named with your 17-digit Steam ID. Also check the Steam Cloud step in Part 7.</li>
+      <li><b>The editor refuses the PlayStation file.</b> You loaded the encrypted file. Load the <code>brggame.sav</code> that Garlic gave you in Part 2.</li>
+      <li><b>The Clone box has the accounts the wrong way round.</b> You loaded the PlayStation save first. Reload the page, load the Steam save with button 2, and load the PlayStation save on the Compare tab.</li>
+      <li><b>The game crashes or resets the save.</b> Put your Steam backup from Part 3 back, then try again from Part 4: remove all PlayStation-only content and fix everything the Save check reports.</li>
+      <li><b>Something is missing in the game.</b> PlayStation-only items don't appear in a normal Steam game. Everything else should be there.</li>
+      <li><b>Anything else.</b> Open <b>Save report</b> in the header and send what it says when you ask for help. It holds no account, Steam or PSN ids.</li>
+    </ul>
+    <p><b>Going back:</b> close the game and copy your Steam backup from Part 3 back into the Steam ID folder. To put an edited save back on the console instead, use <b>PlayStation users: how-to</b>.</p>
+    </div>
+
+    <div class="toolbar" style="margin-top:10px;"><button class="subtle" id="ui-ov-close">Close</button></div></div></section>`;
+  document.body.appendChild(ov);
+  ov.addEventListener('click', e => { if (e.target === ov) uiCloseOverlay(); });
+  document.getElementById('ui-ov-close').addEventListener('click', uiCloseOverlay);
+}
+
 // uiOpenPsGuide(): static how-to overlay for editing a PS4/PS5 save (copy to USB, decrypt, edit here, re-encrypt, copy back). Pure content.
 function uiOpenPsGuide() {
   uiCloseOverlay();
@@ -14436,7 +14521,7 @@ function uiOpenPsGuide() {
     <div class="psIntro">LET IT DIE Offline Edition is a <b>PS4 game</b>; a PS5 plays it through backwards compatibility. Its save counts as a <b>PS4 save</b> on both consoles, which is why copying it to a USB drive works (Sony does not allow PS5-native saves on USB). The save transfer from the online game ends on <b>30 November 2026</b>.</div>
     <div class="psGuide">
     <p><b>You need:</b> a USB drive formatted <b>FAT32 or exFAT</b> (not set up as "extended storage"), a computer, and a PC <code>masters.db</code> from a game version that matches your save. No PlayStation Plus subscription is needed.</p>
-    <p><b>Moving to Steam instead?</b> This page is for editing a save and putting it back on the console. To take your progress to the PC game, read the <a href="https://github.com/oberlinx/let-it-die-save-editor/blob/main/docs/ps-to-steam.md" target="_blank" rel="noopener">PlayStation to Steam guide</a>.</p>
+    <p><b>Moving to Steam instead?</b> This page is for editing a save and putting it back on the console. To take your progress to the PC game, read the <a href="#" data-steam-guide>PlayStation to Steam guide</a>.</p>
     <h3>Part 1: Copy your save from the console to USB</h3>
     <ol>
       <li>Plug the USB drive into the console.</li>
@@ -14704,8 +14789,9 @@ function uiAfterRender() {
   document.getElementById('btn-keys').addEventListener('click', uiHelp);
   document.getElementById('btn-recent').addEventListener('click', uiOpenRecent);
   document.getElementById('btn-psguide').addEventListener('click', uiOpenPsGuide);
-  // the PlayStation to Steam guide is a page in the repo; open it in a new tab
-  document.getElementById('btn-steamguide').addEventListener('click', () => window.open('https://github.com/oberlinx/let-it-die-save-editor/blob/main/docs/ps-to-steam.md', '_blank', 'noopener'));
+  document.getElementById('btn-steamguide').addEventListener('click', uiOpenSteamGuide);
+  // links elsewhere in the page that open the PlayStation to Steam guide (PlayStation how-to, the Clone box)
+  document.addEventListener('click', e => { const a = e.target.closest && e.target.closest('[data-steam-guide]'); if (a) { e.preventDefault(); uiOpenSteamGuide(); } });
   document.getElementById('btn-tour').addEventListener('click', uiTourStart);
   document.getElementById('sb-check').addEventListener('click', uiJumpProblem);
   uiTrackHeader();
