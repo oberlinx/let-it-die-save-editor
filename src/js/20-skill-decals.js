@@ -21,7 +21,7 @@ function decalNameP(id) {
   if (!r) return id;
   return r.name + (Number(r.premium) ? ' (Premium)' : '');
 }
-// Decal icons: every icon is a cell in one embedded sprite sheet (CSS --decal-atlas), so they work offline.
+// Decal icons: every icon is a cell in one embedded sprite sheet (the CSS .dicon rule), so they work offline.
 // DECAL_ATLAS = { cell, cols, names } where names[i] is the icon in cell i (left to right, top to bottom).
 const DECAL_ATLAS = JSON.parse(document.getElementById('decal-atlas-data').textContent);
 const DECAL_ICON_AT = Object.fromEntries(DECAL_ATLAS.names.map((n, i) => [n, i]));
