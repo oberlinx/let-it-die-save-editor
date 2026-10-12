@@ -374,7 +374,8 @@ function runExtraHtml(d) {
   return h;
 }
 // Build the whole Current Run CSV (UTF-8 with BOM, CRLF line endings so Excel opens it cleanly).
-// Map rewards are only exported when the Location tab's spoiler checkbox (LOC_SPOIL) is ticked.
+// Map rewards are only exported when the spoiler setting (LOC_SPOIL) is on: the "Show run rewards" box on this
+// tab, or the same box on the Location tab.
 function runCsv(d) {
   // RFC 4180 quoting: wrap in quotes and double embedded quotes when the value has , " or newline
   const q = v => { const s = String(v == null ? '' : v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };

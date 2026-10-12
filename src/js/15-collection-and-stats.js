@@ -15,7 +15,7 @@ let COLL_FORM = { filter: '' };
 // Block shell for the Collection tab (magazines + mushroom/beast books); renderCollection fills #coll-body.
 function blockCollection() {
   return `<section class="block">
-    <div class="block-head"><div><div class="eyebrow">Account</div><h2>Collection</h2></div></div>
+    <div class="block-head"><div><div class="eyebrow">Items</div><h2>Collection</h2></div></div>
     <div class="block-body"><div id="coll-body"></div></div>
   </section>`;
 }
