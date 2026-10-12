@@ -17,6 +17,8 @@ You can also download `index.html` and open it straight from your PC.
    `...\steamapps\common\LET IT DIE\Savedata\`.
 5. Check the **Save check** panel (see below), make your changes, then click **Download .sav**. A list of everything you changed appears first so you can check it; you can also save a backup of the original from there. The file downloads as `brggame_<date>_<time>.sav` so older downloads are never replaced. Rename it to your save's name (e.g. `brggame.sav`) and put it in place of your save. A copy is also kept in **Download history** (see below), so you can go back if an edit goes wrong.
 
+**Moving from PlayStation to Steam?** See [Moving a PlayStation save to Steam](docs/ps-to-steam.md) for the whole process, step by step.
+
 **PSN players:** your save has to be decrypted first (see [PlayStation saves: step by step](#playstation-saves-step-by-step), also in the editor under **PlayStation users: how-to**). You'll also need a copy of `masters.db`, which only comes with the PC version. If you don't have the PC game, ask in the [LET IT DIE Discord](https://discordapp.com/invite/gdMZBbK) or DM u/Oberlinx on Reddit.
 
 ## Getting around
@@ -98,7 +100,7 @@ Viewing, comparing and inspecting saves.
 | Tab | What it does |
 |---|---|
 | **Screenshots** | View and export Kiwako's large-stamp photos stored in the save (view/export only; they can't be deleted because the game refers to them) |
-| **Compare** | Load a second save, see what differs, and copy ticked parts into the save you're editing (account values, fighters with their gear, research, decal stock, Waiting Room decorations, Reward Box and Storage items). You can also choose which account the downloaded save belongs to, to move progress onto another account, or **clone the whole second save onto the account you're editing**: everything comes from the other save, but the account ID, name and Steam/PSN IDs stay yours, so the game loads it as your save. Cloning a PlayStation save onto a PC account warns you first and lists any PS-only content |
+| **Compare** | Load a second save, see what differs, and copy ticked parts into the save you're editing (account values, fighters with their gear, research, decal stock, Waiting Room decorations, Reward Box and Storage items). You can also choose which account the downloaded save belongs to, to move progress onto another account, or **clone the whole second save onto the account you're editing**: everything comes from the other save, but the account ID, name and Steam/PSN IDs stay yours, so the game loads it as your save. Cloning a PlayStation save onto a PC account warns you first and lists any PS-only content; [the PlayStation to Steam guide](docs/ps-to-steam.md) walks through it |
 | **Raw data** | Read only, for power users: browse the whole save as the game stores it, field by field (click a name to open it, a breadcrumb to go back; big lists 200 at a time). Search keys and values, copy a value or its path, or download any part as `.json`. Numbers that look like dates show the date. **Show with your edits** shows the save exactly as Download would write it. Nothing can be changed here on purpose; the other tabs check every change against the game's rules |
 | **JSON compare (advanced)** | For advanced users, read only. Compares two saves field by field the way the game stores them: this save (as loaded, or with your edits as Download would write it) against a second save, the save loaded on the Compare tab, or the other version of this save. Lists of records are matched by their id, so a reordered list isn't reported as changed. Each changed object is shown side by side, a line per field, with changed lines highlighted and unchanged ones folded; filter by section, by kind (changed, only on the left, only on the right) or by path, open any object to browse it side by side, and download the differences as text. **Search** finds keys and values in both saves. Comparing "as loaded" with "with your edits" shows exactly what your edits change. A warning reminds you that editing a save's JSON by hand can corrupt it |
 
@@ -205,6 +207,7 @@ This repo is a plain static site: `index.html` at the root, plus `.nojekyll`.
 index.html                 the editor (single file, BUILT from src/ - don't edit it directly)
 src/                       the editor's source, split into small files (see src/README.md)
 build.js                   stitches src/ back into index.html
+docs/                      guides (moving a PlayStation save to Steam)
 .github/workflows/         checks on every push that index.html matches src/
 tools/stew_luck_rarity.py  original command-line stew tool (reference)
 README.md                  this file
