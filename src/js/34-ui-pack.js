@@ -656,6 +656,8 @@ function uiAfterRender() {
   document.getElementById('btn-keys').addEventListener('click', uiHelp);
   document.getElementById('btn-recent').addEventListener('click', uiOpenRecent);
   document.getElementById('btn-psguide').addEventListener('click', uiOpenPsGuide);
+  // the PlayStation to Steam guide is a page in the repo; open it in a new tab
+  document.getElementById('btn-steamguide').addEventListener('click', () => window.open('https://github.com/oberlinx/let-it-die-save-editor/blob/main/docs/ps-to-steam.md', '_blank', 'noopener'));
   document.getElementById('btn-tour').addEventListener('click', uiTourStart);
   document.getElementById('sb-check').addEventListener('click', uiJumpProblem);
   uiTrackHeader();
