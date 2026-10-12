@@ -388,6 +388,7 @@ function uiOpenPsGuide() {
     <div class="psIntro">LET IT DIE Offline Edition is a <b>PS4 game</b>; a PS5 plays it through backwards compatibility. Its save counts as a <b>PS4 save</b> on both consoles, which is why copying it to a USB drive works (Sony does not allow PS5-native saves on USB). The save transfer from the online game ends on <b>30 November 2026</b>.</div>
     <div class="psGuide">
     <p><b>You need:</b> a USB drive formatted <b>FAT32 or exFAT</b> (not set up as "extended storage"), a computer, and a PC <code>masters.db</code> from a game version that matches your save. No PlayStation Plus subscription is needed.</p>
+    <p><b>Moving to Steam instead?</b> This page is for editing a save and putting it back on the console. To take your progress to the PC game, read the <a href="https://github.com/oberlinx/let-it-die-save-editor/blob/main/docs/ps-to-steam.md" target="_blank" rel="noopener">PlayStation to Steam guide</a>.</p>
     <h3>Part 1: Copy your save from the console to USB</h3>
     <ol>
       <li>Plug the USB drive into the console.</li>

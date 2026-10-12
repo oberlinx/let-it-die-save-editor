@@ -474,7 +474,7 @@
     <button class="subtle" id="btn-keys" title="Keyboard shortcuts (?)">⌨</button>
     <button class="subtle" id="btn-tour" title="A short tour of the editor">Take the tour</button>
     <button class="subtle" id="btn-theme" title="Switch theme">☀</button>
-    <div class="psnNote"><button class="subtle" id="btn-psguide" title="Step by step: copy a PS4/PS5 save to USB, decrypt, edit, re-encrypt, copy back">🎮 PlayStation users: how-to</button><br>PSN saves must first be decrypted. Use <a href="https://garlicsaves.com" target="_blank" rel="noopener">garlicsaves.com</a> or read <a href="https://discord.com/channels/256677044174323713/1544630372208480316/1547464159804002397" target="_blank" rel="noopener">this guide</a></div>
+    <div class="psnNote"><button class="subtle" id="btn-psguide" title="Step by step: copy a PS4/PS5 save to USB, decrypt, edit, re-encrypt, copy back">🎮 PlayStation users: how-to</button><br>PSN saves must first be decrypted. Use <a href="https://garlicsaves.com" target="_blank" rel="noopener">garlicsaves.com</a> or read <a href="https://discord.com/channels/256677044174323713/1544630372208480316/1547464159804002397" target="_blank" rel="noopener">this guide</a><br>Moving to Steam? Read the <a href="https://github.com/oberlinx/let-it-die-save-editor/blob/main/docs/ps-to-steam.md" target="_blank" rel="noopener">PlayStation to Steam guide</a></div>
   </div>
 </header>
 
@@ -12911,7 +12911,7 @@ function cloneBlockHtml() {
   const ps = psOnlyContent(CMP.adB);
   const psCount = ps.reduce((n, g) => n + g.names.length, 0);
   let warn = '';
-  if (platB === 'PS' && platA !== 'PS') warn = `<div class="warnNote" style="margin:6px 0;"><b>${escapeHtml(nmB)}'s save is a PlayStation save</b> and this account is ${platformName(platA)}. ${psCount ? `It has ${psCount} PlayStation-only thing${psCount === 1 ? '' : 's'} an unmodded PC game doesn't have (${ps.map(g => escapeHtml(g.where)).slice(0, 5).join('; ')}${ps.length > 5 ? '…' : ''}). They'll be listed after cloning so you can clean them up.` : 'No PlayStation-only weapons, armor, decals, research, decorations or rewards were found in it.'}</div>`;
+  if (platB === 'PS' && platA !== 'PS') warn = `<div class="warnNote" style="margin:6px 0;"><b>${escapeHtml(nmB)}'s save is a PlayStation save</b> and this account is ${platformName(platA)}. ${psCount ? `It has ${psCount} PlayStation-only thing${psCount === 1 ? '' : 's'} an unmodded PC game doesn't have (${ps.map(g => escapeHtml(g.where)).slice(0, 5).join('; ')}${ps.length > 5 ? '…' : ''}). They'll be listed after cloning so you can clean them up.` : 'No PlayStation-only weapons, armor, decals, research, decorations or rewards were found in it.'} The <a href="https://github.com/oberlinx/let-it-die-save-editor/blob/main/docs/ps-to-steam.md" target="_blank" rel="noopener">PlayStation to Steam guide</a> walks through the whole move.</div>`;
   else if (psCount && platA !== 'PS') warn = `<div class="warnNote" style="margin:6px 0;">${escapeHtml(nmB)}'s save has ${psCount} PlayStation-only thing${psCount === 1 ? '' : 's'} an unmodded PC game doesn't have. They'll be listed after cloning.</div>`;
   return `<div class="subDetails" style="padding:10px; margin-bottom:12px;"><div class="eyebrow" style="margin-bottom:6px;">Clone the whole save</div>
     <div class="capNote" style="margin-top:0;">Replace everything in the save you're editing with <b>${escapeHtml(nmB)}</b>'s save (${platformName(platB)}): fighters, gear, research, decals, money, quests, settings and flags. Only the account stays <b>${escapeHtml(nmA)}</b>'s (uid ${escapeHtml(cmpUidA())}, ${platformName(platA)}): the account id is moved everywhere the save uses it, and the name, Steam/PSN ids and login ids are kept. Changes you made to this save that you haven't downloaded are lost. Nothing is written until you download.</div>
@@ -14436,6 +14436,7 @@ function uiOpenPsGuide() {
     <div class="psIntro">LET IT DIE Offline Edition is a <b>PS4 game</b>; a PS5 plays it through backwards compatibility. Its save counts as a <b>PS4 save</b> on both consoles, which is why copying it to a USB drive works (Sony does not allow PS5-native saves on USB). The save transfer from the online game ends on <b>30 November 2026</b>.</div>
     <div class="psGuide">
     <p><b>You need:</b> a USB drive formatted <b>FAT32 or exFAT</b> (not set up as "extended storage"), a computer, and a PC <code>masters.db</code> from a game version that matches your save. No PlayStation Plus subscription is needed.</p>
+    <p><b>Moving to Steam instead?</b> This page is for editing a save and putting it back on the console. To take your progress to the PC game, read the <a href="https://github.com/oberlinx/let-it-die-save-editor/blob/main/docs/ps-to-steam.md" target="_blank" rel="noopener">PlayStation to Steam guide</a>.</p>
     <h3>Part 1: Copy your save from the console to USB</h3>
     <ol>
       <li>Plug the USB drive into the console.</li>
