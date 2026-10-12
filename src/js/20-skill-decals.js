@@ -34,6 +34,43 @@ function decalIcon(id, px) {
   const c = DECAL_ATLAS.cols;
   return `<span class="dicon" style="width:${px}px; height:${px}px; background-size:${c * px}px auto; background-position:-${(i % c) * px}px -${Math.floor(i / c) * px}px;"></span>`;
 }
+// Item icons: materials, mushrooms, beasts, blueprints, weapons and armour, in three embedded sprite sheets
+// (CSS classes .gicon.s-items / .s-weapons / .s-armor), so they work offline.
+// ICON_ATLAS = { cell: [w, h], sheets: { name: { cols, names } }, alias: { id: icon name } }; names[i] is the icon in
+// cell i (left to right, top to bottom) and alias maps a part with no icon of its own to the one it borrows.
+const ICON_ATLAS = JSON.parse(document.getElementById('icon-atlas-data').textContent);
+const ICON_AT = {};
+for (const [ sheet, s ] of Object.entries(ICON_ATLAS.sheets)) s.names.forEach((n, i) => { ICON_AT[n] = [ sheet, i ]; });
+// iconSpan(): <span> showing the named icon h pixels tall, or '' if no sheet has it.
+function iconSpan(name, h) {
+  const at = ICON_AT[name];
+  if (!at) return '';
+  const [ cw, ch ] = ICON_ATLAS.cell, c = ICON_ATLAS.sheets[at[0]].cols, w = Math.round(h * cw / ch);
+  return `<span class="gicon s-${at[0]}" style="width:${w}px; height:${h}px; background-size:${c * w}px auto; background-position:-${(at[1] % c) * w}px -${Math.floor(at[1] / c) * h}px;"></span>`;
+}
+// partIcon(): icon of a weapon or armour piece (its own, or the one it borrows).
+function partIcon(ptid, h) { return iconSpan(ICON_ATLAS.alias[ptid] || ptid, h); }
+// itemIcon(): icon of a material or other item. An unrevealed blueprint (ITMP_...U) shows the game's unknown-blueprint
+// icon for its rarity; a revealed one shows the piece it builds, or the plain blueprint icon if that piece has none.
+function itemIcon(itemId, h) {
+  const id = String(itemId);
+  if (!id.startsWith('ITMP_')) return iconSpan(id, h);
+  const rar = Math.min(3, Math.max(1, Number((ITEM_INDEX[id] || {}).rarity) || 1));
+  if (id.endsWith('U')) return iconSpan('UN_RMAP_' + rar, h);
+  return partIcon(id.replace(/^ITMP_/, 'PT_'), h) || iconSpan('RMAP_' + rar, h);
+}
+// msrIcon() / bstIcon(): icon of a mushroom or beast; cooked uses the grilled icon when there is one.
+function msrIcon(msrid, cooked, h) { return (Number(cooked) ? iconSpan(msrid + '_R', h) : '') || iconSpan(msrid, h); }
+function bstIcon(bstid, cooked, h) { return (Number(cooked) ? iconSpan(bstid + '_R', h) : '') || iconSpan(bstid, h); }
+// anyIcon(): icon for an id of unknown kind (part, item, mushroom, beast or decal), or ''.
+function anyIcon(id, h) {
+  if (PT_INDEX[id]) return partIcon(id, h);
+  if (ITEM_INDEX[id]) return itemIcon(id, h);
+  if (MSR_INDEX[id]) return msrIcon(id, 0, h);
+  if (BST_INDEX[id]) return bstIcon(id, 0, h);
+  if (SKL_INDEX[id]) return decalIcon(id, h);
+  return '';
+}
 // 'PS-only' for PlayStation-only decals, else ''.
 function decalOddTag(id) {
   const r = SKL_INDEX[id];

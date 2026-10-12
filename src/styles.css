@@ -437,5 +437,12 @@
 
   /* Decal icons: one sprite sheet (--decal-atlas); decalIcon() sets the size and position inline */
   .dicon { display: inline-block; flex: none; vertical-align: middle; background-image: var(--decal-atlas); background-repeat: no-repeat; }
+  /* Item icons: three sprite sheets, one class each (plain rules rather than variables, so the big images are not
+     re-resolved per element); iconSpan() sets the size and position inline */
+  .gicon { display: inline-block; flex: none; vertical-align: middle; background-repeat: no-repeat; margin-right: 6px; }
+  .gicon.s-items { background-image: url('data:image/webp;base64,@@INCLUDE(assets/icon-items.webp.b64)@@'); }
+  .gicon.s-weapons { background-image: url('data:image/webp;base64,@@INCLUDE(assets/icon-weapons.webp.b64)@@'); }
+  .gicon.s-armor { background-image: url('data:image/webp;base64,@@INCLUDE(assets/icon-armor.webp.b64)@@'); }
+  .dicon.lead { margin-right: 6px; }
   a.diconLink { display: flex; flex: none; }
   a.diconLink:hover .dicon { outline: 1px solid var(--accent-bright); }

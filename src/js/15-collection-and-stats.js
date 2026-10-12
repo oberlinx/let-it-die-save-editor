@@ -206,7 +206,7 @@ function renderCollection() {
     const found = rows.filter(r => r.flag != null).length;
     h += `<div class="toolbar" style="margin:14px 0 6px;"><div class="eyebrow" style="margin:0;">${title}</div><button class="subtle" data-book-complete="${kind}">Eat everything (raw and grilled)</button><span class="count">${found} / ${rows.length} found · ${done} fully eaten</span></div>`;
     h += `<table class="stewTable"><thead><tr><th>${kind === 'msr' ? 'Mushroom' : 'Beast'}</th><th>In the book</th><th>Eaten raw</th><th>Eaten grilled</th></tr></thead><tbody>`;
-    h += rows.filter(r => !filt || norm(r.name).includes(filt)).map(r => `<tr><td>${escapeHtml(r.name)} <span class="id">${r.id}</span></td><td>${r.flag == null ? 'not found' : 'found'}${r.flag != null && (r.flag & 4) ? ' <span class="id">(older record)</span>' : ''}</td>
+    h += rows.filter(r => !filt || norm(r.name).includes(filt)).map(r => `<tr><td>${kind === 'msr' ? msrIcon(r.id, 0, 30) : bstIcon(r.id, 0, 30)}${escapeHtml(r.name)} <span class="id">${r.id}</span></td><td>${r.flag == null ? 'not found' : 'found'}${r.flag != null && (r.flag & 4) ? ' <span class="id">(older record)</span>' : ''}</td>
       <td><input type="checkbox" data-book="${kind}" data-book-id="${r.id}" data-bit="1" ${r.flag != null && (r.flag & 1) ? 'checked' : ''}></td>
       <td>${r.grill ? `<input type="checkbox" data-book="${kind}" data-book-id="${r.id}" data-bit="2" ${r.flag != null && (r.flag & 2) ? 'checked' : ''}>` : '<span class="id">can\'t be grilled</span>'}</td></tr>`).join('');
     h += '</tbody></table>';

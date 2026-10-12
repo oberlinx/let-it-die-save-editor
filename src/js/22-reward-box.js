@@ -68,7 +68,7 @@ function rewardRow(p, i) {
   }
   const bagLbl = lostBagPresentLabel(p);
   if (bagLbl) detail = `${cmpPresentLabel(p)}`;
-  return `<div class="listRow"><div class="name">${bagLbl ? `${bagChip(String(p.kind).replace('MYSTERYBAG_', ''))} Lost Bag → ` : escapeHtml(presentTypeLabel(p)) + ': '}${escapeHtml(detail)}</div><div class="id">${escapeHtml(p.from || '?')}${p.kind ? ' · ' + p.kind : ''}</div>${levelInput}<button class="subtle" data-rb-remove="${i}">✕</button></div>`;
+  return `<div class="listRow"><div class="name">${bagLbl ? `${bagChip(String(p.kind).replace('MYSTERYBAG_', ''))} Lost Bag → ` : escapeHtml(presentTypeLabel(p)) + ': '}${bagLbl || !p.val0 ? '' : anyIcon(p.val0, 26).replace('class="dicon"', 'class="dicon lead"')}${escapeHtml(detail)}</div><div class="id">${escapeHtml(p.from || '?')}${p.kind ? ' · ' + p.kind : ''}</div>${levelInput}<button class="subtle" data-rb-remove="${i}">✕</button></div>`;
 }
 
 // HTML for the Reward Box add form: Lost Bag form, search-based form, or a plain amount form (money/spirit).

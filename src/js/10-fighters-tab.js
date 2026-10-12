@@ -71,17 +71,17 @@ function fighterInventoryRows(chr) {
   arr(chr.pspts).forEach((p, i) => {
     const rec = PT_INDEX[p.ptid];
     if (equippedEptids.has(p.eptid)) {
-      rows.push(`<div class="listRow fiRow"><div class="name">${escapeHtml(rec ? rec.name : p.ptid)}${rec ? ` · +${displayFromRaw(rec, p.lvl)}` : ''}</div><span class="badge current">${arr(chr.eqpts).some(e => e.eptid === p.eptid) ? 'EQUIPPED' : 'WEAPON SLOT'}</span></div>`);
+      rows.push(`<div class="listRow fiRow"><div class="name">${partIcon(p.ptid, 30)}${escapeHtml(rec ? rec.name : p.ptid)}${rec ? ` · +${displayFromRaw(rec, p.lvl)}` : ''}</div><span class="badge current">${arr(chr.eqpts).some(e => e.eptid === p.eptid) ? 'EQUIPPED' : 'WEAPON SLOT'}</span></div>`);
       return;
     }
     const name = rec ? rec.name : p.ptid;
     const pct = rec ? durabilityPct(p, rec) : null;
     const sub = rec ? ` · +${displayFromRaw(rec, p.lvl)} · durability ${pct != null ? pct + '%' : '?'}${ammoText(p, rec)}` : '';
-    rows.push(`<div class="listRow fiRow"><div class="name">${escapeHtml(name)}${sub}</div><button class="subtle" data-fi-remove="pt:${i}">✕</button></div>`);
+    rows.push(`<div class="listRow fiRow"><div class="name">${partIcon(p.ptid, 30)}${escapeHtml(name)}${sub}</div><button class="subtle" data-fi-remove="pt:${i}">✕</button></div>`);
   });
-  arr(chr.psmsrs).forEach((m, i) => rows.push(`<div class="listRow fiRow"><div class="name">${escapeHtml(msrDisplayName(m.msrid, m.cooked))}</div><button class="subtle" data-fi-remove="msr:${i}">✕</button></div>`));
-  arr(chr.psbsts).forEach((b, i) => rows.push(`<div class="listRow fiRow"><div class="name">${escapeHtml(bstDisplayName(b.bstid, b.cooked))}</div><button class="subtle" data-fi-remove="bst:${i}">✕</button></div>`));
-  arr(chr.psitems).forEach((it, i) => rows.push(`<div class="listRow fiRow"><div class="name">${escapeHtml(itemDisplayName(it.itemId))}</div><button class="subtle" data-fi-remove="item:${i}">✕</button></div>`));
+  arr(chr.psmsrs).forEach((m, i) => rows.push(`<div class="listRow fiRow"><div class="name">${msrIcon(m.msrid, m.cooked, 30)}${escapeHtml(msrDisplayName(m.msrid, m.cooked))}</div><button class="subtle" data-fi-remove="msr:${i}">✕</button></div>`));
+  arr(chr.psbsts).forEach((b, i) => rows.push(`<div class="listRow fiRow"><div class="name">${bstIcon(b.bstid, b.cooked, 30)}${escapeHtml(bstDisplayName(b.bstid, b.cooked))}</div><button class="subtle" data-fi-remove="bst:${i}">✕</button></div>`));
+  arr(chr.psitems).forEach((it, i) => rows.push(`<div class="listRow fiRow"><div class="name">${itemIcon(it.itemId, 30)}${escapeHtml(itemDisplayName(it.itemId))}</div><button class="subtle" data-fi-remove="item:${i}">✕</button></div>`));
   return rows;
 }
 
@@ -641,10 +641,12 @@ function wireAutocomplete(input, dropEl, category, onPick, ptType, levelInputId,
     hiddenNote = hidden ? `${hidden} more can't be +${L} and aren't listed (change the level to see them)` : '';
     return list.slice(0, 30);
   }
+  // icon for a search result, by its category
+  const acIcon = r => r.category === 'pt' ? partIcon(r.id, 26) : r.category === 'item' || r.category === 'bp' ? itemIcon(r.id, 26) : r.category === 'msr' ? msrIcon(r.id, 0, 26) : r.category === 'bst' ? bstIcon(r.id, 0, 26) : r.category === 'skl' ? decalIcon(r.id, 22).replace('class="dicon"', 'class="dicon lead"') : '';
   function show(list) {
     results = list;
     hiIdx = -1;
-    dropEl.innerHTML = list.map((r, i) => `<div class="acitem" data-i="${i}"><span>${escapeHtml(r.name)}${r.category === 'pt' && PT_INDEX[r.id] && PT_INDEX[r.id].is_limitbreak ? ' <span class="badge lb" style="margin-left:4px;">Uncap</span>' : ''}${r.category === 'skl' && SKL_INDEX[r.id] ? (Number(SKL_INDEX[r.id].premium) ? ' <span class="badge" style="margin-left:4px;" title="Kept when the fighter dies or the decal is taken off">Premium</span>' : ' <span class="badge" style="margin-left:4px; opacity:.7;" title="Lost when the fighter dies or the decal is taken off">Normal</span>') : ''}</span><span class="id">${r.id}</span></div>`).join('');
+    dropEl.innerHTML = list.map((r, i) => `<div class="acitem" data-i="${i}"><span>${acIcon(r)}${escapeHtml(r.name)}${r.category === 'pt' && PT_INDEX[r.id] && PT_INDEX[r.id].is_limitbreak ? ' <span class="badge lb" style="margin-left:4px;">Uncap</span>' : ''}${r.category === 'skl' && SKL_INDEX[r.id] ? (Number(SKL_INDEX[r.id].premium) ? ' <span class="badge" style="margin-left:4px;" title="Kept when the fighter dies or the decal is taken off">Premium</span>' : ' <span class="badge" style="margin-left:4px; opacity:.7;" title="Lost when the fighter dies or the decal is taken off">Normal</span>') : ''}</span><span class="id">${r.id}</span></div>`).join('');
     if (hiddenNote) dropEl.innerHTML += `<div class="acnote" style="padding:6px 10px; font-size:11px; color:var(--text-faint); cursor:default;">${escapeHtml(hiddenNote)}</div>`;
     dropEl.classList.toggle('open', list.length > 0 || !!hiddenNote);
   }

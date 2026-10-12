@@ -21,6 +21,7 @@ You need [Node.js](https://nodejs.org/) (any current version). The build only st
 | `styles.css` | All CSS (the background image lives in `assets/background.jpg.b64`) |
 | `data/templates.json` | Blank records the game uses for new entries (kept byte-for-byte) |
 | `data/decal-atlas.json` | Which decal icon sits in which cell of the icon sprite sheet (`assets/decal-atlas.webp.b64`, included by `styles.css`); made by the let-it-die-model-viewer repo's tools |
+| `data/icon-atlas.json` | The same for item icons: which material, mushroom, beast, blueprint, weapon and armour icon sits in which cell of the three sprite sheets (`assets/icon-items.webp.b64`, `icon-weapons.webp.b64`, `icon-armor.webp.b64`), and which pieces borrow another piece's icon; made by the let-it-die-model-viewer repo's tools |
 | `data/body-thumbs.json` | Face thumbnail (base64 WebP) per fighter model id, for the model picker; rendered by the let-it-die-model-viewer repo's tools |
 | `js/01-core-state-and-tables.js` | File overview, global state, game constants and lookup tables |
 | `js/02-save-codec.js` | `.sav` read/write: BRG header + zlib chunks |

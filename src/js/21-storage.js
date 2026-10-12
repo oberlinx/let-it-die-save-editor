@@ -117,29 +117,33 @@ function durabilityPct(inst, rec) {
 
 // One Storage Box content row (HTML) for slot s at index i; returns '' for empty slots. data-sb-kind feeds the search filter.
 function storageSlotRow(s, i) {
-  let label = null, sub = '', kind = '';
+  let label = null, sub = '', kind = '', ico = '';
   if (s.eptid && s.eptid !== '-1') {
     const inst = arr(SAVE.cl.pts).find(p => p.eptid === s.eptid);
     const rec = inst && PT_INDEX[inst.ptid];
     label = rec ? rec.name : inst ? inst.ptid : 'part (unresolved)';
+    ico = inst ? partIcon(inst.ptid, 30) : '';
     const pct = rec ? durabilityPct(inst, rec) : null;
     sub = rec ? `+${displayFromRaw(rec, inst.lvl)} · durability ${pct != null ? pct + '%' : '?'}${ammoText(inst, rec)}` : '';
     kind = rec ? (rec.type === 'PTTP_ARM' ? 'weapon' : 'armor ' + partSlotLabel(rec)) : 'part';
   } else if (s.eitemid && s.eitemid !== '-1') {
     const inst = arr(SAVE.cl.items).find(p => p.eitemid === s.eitemid);
     label = inst ? itemDisplayName(inst.itemId) : 'item (unresolved)';
+    ico = inst ? itemIcon(inst.itemId, 30) : '';
     kind = inst && String(inst.itemId).startsWith('ITMP_') ? 'blueprint' : 'material item';
   } else if (s.emsrid && s.emsrid !== '-1') {
     const inst = arr(SAVE.cl.msrs).find(m => m.emsrid === s.emsrid);
     label = inst ? msrDisplayName(inst.msrid, inst.cooked) : 'Mushroom';
+    ico = inst ? msrIcon(inst.msrid, inst.cooked, 30) : '';
     kind = 'mushroom';
   } else if (s.ebstid && s.ebstid !== '-1') {
     const inst = arr(SAVE.cl.bsts).find(b => b.ebstid === s.ebstid);
     label = inst ? bstDisplayName(inst.bstid, inst.cooked) : 'Beast';
+    ico = inst ? bstIcon(inst.bstid, inst.cooked, 30) : '';
     kind = 'beast';
   }
   if (!label) return '';
-  return `<div class="listRow" data-sb-kind="${kind}"><div class="name">${escapeHtml(label)} ${sub}</div><div class="id">slot ${s.slot != null ? s.slot : i}</div><button class="subtle" data-sb-remove="${i}">✕</button></div>`;
+  return `<div class="listRow" data-sb-kind="${kind}"><div class="name">${ico}${escapeHtml(label)} ${sub}</div><div class="id">slot ${s.slot != null ? s.slot : i}</div><button class="subtle" data-sb-remove="${i}">✕</button></div>`;
 }
 
 // Currently selected deposit category in the Storage Box: bp, pt, msr, bst or item.
