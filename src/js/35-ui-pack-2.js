@@ -238,7 +238,7 @@ const TOUR_KEY = 'lid.tour';
 const TOUR_STEPS = [
   { sel: '#chip-masters', title: 'Load masters.db', text: "Start here. Load the masters.db from your game's Content folder. It tells the editor what the game allows, so edits stay in range. PlayStation saves need a PC masters.db." },
   { sel: '#chip-save', title: 'Load your save', text: 'Then load your save, or drag a .sav anywhere on the page. PlayStation saves must be decrypted first; the 🎮 button next to it explains how.' },
-  { sel: '.stickyNav', title: 'The tabs', text: 'Four sections hold the tabs: Account, Fighters, Run & Floors and Tools. A dot on a tab means you changed something there.', fallback: 'They appear here once a save is loaded.' },
+  { sel: '.stickyNav', title: 'The tabs', text: 'Five sections hold the tabs: Account, Items, Fighters, Run & Floors and Tools. A dot on a tab means you changed something there.', fallback: 'They appear here once a save is loaded.' },
   { sel: '#qs', title: 'Search', text: "Press Ctrl+K and type what you're after, such as 'bloodnium' or 'storage', and it takes you straight to it." },
   { sel: '#statusbar', title: 'Status bar', text: 'This counts your unsaved changes and shows the Save check. Changes lists every edit with an Undo for each, and the Save check button jumps to the next problem.', fallback: 'It appears at the bottom once a save is loaded.' },
   { sel: '#btn-download-sav', title: 'Download safely', text: 'Download shows a full review of what changed before anything is saved. The editor keeps a copy of your original, so you can always go back. Keep your own backup too.' },

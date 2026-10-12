@@ -21,7 +21,7 @@ You can also download `index.html` and open it straight from your PC.
 
 ## Getting around
 
-- **Four groups** (Account, Fighters, Run & Floors, Tools) with the tabs of the open group underneath. The editor remembers your last tab and fighter.
+- **Five groups** (Account, Items, Fighters, Run & Floors, Tools) with the tabs of the open group underneath. The editor remembers your last tab and fighter.
 - **Search** (Ctrl+K or `/`): type a tab or a setting (for example "bloodnium" or "storage") and jump straight to it.
 - **Status bar** at the bottom: how many unsaved changes you have, the Save check result, a **Changes** button and **Download .sav**. The browser warns you if you try to leave with unsaved changes.
 - **Changes** (button or `C`): everything that differs from the save as you loaded it. **Undo** puts one value, or one fighter, back. Floor moves, boss locks, End the run, Rewind and Free continues are listed under *Applied when you download* with a Cancel button. **Start over** reloads the original file.
@@ -33,7 +33,7 @@ You can also download `index.html` and open it straight from your PC.
 - **masters.db mismatch warning:** if the save uses many parts, decals or beasts your masters.db does not know, the Save check says it is probably an older or different masters.db.
 - **? help tips** next to the less obvious settings (hover, tap or tab to one).
 - **Quick tour:** the first time you open the editor on a computer, a short tour points out loading masters.db and your save, the tabs, search, the status bar and the download review. Skip it any time with Esc; the **Take the tour** button in the header plays it again.
-- **Keyboard:** Ctrl+S download, `[` `]` previous/next tab, `1`-`4` groups, `?` help.
+- **Keyboard:** Ctrl+S download, `[` `]` previous/next tab, `1`-`5` groups, `?` help.
 - **Light or dark theme** (button in the header), larger touch targets on phones, and you can **drop** a `.sav`, `.json` or `masters.db` anywhere on the page.
 
 ## Tabs

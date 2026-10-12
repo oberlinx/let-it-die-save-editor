@@ -14,9 +14,10 @@ function uiLsGet(k) { try { return window.localStorage.getItem(k); } catch (e) {
 function uiLsSet(k, v) { try { window.localStorage.setItem(k, v); } catch (e) { /* storage blocked: fine */ } }
 
 // ---- 4. tab groups ------------------------------------------------------
-// Tab groups (the four top-level sections) and which tab ids belong to each; tabs not listed fall into "tools".
+// Tab groups (the five top-level sections) and which tab ids belong to each; tabs not listed fall into "tools".
 const TAB_GROUPS = [
-  { id: 'account', label: 'Account', tabs: [ 'account', 'vip', 'dates', 'stats', 'collection', 'rewards', 'storage', 'decals', 'research', 'stews', 'hub', 'rally', 'bags', 'boxes' ] },
+  { id: 'account', label: 'Account', tabs: [ 'account', 'vip', 'dates', 'stats', 'hub', 'rally' ] },
+  { id: 'items', label: 'Items', tabs: [ 'storage', 'rewards', 'bags', 'boxes', 'decals', 'stews', 'research', 'collection' ] },
   { id: 'fighters', label: 'Fighters', tabs: [ 'fighters', 'layouts', 'defense', 'quests', 'graves' ] },
   { id: 'run', label: 'Run & Floors', tabs: [ 'location', 'run', 'jackals' ] },
   { id: 'tools', label: 'Tools', tabs: [ 'photos', 'compare', 'raw', 'jdiff' ] }
@@ -366,7 +367,7 @@ function uiHelp() {
       <tr><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>Review changes and download the .sav</td></tr>
       <tr><td><kbd>Ctrl</kbd>+<kbd>K</kbd> or <kbd>/</kbd></td><td>Search tabs and settings</td></tr>
       <tr><td><kbd>[</kbd> and <kbd>]</kbd></td><td>Previous / next tab</td></tr>
-      <tr><td><kbd>1</kbd> – <kbd>4</kbd></td><td>Jump to Account, Fighters, Run &amp; Floors, Tools</td></tr>
+      <tr><td><kbd>1</kbd> – <kbd>5</kbd></td><td>Jump to Account, Items, Fighters, Run &amp; Floors, Tools</td></tr>
       <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>Move between tabs while a tab button is selected</td></tr>
       <tr><td><kbd>C</kbd></td><td>Open the list of changes</td></tr>
       <tr><td><kbd>?</kbd></td><td>This help</td></tr>
@@ -445,7 +446,7 @@ function uiOpenPsGuide() {
 }
 // uiCloseOverlay(): remove the generic UI overlay.
 function uiCloseOverlay() { const o = document.getElementById('ui-overlay'); if (o) o.remove(); }
-// Global shortcuts: Ctrl+S download, Ctrl+K/"/" search, Esc closes overlays, [ ] step tabs, 1-4 jump group, C changes, ? help.
+// Global shortcuts: Ctrl+S download, Ctrl+K/"/" search, Esc closes overlays, [ ] step tabs, 1-5 jump group, C changes, ? help.
 document.addEventListener('keydown', e => {
   const k = e.key;
   if ((e.ctrlKey || e.metaKey) && !e.altKey && (k === 's' || k === 'S')) {
@@ -465,7 +466,7 @@ document.addEventListener('keydown', e => {
   if (k === '?') { uiHelp(); return; }
   if (!SAVE) return;
   if (k === ']') uiStepTab(1); else if (k === '[') uiStepTab(-1);
-  else if (k >= '1' && k <= '4') uiGoGroup(TAB_GROUPS[Number(k) - 1].id);
+  else if (k >= '1' && k <= String(TAB_GROUPS.length)) uiGoGroup(TAB_GROUPS[Number(k) - 1].id);
   else if (k === 'c' || k === 'C') uiOpenChanges();
 });
 
