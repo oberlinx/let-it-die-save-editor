@@ -16,8 +16,8 @@ function uiLsSet(k, v) { try { window.localStorage.setItem(k, v); } catch (e) { 
 // ---- 4. tab groups ------------------------------------------------------
 // Tab groups (the four top-level sections) and which tab ids belong to each; tabs not listed fall into "tools".
 const TAB_GROUPS = [
-  { id: 'account', label: 'Account', tabs: [ 'account', 'vip', 'dates', 'stats', 'collection', 'rewards', 'storage' ] },
-  { id: 'fighters', label: 'Fighters', tabs: [ 'fighters', 'layouts', 'decals', 'research', 'stews', 'quests', 'graves' ] },
+  { id: 'account', label: 'Account', tabs: [ 'account', 'vip', 'dates', 'stats', 'collection', 'rewards', 'storage', 'decals', 'research', 'stews' ] },
+  { id: 'fighters', label: 'Fighters', tabs: [ 'fighters', 'layouts', 'quests', 'graves' ] },
   { id: 'run', label: 'Run & Floors', tabs: [ 'location', 'run', 'rally', 'defense', 'hub', 'bags', 'boxes', 'jackals' ] },
   { id: 'tools', label: 'Tools', tabs: [ 'photos', 'compare', 'raw', 'jdiff' ] }
 ];
