@@ -147,7 +147,7 @@ function renderBags() {
       const nm = g ? rewardName(g.rwdid) : x.e.cntgen;
       const p = pool.find(pp => pp.id === x.e.cntgen);
       return `<div class="listRow"><span style="width:34px; color:var(--text-faint);">${k + 1}.</span>
-        <div class="name">${g && rwdRow(g.rwdid) && rwdRow(g.rwdid).val0 ? anyIcon(rwdRow(g.rwdid).val0, 26).replace('class="dicon"', 'class="dicon lead"') : ''}${escapeHtml(nm)}${p ? '' : ' <span class="badge" title="Not in the current offline pool">not in pool</span>'}</div>
+        <div class="name">${g && rwdRow(g.rwdid) ? (rwdRow(g.rwdid).val0 ? anyIcon(rwdRow(g.rwdid).val0, 26).replace('class="dicon"', 'class="dicon lead"') : currencyIcon(rwdRow(g.rwdid).type, g.rwdid, 26)) : ''}${escapeHtml(nm)}${p ? '' : ' <span class="badge" title="Not in the current offline pool">not in pool</span>'}</div>
         <select data-bag-slot="${r}:${x.i}" style="max-width:260px; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:3px 6px; font-family:var(--mono); font-size:11px;">
           ${p ? '' : `<option value="${escapeHtml(x.e.cntgen)}" selected>${escapeHtml(nm)}</option>`}
           ${pool.slice().sort((a, b) => a.name.localeCompare(b.name)).map(pp => `<option value="${pp.id}" ${pp.id === x.e.cntgen ? 'selected' : ''}>${escapeHtml(pp.name)}</option>`).join('')}
@@ -291,7 +291,7 @@ function renderBoxes() {
     const ready = !(x.opentime > now);
     return `<div class="listRow" style="flex-direction:column; align-items:stretch; padding:10px; gap:6px;">
       <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-        ${bagChip(x.rarity)} <div class="name">${x.val0 ? anyIcon(x.val0, 30).replace('class="dicon"', 'class="dicon lead"') : ''}<b>${escapeHtml(boxContentName(x))}</b></div>
+        ${bagChip(x.rarity)} <div class="name">${x.val0 ? anyIcon(x.val0, 30).replace('class="dicon"', 'class="dicon lead"') : currencyIcon(x.type, '', 30)}<b>${escapeHtml(boxContentName(x))}</b></div>
         ${ready ? '<span class="badge current">READY</span>' : `<span class="badge">opens ${escapeHtml(dtRel(x.opentime, now))}</span>`}
       </div>
       <div style="font-size:11px; color:var(--text-dim);">Received ${escapeHtml(dtFmt(x.created))} · opens ${escapeHtml(dtFmt(x.opentime))}</div>

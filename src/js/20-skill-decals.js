@@ -34,7 +34,7 @@ function decalIcon(id, px) {
   const c = DECAL_ATLAS.cols;
   return `<span class="dicon" style="width:${px}px; height:${px}px; background-size:${c * px}px auto; background-position:-${(i % c) * px}px -${Math.floor(i / c) * px}px;"></span>`;
 }
-// Item icons: materials, mushrooms, beasts, blueprints, weapons and armour, in three embedded sprite sheets
+// Item icons: materials, mushrooms, beasts, blueprints, currencies, weapons and armour, in three embedded sprite sheets
 // (CSS classes .gicon.s-items / .s-weapons / .s-armor), so they work offline.
 // ICON_ATLAS = { cell: [w, h], sheets: { name: { cols, names } }, alias: { id: icon name } }; names[i] is the icon in
 // cell i (left to right, top to bottom) and alias maps a part with no icon of its own to the one it borrows.
@@ -62,6 +62,13 @@ function itemIcon(itemId, h) {
 // msrIcon() / bstIcon(): icon of a mushroom or beast; cooked uses the grilled icon when there is one.
 function msrIcon(msrid, cooked, h) { return (Number(cooked) ? iconSpan(msrid + '_R', h) : '') || iconSpan(msrid, h); }
 function bstIcon(bstid, cooked, h) { return (Number(cooked) ? iconSpan(bstid + '_R', h) : '') || iconSpan(bstid, h); }
+// currencyIcon(): icon for a reward that is a currency or pass and has no item id: Kill Coins, Death Metal (a MONEY reward
+// whose id says MEDAL), SPLithium, Bloodnium, and the 1-day and 30-day Express passes. '' for any other type.
+function currencyIcon(type, rwdid, h) {
+  const t = String(type || '');
+  const name = t === 'MONEY' ? (/MEDAL/.test(String(rwdid || '')) ? 'DMetal_1' : 'Money_1') : t === 'SPIRIT' ? 'Spirit_1' : t === 'BLOODNIUM' ? 'Blood_1' : t === '1VIP' ? 'VIPticket_1' : t === 'VIP' ? 'VIPticket_2' : '';
+  return name ? iconSpan(name, h) : '';
+}
 // anyIcon(): icon for an id of unknown kind (part, item, mushroom, beast or decal), or ''.
 function anyIcon(id, h) {
   if (PT_INDEX[id]) return partIcon(id, h);
