@@ -52,7 +52,9 @@
   header {
     padding: 22px 28px 18px; border-bottom: 1px solid var(--panel-border);
     background: linear-gradient(180deg, var(--bg-raised), var(--bg));
-    position: sticky; top: 0; z-index: 50;
+    /* not pinned: it is the tallest thing on the page, so it scrolls away and only the tab bar (.stickyNav) stays.
+       Download and the Save check stay reachable from the status bar at the bottom. */
+    position: relative; z-index: 50;
   }
   h1 {
     font-family: var(--display); font-weight: 700; font-size: 26px; letter-spacing: 0.5px;
@@ -338,7 +340,7 @@
   #statusbar .sbok { color: var(--good-bright); }
   #statusbar .sbprob { color: var(--accent-bright); font-weight: bold; }
   #statusbar .sbspace { flex: 1; }
-  main { padding-bottom: 90px; }
+  main { padding-bottom: 64px; }   /* room for the fixed status bar, and no more: extra padding made short pages scroll */
 
   #chg-drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(560px, 100vw); z-index: 900; background: var(--panel); border-left: 1px solid var(--panel-border-bright); box-shadow: -10px 0 30px rgba(0,0,0,.5); display: none; flex-direction: column; }
   #chg-drawer .dhead { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--panel-border); }
@@ -400,15 +402,15 @@
   html[data-theme="light"] ::selection { color: #fff; }
   /* ===== UI pack 2 ===== */
   .stickyNav { background: var(--bg); }
-  /* The pinned tab bar sits just under the pinned header. It overlaps the header by a pixel and carries a solid strip
-     above itself (hidden behind the header), so no sliver of the page can show between the two whatever the header's
-     exact height or the browser zoom. Its own bottom padding replaces the tab row's margin, which used to fall outside
-     the bar and let the page show right under the tabs. */
+  /* The pinned tab bar stays at the top of the window once the header has scrolled away (--hdrh is the height of a
+     pinned header, which is now always 0). It carries a solid strip above itself so no sliver of the page can show
+     over it, and its own bottom padding replaces the tab row's margin, which used to fall outside the bar and let the
+     page show right under the tabs. */
   @media (min-width: 641px) {
     .stickyNav { position: sticky; top: calc(var(--hdrh, 0px) - 1px); z-index: 45; padding-top: 7px; margin-top: -6px; padding-bottom: 10px; margin-bottom: 4px; box-shadow: 0 -16px 0 var(--bg), 0 6px 8px -6px rgba(0,0,0,.45); }
     .stickyNav .tabbar { margin-bottom: 0; }
   }
-  .healthRow, .block, .block-head { scroll-margin-top: 150px; }
+  .healthRow, .block, .block-head { scroll-margin-top: 110px; }   /* jumps land below the pinned tab bar */
   .tabbtn.dirty::after, .grpbtn.dirty::after { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--warn); margin-left: 7px; vertical-align: middle; }
   .tabbtn.dirty.active::after, .grpbtn.dirty.active::after { background: #fff; box-shadow: 0 0 0 1px var(--warn); }
   .linkbtn { background: none; border: 0; padding: 0; font: inherit; color: inherit; text-decoration: underline dotted; cursor: pointer; min-height: 0 !important; }
@@ -15025,7 +15027,8 @@ function uiAfterRender() {
 // ===========================================================================
 
 // ---- sticky tab bar: keep the header height in a CSS variable so the nav can stick right under it ----
-// uiTrackHeader(): publish the sticky header height as CSS variable --hdrh so the tab bar sticks under it.
+// uiTrackHeader(): publish the height of a pinned (sticky) header as CSS variable --hdrh so the tab bar sticks under it.
+// The header is no longer pinned, so this is 0 and the tab bar sticks to the top of the window; kept in case a theme pins it.
 function uiTrackHeader() {
   const h = document.querySelector('header'); if (!h) return;
   const set = () => document.documentElement.style.setProperty('--hdrh', (getComputedStyle(h).position === 'sticky' ? Math.floor(h.getBoundingClientRect().height) : 0) + 'px');

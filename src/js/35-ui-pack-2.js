@@ -4,7 +4,8 @@
 // ===========================================================================
 
 // ---- sticky tab bar: keep the header height in a CSS variable so the nav can stick right under it ----
-// uiTrackHeader(): publish the sticky header height as CSS variable --hdrh so the tab bar sticks under it.
+// uiTrackHeader(): publish the height of a pinned (sticky) header as CSS variable --hdrh so the tab bar sticks under it.
+// The header is no longer pinned, so this is 0 and the tab bar sticks to the top of the window; kept in case a theme pins it.
 function uiTrackHeader() {
   const h = document.querySelector('header'); if (!h) return;
   const set = () => document.documentElement.style.setProperty('--hdrh', (getComputedStyle(h).position === 'sticky' ? Math.floor(h.getBoundingClientRect().height) : 0) + 'px');
