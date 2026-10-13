@@ -460,6 +460,11 @@
   .gicon.s-weapons { background-image: url('data:image/webp;base64,@@INCLUDE(assets/icon-weapons.webp.b64)@@'); }
   .gicon.s-armor { background-image: url('data:image/webp;base64,@@INCLUDE(assets/icon-armor.webp.b64)@@'); }
   .gicon.s-mastery { background-image: url('data:image/webp;base64,@@INCLUDE(assets/icon-mastery.webp.b64)@@'); }
+  /* Tokyo Death Metro rank medals: five 54x60 cells in a row (bronze, silver, gold, platinum, diamond), cut from the
+     game's info-icon sheet; tdmRankIcon() sets the size and position inline */
+  .gicon.s-tdm { background-image: url('data:image/webp;base64,@@INCLUDE(assets/icon-tdm.webp.b64)@@'); }
+  /* which platform the loaded save is from, beside the account id */
+  .platBadge { display: inline-block; margin-left: 8px; padding: 1px 7px; border: 1px solid var(--panel-border-bright); font-size: 11px; color: var(--text); vertical-align: middle; white-space: nowrap; }
   /* Recycle Points: the game draws this symbol as a shape, not a picture, so the icon is the 22x28 image from the
      LET IT DIE wiki (letitdie.wiki.gg, File:RE.png) rather than a cell of the sheets above */
   .gicon.s-recycle { background-image: url('data:image/png;base64,@@INCLUDE(assets/icon-recycle.png.b64)@@'); background-size: contain; background-position: center; }
