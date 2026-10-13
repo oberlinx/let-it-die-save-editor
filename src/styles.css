@@ -144,6 +144,12 @@
   .listRow:hover { background: rgba(255,255,255,0.02); }
   .listRow .name { flex: 1; }
   .listRow .id { color: var(--text-faint); font-size: 10.5px; }
+  /* Storage totals rows: on a narrow screen the name takes its own line and the count and buttons sit under it */
+  @media (max-width: 640px) {
+    .listRow.sbTot { flex-wrap: wrap; row-gap: 4px; }
+    .listRow.sbTot .name { flex: 1 1 100%; }
+    .listRow.sbTot .id { flex: 1; }
+  }
   .listRow input[type=checkbox] { accent-color: var(--accent); width: 15px; height: 15px; }
 
   .toolbar { display: flex; gap: 8px; margin-bottom: 10px; align-items: center; flex-wrap: wrap; }

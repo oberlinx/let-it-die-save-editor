@@ -64,7 +64,7 @@ Things you own, make or receive.
 
 | Tab | What it does |
 |---|---|
-| Storage | Storage Box contents and capacity; add weapons and armor at a chosen in-game +n (only levels the part can reach are offered; they arrive with full durability and ammo), blueprints, mushrooms, beasts and items; repair and refill ammo on everything stored |
+| Storage | Storage Box contents and capacity; add weapons and armor at a chosen in-game +n (only levels the part can reach are offered; they arrive with full durability and ammo), blueprints, mushrooms, beasts and items; repair and refill ammo on everything stored. The Contents list has two views: **By slot** (one row per slot, with a remove button) and **Totals** (one row per different thing with how many you hold, grouped by level for weapons and armor, with **−**, **+** and **✕ all** buttons). A line beside the switch counts the box by kind, and the search filters both views |
 | Rewards | Send to the Reward Box: weapons and armor at a chosen in-game +n (arriving with full durability and ammo), blueprints (normal or unrevealed), items, mushrooms, beasts, decals (marked Premium or Normal), Kill Coins, SPLithium, and Lost Bags of any rarity (random contents from the game's odds, or chosen). Only things the PC game can hand out are offered, and levels an item can't reach are hidden. PS-only parts, blueprints and decals need **Include PS-only** |
 | **Mystery Bags** | Lost Bags from Tokyo Death Metro: see what each rarity will give, set any slot, fill all, or reroll from the game's odds |
 | **Death Boxes** | See each box's reward and unlock time, open now, change or reroll the reward, add or remove boxes |

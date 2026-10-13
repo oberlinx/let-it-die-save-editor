@@ -6,7 +6,7 @@ function blockStorageBox() {
   const cl = SAVE.cl;
   const cap = cl.slots.length;
   const occupied = cl.slots.filter(s => s.eptid && s.eptid !== '-1' || s.emsrid && s.emsrid !== '-1' || s.ebstid && s.ebstid !== '-1' || s.eitemid && s.eitemid !== '-1').length;
-  return `<section class="block">\n    <div class="block-head"><div><div class="eyebrow">Item Storage</div><h2>Storage Box</h2></div></div>\n    <div class="block-body">\n      <div class="grid" style="margin-bottom:6px;">\n        <div class="field"><label>Capacity (${STORAGE_BOX_MIN}-${storageBoxMax()}, steps of ${storageBoxStep()})</label><input type="number" id="sb-capacity" min="${STORAGE_BOX_MIN}" max="${storageBoxMax()}" step="${storageBoxStep()}" value="${cap}"></div>\n        <div class="field" style="display:flex; align-items:end;"><button class="subtle" id="sb-max">Max (${storageBoxMax()})</button></div>\n      </div>\n      <div class="capNote ${occupied >= cap ? 'over' : ''}">${occupied} / ${cap} slots occupied${occupied >= cap ? ' -- FULL, raise capacity to add more' : ''}. Changing capacity adds/removes empty slots at the end; it never deletes occupied ones.</div>\n\n      <div class="eyebrow" style="margin:12px 0 6px;">Bulk blueprints</div>\n      <div class="toolbar">\n        <button class="subtle" id="sb-add-legit-bp">+1 of every obtainable blueprint</button>\n        <button class="subtle" id="sb-add-ps-bp">+1 PlayStation-only blueprint</button>\n        <button class="subtle" id="sb-add-travis-bp">+1 Travis jacket, pants, sunglasses &amp; Beam Katana 1</button>\n        <button class="subtle" id="sb-add-tdm-bp">+1 every TDM blueprint</button>\n      </div>\n\n      <div class="eyebrow" style="margin:12px 0 6px;">Deposit item</div>\n      <div class="subTabs" id="sb-cat-tabs">\n        <div class="subTab active" data-sb-cat="bp">Blueprint</div>\n        <div class="subTab" data-sb-cat="pt">Weapon / Armor</div>\n        <div class="subTab" data-sb-cat="msr">Mushroom</div>\n        <div class="subTab" data-sb-cat="bst">Beast</div>\n        <div class="subTab" data-sb-cat="item">Material / Other Item</div>\n      </div>\n      <div id="sb-add-form"></div>\n\n      <div class="eyebrow" style="margin:16px 0 8px;">Contents <button class="subtle" id="sb-refresh-all" style="margin-left:8px;" title="Durability to 100% and ammo full on every weapon and armor in the Storage Box">Repair &amp; refill all</button> <button class="subtle" id="sb-clear-all" style="margin-left:4px;">Clear all</button></div>\n      <div class="toolbar" style="margin-bottom:6px;"><input type="text" id="sb-content-search" placeholder="Search contents: name, level, or weapon / armor / blueprint / mushroom / beast / material" value="${escapeHtml(SB_CONTENT_FILTER)}" style="flex:1; max-width:360px; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);"><span class="count" id="sb-content-count"></span></div>\n      <div class="listBlock" id="sb-list">\n        ${cl.slots.map((s, i) => storageSlotRow(s, i)).filter(Boolean).join('') || '<div style="padding:10px; color:var(--text-faint); font-size:12px;">No occupied slots.</div>'}\n      </div>\n    </div>\n  </section>`;
+  return `<section class="block">\n    <div class="block-head"><div><div class="eyebrow">Item Storage</div><h2>Storage Box</h2></div></div>\n    <div class="block-body">\n      <div class="grid" style="margin-bottom:6px;">\n        <div class="field"><label>Capacity (${STORAGE_BOX_MIN}-${storageBoxMax()}, steps of ${storageBoxStep()})</label><input type="number" id="sb-capacity" min="${STORAGE_BOX_MIN}" max="${storageBoxMax()}" step="${storageBoxStep()}" value="${cap}"></div>\n        <div class="field" style="display:flex; align-items:end;"><button class="subtle" id="sb-max">Max (${storageBoxMax()})</button></div>\n      </div>\n      <div class="capNote ${occupied >= cap ? 'over' : ''}">${occupied} / ${cap} slots occupied${occupied >= cap ? ' -- FULL, raise capacity to add more' : ''}. Changing capacity adds/removes empty slots at the end; it never deletes occupied ones.</div>\n\n      <div class="eyebrow" style="margin:12px 0 6px;">Bulk blueprints</div>\n      <div class="toolbar">\n        <button class="subtle" id="sb-add-legit-bp">+1 of every obtainable blueprint</button>\n        <button class="subtle" id="sb-add-ps-bp">+1 PlayStation-only blueprint</button>\n        <button class="subtle" id="sb-add-travis-bp">+1 Travis jacket, pants, sunglasses &amp; Beam Katana 1</button>\n        <button class="subtle" id="sb-add-tdm-bp">+1 every TDM blueprint</button>\n      </div>\n\n      <div class="eyebrow" style="margin:12px 0 6px;">Deposit item</div>\n      <div class="subTabs" id="sb-cat-tabs">\n        <div class="subTab active" data-sb-cat="bp">Blueprint</div>\n        <div class="subTab" data-sb-cat="pt">Weapon / Armor</div>\n        <div class="subTab" data-sb-cat="msr">Mushroom</div>\n        <div class="subTab" data-sb-cat="bst">Beast</div>\n        <div class="subTab" data-sb-cat="item">Material / Other Item</div>\n      </div>\n      <div id="sb-add-form"></div>\n\n      <div class="eyebrow" style="margin:16px 0 8px;">Contents <button class="subtle" id="sb-refresh-all" style="margin-left:8px;" title="Durability to 100% and ammo full on every weapon and armor in the Storage Box">Repair &amp; refill all</button> <button class="subtle" id="sb-clear-all" style="margin-left:4px;">Clear all</button></div>\n      <div class="toolbar" style="margin-bottom:6px;"><input type="text" id="sb-content-search" placeholder="Search contents: name, level, or weapon / armor / blueprint / mushroom / beast / material" value="${escapeHtml(SB_CONTENT_FILTER)}" style="flex:1; max-width:360px; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);"><span class="count" id="sb-content-count"></span></div>\n      <div class="toolbar" style="margin-bottom:6px; gap:6px;"><div class="subTabs" style="margin:0;"><div class="subTab ${SB_VIEW === 'slots' ? 'active' : ''}" data-sb-view="slots" title="One row per storage slot, with a remove button">By slot</div><div class="subTab ${SB_VIEW === 'totals' ? 'active' : ''}" data-sb-view="totals" title="One row per different thing, with how many you hold">Totals</div></div><select id="sb-total-sort" title="Order of the Totals list" style="display:${SB_VIEW === 'totals' ? '' : 'none'}; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:5px 8px; font-family:var(--mono); font-size:11.5px;"><option value="count" ${SB_TOTAL_SORT === 'count' ? 'selected' : ''}>Most held first</option><option value="name" ${SB_TOTAL_SORT === 'name' ? 'selected' : ''}>By name</option><option value="kind" ${SB_TOTAL_SORT === 'kind' ? 'selected' : ''}>By kind</option></select><span id="sb-summary" style="font-size:11.5px; color:var(--text-dim);">${sbSummaryHtml()}</span></div>\n      <div class="listBlock" id="sb-list">\n        ${sbListHtml()}\n      </div>\n    </div>\n  </section>`;
 }
 
 // Display name for an item id. Blueprints (ITMP_*) show as 'Blueprint - <part name>' with
@@ -146,6 +146,94 @@ function storageSlotRow(s, i) {
   return `<div class="listRow" data-sb-kind="${kind}"><div class="name">${ico}${escapeHtml(label)} ${sub}</div><div class="id">slot ${s.slot != null ? s.slot : i}</div><button class="subtle" data-sb-remove="${i}">✕</button></div>`;
 }
 
+// Which Contents view is showing: 'slots' (one row per slot, with remove buttons) or 'totals' (one row per different
+// thing with how many are held, and - / + / remove all buttons), and how the totals are ordered. Kept across re-renders.
+let SB_VIEW = 'slots', SB_TOTAL_SORT = 'count';
+const SB_KIND_ORDER = [ 'weapon', 'armor', 'blueprint', 'material', 'mushroom', 'beast' ];
+const SB_KIND_LABEL = { weapon: 'weapons', armor: 'armor', blueprint: 'blueprints', material: 'materials and items', mushroom: 'mushrooms', beast: 'beasts' };
+// storageTotals(): everything in the Storage Box grouped into [{ key, kind, label, sub, ico, n, slots, src }]. Weapons and
+// armor group by piece and level, mushrooms and beasts by raw or grilled, blueprints by revealed or unrevealed (they are
+// different ids). slots are the slot indexes holding the group; src says what one more copy would be (null if unknown).
+function storageTotals() {
+  const cl = SAVE.cl, by = new Map();
+  let at = -1;
+  const add = (key, kind, label, sub, ico, src) => { const g = by.get(key); if (g) { g.n++; g.slots.push(at); } else by.set(key, { key, kind, label, sub, ico, n: 1, slots: [ at ], src: src || null }); };
+  const pts = new Map(arr(cl.pts).map(p => [ p.eptid, p ])), items = new Map(arr(cl.items).map(p => [ p.eitemid, p ]));
+  const msrs = new Map(arr(cl.msrs).map(p => [ p.emsrid, p ])), bsts = new Map(arr(cl.bsts).map(p => [ p.ebstid, p ]));
+  for (const s of cl.slots) {
+    at++;
+    if (s.eptid && s.eptid !== '-1') {
+      const inst = pts.get(s.eptid), rec = inst && PT_INDEX[inst.ptid];
+      if (!inst) { add('pt?', 'weapon', 'part (unresolved)', '', () => ''); continue; }
+      const armor = !!rec && rec.type !== 'PTTP_ARM';
+      add(`pt|${inst.ptid}|${inst.lvl}`, armor ? 'armor' : 'weapon', rec ? rec.name : inst.ptid, [ rec ? `+${displayFromRaw(rec, inst.lvl)}` : '', armor ? partSlotLabel(rec) : '' ].filter(Boolean).join(' · '), () => partIcon(inst.ptid, 30), rec ? { t: 'pt', rec, lvl: inst.lvl } : null);
+    } else if (s.eitemid && s.eitemid !== '-1') {
+      const inst = items.get(s.eitemid);
+      if (!inst) { add('item?', 'material', 'item (unresolved)', '', () => ''); continue; }
+      add(`item|${inst.itemId}`, String(inst.itemId).startsWith('ITMP_') ? 'blueprint' : 'material', itemDisplayName(inst.itemId), '', () => itemIcon(inst.itemId, 30), { t: 'item', id: inst.itemId });
+    } else if (s.emsrid && s.emsrid !== '-1') {
+      const inst = msrs.get(s.emsrid);
+      if (!inst) { add('msr?', 'mushroom', 'Mushroom', '', () => ''); continue; }
+      add(`msr|${inst.msrid}|${Number(inst.cooked) ? 1 : 0}`, 'mushroom', msrDisplayName(inst.msrid, inst.cooked), Number(inst.cooked) && msrDisplayName(inst.msrid, 1) === msrDisplayName(inst.msrid, 0) ? 'grilled' : '', () => msrIcon(inst.msrid, inst.cooked, 30), { t: 'msr', id: inst.msrid, cooked: !!Number(inst.cooked) });
+    } else if (s.ebstid && s.ebstid !== '-1') {
+      const inst = bsts.get(s.ebstid);
+      if (!inst) { add('bst?', 'beast', 'Beast', '', () => ''); continue; }
+      add(`bst|${inst.bstid}|${Number(inst.cooked) ? 1 : 0}`, 'beast', bstDisplayName(inst.bstid, inst.cooked), Number(inst.cooked) && bstDisplayName(inst.bstid, 1) === bstDisplayName(inst.bstid, 0) ? 'grilled' : '', () => bstIcon(inst.bstid, inst.cooked, 30), { t: 'bst', id: inst.bstid, cooked: !!Number(inst.cooked) });
+    }
+  }
+  return [ ...by.values() ];
+}
+// ---- editing from the Totals view ----
+// sbEmptySlot(i): the cleared form of slot i (same as the By slot remove button writes).
+const sbEmptySlot = i => ({ slot: i, eptid: '-1', emsrid: '-1', ebstid: '-1', eitemid: '-1' });
+// sbTotalsAddOne(g): put one more of group g into the first free slot. Gear arrives at the group's level with full
+// durability and ammo, like the deposit form. Returns false (with a toast) when the box is full.
+function sbTotalsAddOne(g) {
+  const cl = SAVE.cl, i = storageFreeSlotIndex(), src = g.src;
+  if (!src) return false;
+  if (i < 0) { toast('Storage box full -- raise capacity to add more', true); return false; }
+  const eid = 'edit-' + Math.random().toString(16).slice(2) + Date.now().toString(16), now = Math.floor(Date.now() / 1e3), slot = sbEmptySlot(i);
+  if (src.t === 'pt') {
+    cl.pts.push({ eptid: eid, ptid: src.rec.id, gettime: now, rest: Number(src.rec.capacity) || 0, spare: Number(src.rec.spare) || 0, grade: 0, dur: partMaxDur(src.rec, src.lvl) || src.rec.dur, lvl: src.lvl });
+    slot.eptid = eid;
+  } else if (src.t === 'item') {
+    cl.items.push({ eitemid: eid, itemId: src.id, gettime: now });
+    slot.eitemid = eid;
+  } else if (src.t === 'msr') {
+    cl.msrs.push({ emsrid: eid, msrid: src.id, gettime: now, eefcid: '', tefcid: '', state: src.cooked ? 1 : 0, cooked: src.cooked });
+    slot.emsrid = eid;
+  } else {
+    cl.bsts.push({ ebstid: eid, bstid: src.id, gettime: now, lvl: 1, state: src.cooked ? 1 : 0, cooked: src.cooked });
+    slot.ebstid = eid;
+  }
+  cl.slots[i] = slot;
+  return true;
+}
+// sbTotalsRemoveOne(g): clear one slot of group g. Copies of a material, mushroom or beast are identical; gear of the
+// same level can differ in wear, so the most worn copy goes first.
+function sbTotalsRemoveOne(g) {
+  const cl = SAVE.cl;
+  let pick = g.slots[g.slots.length - 1];
+  if (g.src && g.src.t === 'pt') {
+    const wear = i => { const inst = arr(cl.pts).find(p => p.eptid === cl.slots[i].eptid); const pct = inst ? durabilityPct(inst, g.src.rec) : null; return pct == null ? 100 : pct; };
+    pick = g.slots.slice().sort((a, b) => wear(a) - wear(b) || b - a)[0];
+  }
+  cl.slots[pick] = sbEmptySlot(pick);
+}
+// sbSummaryHtml(): one line counting what is in the box by kind, e.g. "274 weapons · 86 armor · ...".
+function sbSummaryHtml() {
+  const n = {};
+  for (const g of storageTotals()) n[g.kind] = (n[g.kind] || 0) + g.n;
+  return SB_KIND_ORDER.filter(k => n[k]).map(k => `<b style="color:var(--text);">${n[k].toLocaleString()}</b> ${SB_KIND_LABEL[k]}`).join(' · ');
+}
+// sbListHtml(): the rows of #sb-list for the current view.
+function sbListHtml() {
+  const empty = '<div style="padding:10px; color:var(--text-faint); font-size:12px;">No occupied slots.</div>';
+  if (SB_VIEW !== 'totals') return SAVE.cl.slots.map((s, i) => storageSlotRow(s, i)).filter(Boolean).join('') || empty;
+  const rows = storageTotals(), ko = k => SB_KIND_ORDER.indexOf(k), nm = (a, b) => a.label.localeCompare(b.label) || a.sub.localeCompare(b.sub, undefined, { numeric: true });
+  rows.sort(SB_TOTAL_SORT === 'name' ? nm : SB_TOTAL_SORT === 'kind' ? (a, b) => ko(a.kind) - ko(b.kind) || nm(a, b) : (a, b) => b.n - a.n || nm(a, b));
+  return rows.map(g => `<div class="listRow sbTot" data-sb-kind="${g.kind}" data-sb-n="${g.n}"><div class="name">${g.ico()}${escapeHtml(g.label)}${g.sub ? ` <span style="color:var(--text-dim); font-weight:400;">${escapeHtml(g.sub)}</span>` : ''}</div><div class="id">${g.kind}</div><button class="subtle" data-sb-t="minus" data-sb-key="${escapeHtml(g.key)}" title="Remove one${g.kind === 'weapon' || g.kind === 'armor' ? ' (the most worn copy first)' : ''}" style="min-width:30px;">−</button><span class="badge" style="min-width:52px; text-align:center;">×${g.n.toLocaleString()}</span><button class="subtle" data-sb-t="plus" data-sb-key="${escapeHtml(g.key)}" title="Add one more${g.kind === 'weapon' || g.kind === 'armor' ? ' at this level, with full durability and ammo' : ''}" style="min-width:30px;" ${g.src ? '' : 'disabled'}>+</button><button class="subtle" data-sb-t="all" data-sb-key="${escapeHtml(g.key)}" title="Remove all ${g.n.toLocaleString()} from the Storage Box">✕ all</button></div>`).join('') || empty;
+}
 // Currently selected deposit category in the Storage Box: bp, pt, msr, bst or item.
 let sbCategory = 'bp';
 // Storage contents search: filters the list in place (kept across re-renders)
@@ -163,7 +251,11 @@ function applyStorageContentFilter() {
     if (hit) shown++;
   }
   const c = document.getElementById('sb-content-count');
-  if (c) c.textContent = q ? `${shown} of ${rows.length} shown` : `${rows.length} item${rows.length === 1 ? '' : 's'}`;
+  if (!c) return;
+  if (SB_VIEW === 'totals') {
+    const held = rows.filter(r => r.style.display !== 'none').reduce((n, r) => n + (Number(r.dataset.sbN) || 0), 0);
+    c.textContent = q ? `${shown} of ${rows.length} different things shown · ${held.toLocaleString()} held` : `${rows.length} different thing${rows.length === 1 ? '' : 's'} · ${held.toLocaleString()} held`;
+  } else c.textContent = q ? `${shown} of ${rows.length} shown` : `${rows.length} item${rows.length === 1 ? '' : 's'}`;
 }
 
 // HTML for the deposit form of the selected category (level for parts, unrevealed for blueprints, cooked for mushrooms/beasts).
@@ -186,6 +278,15 @@ function wireStorageBox() {
   const sbSearch = document.getElementById('sb-content-search');
   if (sbSearch) sbSearch.addEventListener('input', () => { SB_CONTENT_FILTER = sbSearch.value; applyStorageContentFilter(); });
   applyStorageContentFilter();
+  // Contents view switch and totals order: only the list is redrawn
+  const redrawList = () => {
+    document.querySelectorAll('[data-sb-view]').forEach(el => el.classList.toggle('active', el.dataset.sbView === SB_VIEW));
+    document.getElementById('sb-total-sort').style.display = SB_VIEW === 'totals' ? '' : 'none';
+    document.getElementById('sb-list').innerHTML = sbListHtml();
+    applyStorageContentFilter();
+  };
+  document.querySelectorAll('[data-sb-view]').forEach(el => el.addEventListener('click', () => { SB_VIEW = el.dataset.sbView; redrawList(); }));
+  document.getElementById('sb-total-sort').addEventListener('change', e => { SB_TOTAL_SORT = e.target.value; redrawList(); });
   document.getElementById('sb-capacity').addEventListener('change', e => {
     let target = parseInt(e.target.value, 10) || STORAGE_BOX_MIN;
     target = Math.round(target / storageBoxStep()) * storageBoxStep();
@@ -219,18 +320,40 @@ function wireStorageBox() {
     renderAll();
     toast('Storage box cleared');
   });
-  document.querySelectorAll('[data-sb-remove]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const i = parseInt(btn.dataset.sbRemove, 10);
-      SAVE.cl.slots[i] = {
-        slot: i,
-        eptid: '-1',
-        emsrid: '-1',
-        ebstid: '-1',
-        eitemid: '-1'
-      };
+  // one listener on the list, so the remove buttons keep working after the list is redrawn by the view switch
+  document.getElementById('sb-list').addEventListener('click', e => {
+    // Totals view: - / + / remove all on a group
+    const tb = e.target.closest('[data-sb-t]');
+    if (tb) {
+      const g = storageTotals().find(x => x.key === tb.dataset.sbKey);
+      if (!g) return;
+      const what = g.label + (g.sub ? ' ' + g.sub : '');
+      if (tb.dataset.sbT === 'plus') { if (!sbTotalsAddOne(g)) return; }
+      else if (tb.dataset.sbT === 'minus') sbTotalsRemoveOne(g);
+      else {
+        if (g.n > 1 && !confirm(`Remove all ${g.n.toLocaleString()} "${what}" from the Storage Box? Nothing is written until you download.`)) return;
+        for (const i of g.slots) SAVE.cl.slots[i] = sbEmptySlot(i);
+        toast(`Removed ${g.n.toLocaleString()} "${what}"`);
+      }
+      // redraw everything (slot count, change tracking) but stay where the user was in the list
+      const top = document.getElementById('sb-list').scrollTop, y = window.scrollY;
       renderAll();
-    });
+      const nl = document.getElementById('sb-list');
+      if (nl) nl.scrollTop = top;
+      window.scrollTo(0, y);
+      return;
+    }
+    const btn = e.target.closest('[data-sb-remove]');
+    if (!btn) return;
+    const i = parseInt(btn.dataset.sbRemove, 10);
+    SAVE.cl.slots[i] = {
+      slot: i,
+      eptid: '-1',
+      emsrid: '-1',
+      ebstid: '-1',
+      eitemid: '-1'
+    };
+    renderAll();
   });
   document.querySelectorAll('[data-sb-cat]').forEach(el => {
     el.addEventListener('click', () => {
