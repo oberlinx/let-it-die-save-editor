@@ -450,6 +450,7 @@
   .gicon.s-items { background-image: url('data:image/webp;base64,@@INCLUDE(assets/icon-items.webp.b64)@@'); }
   .gicon.s-weapons { background-image: url('data:image/webp;base64,@@INCLUDE(assets/icon-weapons.webp.b64)@@'); }
   .gicon.s-armor { background-image: url('data:image/webp;base64,@@INCLUDE(assets/icon-armor.webp.b64)@@'); }
+  .gicon.s-mastery { background-image: url('data:image/webp;base64,@@INCLUDE(assets/icon-mastery.webp.b64)@@'); }
   /* Recycle Points: the game draws this symbol as a shape, not a picture, so the icon is the 22x28 image from the
      LET IT DIE wiki (letitdie.wiki.gg, File:RE.png) rather than a cell of the sheets above */
   .gicon.s-recycle { background-image: url('data:image/png;base64,@@INCLUDE(assets/icon-recycle.png.b64)@@'); background-size: contain; background-position: center; }

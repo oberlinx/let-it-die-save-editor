@@ -447,7 +447,7 @@ function wireMastery() {
       const e = mstlvl.find(m => m.ptarmtp === p.ptarmtp);
       const lvl = e ? e.lvl : 1;
       const pts = e && Number(e.abp) > 0 ? Number(e.abp).toLocaleString() + ' pts' : '0 pts';
-      return `<div class="listRow"><div class="name">${escapeHtml(p.name)}</div><div class="id" data-mst-pts="${p.ptarmtp}">${pts}</div><select class="mst-lvl" data-mst="${p.ptarmtp}" style="width:90px; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);">${fighterOpts(1, 20, Number(lvl) || 1, v => 'Lv ' + v)}</select></div>`;
+      return `<div class="listRow"><div class="name">${iconSpan(p.ptarmtp, 28)}${escapeHtml(p.name)}</div><div class="id" data-mst-pts="${p.ptarmtp}">${pts}</div><select class="mst-lvl" data-mst="${p.ptarmtp}" style="width:90px; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);">${fighterOpts(1, 20, Number(lvl) || 1, v => 'Lv ' + v)}</select></div>`;
     }).join('');
     document.querySelectorAll('.mst-lvl').forEach(inp => {
       inp.addEventListener('change', () => {

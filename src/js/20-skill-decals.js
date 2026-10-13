@@ -34,9 +34,10 @@ function decalIcon(id, px) {
   const c = DECAL_ATLAS.cols;
   return `<span class="dicon" style="width:${px}px; height:${px}px; background-size:${c * px}px auto; background-position:-${(i % c) * px}px -${Math.floor(i / c) * px}px;"></span>`;
 }
-// Item icons: materials, mushrooms, beasts, blueprints, currencies, weapons and armour, in three embedded sprite sheets
-// (CSS classes .gicon.s-items / .s-weapons / .s-armor), so they work offline.
-// ICON_ATLAS = { cell: [w, h], sheets: { name: { cols, names } }, alias: { id: icon name } }; names[i] is the icon in
+// Item icons: materials, mushrooms, beasts, blueprints, currencies, weapons, armour and weapon types, in embedded sprite sheets
+// (CSS classes .gicon.s-items / .s-weapons / .s-armor / .s-mastery), so they work offline.
+// ICON_ATLAS = { cell: [w, h], sheets: { name: { cols, names, cell? } }, alias: { id: icon name } }; a sheet's own cell
+// overrides the common one (the weapon-type icons used for mastery are square). names[i] is the icon in
 // cell i (left to right, top to bottom) and alias maps a part with no icon of its own to the one it borrows.
 const ICON_ATLAS = JSON.parse(document.getElementById('icon-atlas-data').textContent);
 const ICON_AT = {};
@@ -45,7 +46,7 @@ for (const [ sheet, s ] of Object.entries(ICON_ATLAS.sheets)) s.names.forEach((n
 function iconSpan(name, h) {
   const at = ICON_AT[name];
   if (!at) return '';
-  const [ cw, ch ] = ICON_ATLAS.cell, c = ICON_ATLAS.sheets[at[0]].cols, w = Math.round(h * cw / ch);
+  const [ cw, ch ] = ICON_ATLAS.sheets[at[0]].cell || ICON_ATLAS.cell, c = ICON_ATLAS.sheets[at[0]].cols, w = Math.round(h * cw / ch);
   return `<span class="gicon s-${at[0]}" style="width:${w}px; height:${h}px; background-size:${c * w}px auto; background-position:-${(at[1] % c) * w}px -${Math.floor(at[1] / c) * h}px;"></span>`;
 }
 // partIcon(): icon of a weapon or armour piece (its own, or the one it borrows).
