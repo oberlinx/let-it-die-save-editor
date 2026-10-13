@@ -7,7 +7,7 @@
 // uiTrackHeader(): publish the sticky header height as CSS variable --hdrh so the tab bar sticks under it.
 function uiTrackHeader() {
   const h = document.querySelector('header'); if (!h) return;
-  const set = () => document.documentElement.style.setProperty('--hdrh', (getComputedStyle(h).position === 'sticky' ? h.offsetHeight : 0) + 'px');
+  const set = () => document.documentElement.style.setProperty('--hdrh', (getComputedStyle(h).position === 'sticky' ? Math.floor(h.getBoundingClientRect().height) : 0) + 'px');
   set(); window.addEventListener('resize', set);
   if (window.ResizeObserver) new ResizeObserver(set).observe(h);
 }

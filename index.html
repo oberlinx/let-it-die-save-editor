@@ -400,7 +400,14 @@
   html[data-theme="light"] ::selection { color: #fff; }
   /* ===== UI pack 2 ===== */
   .stickyNav { background: var(--bg); }
-  @media (min-width: 641px) { .stickyNav { position: sticky; top: var(--hdrh, 0px); z-index: 45; padding-top: 6px; margin-top: -6px; box-shadow: 0 6px 8px -6px rgba(0,0,0,.45); } }
+  /* The pinned tab bar sits just under the pinned header. It overlaps the header by a pixel and carries a solid strip
+     above itself (hidden behind the header), so no sliver of the page can show between the two whatever the header's
+     exact height or the browser zoom. Its own bottom padding replaces the tab row's margin, which used to fall outside
+     the bar and let the page show right under the tabs. */
+  @media (min-width: 641px) {
+    .stickyNav { position: sticky; top: calc(var(--hdrh, 0px) - 1px); z-index: 45; padding-top: 7px; margin-top: -6px; padding-bottom: 10px; margin-bottom: 4px; box-shadow: 0 -16px 0 var(--bg), 0 6px 8px -6px rgba(0,0,0,.45); }
+    .stickyNav .tabbar { margin-bottom: 0; }
+  }
   .healthRow, .block, .block-head { scroll-margin-top: 150px; }
   .tabbtn.dirty::after, .grpbtn.dirty::after { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--warn); margin-left: 7px; vertical-align: middle; }
   .tabbtn.dirty.active::after, .grpbtn.dirty.active::after { background: #fff; box-shadow: 0 0 0 1px var(--warn); }
@@ -3020,7 +3027,7 @@ function accountIcon(label, h) {
 function blockCurrency() {
   const soul = SAVE.soul;
   const rank = tdmRankForPoints(soul.tdm_point || 0, AP);
-  return `<section class="block">\n    <div class="block-head"><div><div class="eyebrow">Account</div><h2>Account Details</h2></div></div>\n    <div class="block-body">\n      <div class="grid" style="margin-bottom:14px;">\n        <div class="field"><label>Account ID <span class="id">(Steam ID, read only)</span></label><div id="acc-psnacid" style="padding:8px 0; font-size:14px; word-break:break-all;">${escapeHtml(SAVE.user.psnacid != null && SAVE.user.psnacid !== '' ? String(SAVE.user.psnacid) : '—')}</div></div>\n        <div class="field"><label>Account Name <span class="id">(read only)</span></label><div id="acc-name" style="padding:8px 0; font-size:14px; word-break:break-all;"><b>${escapeHtml(SAVE.user.nm != null && SAVE.user.nm !== '' ? String(SAVE.user.nm) : '—')}</b></div></div>\n        <div class="field"><label>TDM Points</label><input type="number" id="tdm-point" min="0" max="${tdmPointMax()}" step="1" value="${soul.tdm_point || 0}"></div>\n        <div class="field"><label>TDM Rank <span class="id">(from the points)</span></label><div style="padding:8px 0; font-size:14px; word-break:break-all;">${escapeHtml(rank ? formatTdmRank(resolveName(rank.name)) || rank.id : soul.tdm_rank || '?')}</div></div>\n      </div>\n      <div class="eyebrow" style="margin-bottom:8px;">Bank-limited currencies</div>\n      <div class="bankTable">\n        ${bankRow(soul, 'money', 'Kill Coins', 'safe_level', 'free_money')}\n        ${bankRow(soul, 'spirit', 'SPLithium', 'spirit_tank_level', 'spirit')}\n      </div>\n      <div class="grid">\n        ${currencyFields().map(([f, label, cap]) => `\n          <div class="field">\n            <label style="white-space:nowrap;">${accountIcon(label, 22)}${label}${cap ? ` (max ${cap.toLocaleString()})` : ''}</label>${f === 'recycle_point' ? `<div class="capNote" style="margin:0 0 4px;">In game, anything earned over the max is lost.</div>` : ''}\n            <input type="text" inputmode="numeric" data-currency="${f}" ${cap ? `data-max="${cap}"` : ''} value="${(soul[f] != null ? soul[f] : 0).toLocaleString()}">\n          </div>`).join('')}\n      </div>\n      ${masteryBlockHtml()}\n    </div>\n  </section>`;
+  return `<section class="block">\n    <div class="block-head"><div><div class="eyebrow">Account</div><h2>Account Details</h2></div></div>\n    <div class="block-body">\n      <div class="grid" style="margin-bottom:14px;">\n        <div class="field"><label>Account ID <span class="id">(Steam ID, read only)</span></label><div id="acc-psnacid" style="padding:8px 0; font-size:14px; word-break:break-all;">${escapeHtml(SAVE.user.psnacid != null && SAVE.user.psnacid !== '' ? String(SAVE.user.psnacid) : '—')}</div></div>\n        <div class="field"><label>Account Name <span class="id">(read only)</span></label><div id="acc-name" style="padding:8px 0; font-size:14px; word-break:break-all;"><b>${escapeHtml(SAVE.user.nm != null && SAVE.user.nm !== '' ? String(SAVE.user.nm) : '—')}</b></div></div>\n        <div class="field"><label>TDM Points</label><input type="number" id="tdm-point" min="0" max="${tdmPointMax()}" step="1" value="${soul.tdm_point || 0}"></div>\n        <div class="field"><label>TDM Rank <span class="id">(from the points)</span></label><div style="padding:8px 0; font-size:14px; word-break:break-all;">${escapeHtml(rank ? formatTdmRank(resolveName(rank.name)) || rank.id : soul.tdm_rank || '?')}</div></div>\n      </div>\n      <div class="eyebrow" style="margin-bottom:8px;">Bank-limited currencies</div>\n      <div class="bankTable">\n        ${bankRow(soul, 'money', 'Kill Coins', 'safe_level', 'free_money')}\n        ${bankRow(soul, 'spirit', 'SPLithium', 'spirit_tank_level', 'spirit')}\n      </div>\n      <div class="grid">\n        ${currencyFields().map(([f, label, cap]) => `\n          <div class="field">\n            <label style="white-space:nowrap;">${accountIcon(label, 22)}${label}${cap ? ` (max ${cap.toLocaleString()})` : ''}</label>\n            <input type="text" inputmode="numeric" data-currency="${f}" ${cap ? `data-max="${cap}"` : ''} value="${(soul[f] != null ? soul[f] : 0).toLocaleString()}">${f === 'recycle_point' ? `<div class="capNote" style="margin:4px 0 0;">In game, anything earned over the max is lost.</div>` : ''}\n          </div>`).join('')}\n      </div>\n      ${masteryBlockHtml()}\n    </div>\n  </section>`;
 }
 
 // wireCurrency(): listeners for the Account tab.
@@ -15021,7 +15028,7 @@ function uiAfterRender() {
 // uiTrackHeader(): publish the sticky header height as CSS variable --hdrh so the tab bar sticks under it.
 function uiTrackHeader() {
   const h = document.querySelector('header'); if (!h) return;
-  const set = () => document.documentElement.style.setProperty('--hdrh', (getComputedStyle(h).position === 'sticky' ? h.offsetHeight : 0) + 'px');
+  const set = () => document.documentElement.style.setProperty('--hdrh', (getComputedStyle(h).position === 'sticky' ? Math.floor(h.getBoundingClientRect().height) : 0) + 'px');
   set(); window.addEventListener('resize', set);
   if (window.ResizeObserver) new ResizeObserver(set).observe(h);
 }

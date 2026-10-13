@@ -393,7 +393,14 @@
   html[data-theme="light"] ::selection { color: #fff; }
   /* ===== UI pack 2 ===== */
   .stickyNav { background: var(--bg); }
-  @media (min-width: 641px) { .stickyNav { position: sticky; top: var(--hdrh, 0px); z-index: 45; padding-top: 6px; margin-top: -6px; box-shadow: 0 6px 8px -6px rgba(0,0,0,.45); } }
+  /* The pinned tab bar sits just under the pinned header. It overlaps the header by a pixel and carries a solid strip
+     above itself (hidden behind the header), so no sliver of the page can show between the two whatever the header's
+     exact height or the browser zoom. Its own bottom padding replaces the tab row's margin, which used to fall outside
+     the bar and let the page show right under the tabs. */
+  @media (min-width: 641px) {
+    .stickyNav { position: sticky; top: calc(var(--hdrh, 0px) - 1px); z-index: 45; padding-top: 7px; margin-top: -6px; padding-bottom: 10px; margin-bottom: 4px; box-shadow: 0 -16px 0 var(--bg), 0 6px 8px -6px rgba(0,0,0,.45); }
+    .stickyNav .tabbar { margin-bottom: 0; }
+  }
   .healthRow, .block, .block-head { scroll-margin-top: 150px; }
   .tabbtn.dirty::after, .grpbtn.dirty::after { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--warn); margin-left: 7px; vertical-align: middle; }
   .tabbtn.dirty.active::after, .grpbtn.dirty.active::after { background: #fff; box-shadow: 0 0 0 1px var(--warn); }
