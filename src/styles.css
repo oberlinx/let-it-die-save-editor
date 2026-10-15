@@ -333,7 +333,7 @@
 
   #statusbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 60; display: none; align-items: center; gap: 12px; flex-wrap: wrap; padding: 7px 18px; background: var(--bg-raised); border-top: 1px solid var(--panel-border-bright); font-size: 12px; }
   #statusbar .sbsep { width: 1px; height: 16px; background: var(--panel-border); }
-  #statusbar .sbfile { color: var(--text-dim); max-width: 26ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #statusbar .sbfile { color: var(--text-dim); max-width: 48ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #statusbar .sbdirty { color: var(--warn); font-weight: bold; }
   #statusbar .sbclean { color: var(--text-dim); }
   #statusbar .sbok { color: var(--good-bright); }

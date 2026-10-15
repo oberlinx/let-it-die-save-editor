@@ -340,7 +340,7 @@
 
   #statusbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 60; display: none; align-items: center; gap: 12px; flex-wrap: wrap; padding: 7px 18px; background: var(--bg-raised); border-top: 1px solid var(--panel-border-bright); font-size: 12px; }
   #statusbar .sbsep { width: 1px; height: 16px; background: var(--panel-border); }
-  #statusbar .sbfile { color: var(--text-dim); max-width: 26ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #statusbar .sbfile { color: var(--text-dim); max-width: 48ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #statusbar .sbdirty { color: var(--warn); font-weight: bold; }
   #statusbar .sbclean { color: var(--text-dim); }
   #statusbar .sbok { color: var(--good-bright); }
@@ -13034,8 +13034,8 @@ function cmpCopyFighter(cid) {
 // The clone is then loaded as if it were opened from a file, so every tab, the
 // save check and the download work on it as usual. Nothing is written until you
 // download, and neither original file is changed.
-// Notice text shown after a clone, tied to the root it describes.
-let CLONE_NOTE = { root: null, text: '' };
+// Notice text shown after a clone, tied to the root it describes, plus the cloned file's name and its account name.
+let CLONE_NOTE = { root: null, text: '', from: '', fromName: '' };
 // Two-click confirmation flag for the clone button (auto-disarms after 8 s).
 let CLONE_ARMED = false;
 // PlayStation saves: PS-only content belongs there, so the "Include PS-only" boxes start ticked
@@ -13134,7 +13134,7 @@ async function cmpCloneWhole() {
   else if (ps.length && platA !== 'PS') t += '\n\nIt has PlayStation-only content that an unmodded PC game doesn\'t have:';
   if (platA !== 'PS') for (const g of ps) t += `\n  - ${g.where}: ${g.names.slice(0, 12).join(', ')}${g.names.length > 12 ? ` and ${g.names.length - 12} more` : ''}`;
   if (ps.length && platA !== 'PS') t += '\nTo clean up: Decals tab "Set them to 0", the save check\'s Reward Box fix, and remove PS-only gear from the fighters and Storage Box tabs.';
-  CLONE_NOTE = { root: RAW_SAV_ROOT, text: t };
+  CLONE_NOTE = { root: RAW_SAV_ROOT, text: t, from: fileB, fromName: nmB };
   activeTab = 'compare';
   renderAll();
   toast(`Cloned ${fileB} onto ${nmA}'s account -- check it, then download`);
@@ -13176,6 +13176,9 @@ function renderCompare() {
   const uA = cmpUidA(), nmA = (RAW_SAV_ROOT.user || {}).nm || 'this save';
   let h = `<div class="toolbar"><label class="subtle" style="cursor:pointer; padding:6px 10px; border:1px solid var(--panel-border);">Load second save (.sav or .json)<input type="file" id="cmp-file" accept=".sav,.json" style="display:none;"></label>
     <span class="count">${CMP.rootB ? `Comparing with <b>${escapeHtml(CMP.file)}</b>` : 'No second save loaded'}</span></div>`;
+  // whose account the save being edited is on (after a clone, that's still this account, with the other save's progress)
+  const cloned = CLONE_NOTE.root === RAW_SAV_ROOT && CLONE_NOTE.from;
+  h += `<div class="capNote" style="margin:0 0 10px; color:var(--text); font-size:12.5px;">The save you're editing is on <b>${escapeHtml(nmA)}</b>'s account (uid ${escapeHtml(uA)}) ${accountPlatform().badge}${cloned ? ` with the progress cloned from <b>${escapeHtml(CLONE_NOTE.from)}</b> (${escapeHtml(CLONE_NOTE.fromName || 'other save')})` : ''}.</div>`;
   if (CLONE_NOTE.root === RAW_SAV_ROOT && CLONE_NOTE.text) h += `<pre class="stewLog"${/WARNING|PlayStation-only/.test(CLONE_NOTE.text) ? ' style="border-color:var(--accent);"' : ''}>${escapeHtml(CLONE_NOTE.text)}</pre>`;
   if (CMP.msg) h += `<pre class="stewLog">${escapeHtml(CMP.msg)}</pre>`;
   if (!CMP.rootB) { host.innerHTML = h; cmpWire(); return; }
@@ -14521,8 +14524,11 @@ function uiStatusUpdate() {
   const n = uiChangeCount(UI.changes), pend = UI.changes !== null;
   const it = (HEALTH && HEALTH.items) || [];
   const np = it.filter(x => x.level === 'problem').length, nw = it.filter(x => x.level === 'warning').length;
-  document.getElementById('sb-file').textContent = ORIG_SAVE.name || 'save';
-  document.getElementById('sb-file').title = ORIG_SAVE.name || '';
+  // after a clone the file name is still the one loaded, so say where the progress came from
+  const cl = typeof CLONE_NOTE !== 'undefined' && CLONE_NOTE.root === RAW_SAV_ROOT && CLONE_NOTE.from;
+  const fileLbl = (ORIG_SAVE.name || 'save') + (cl ? ` · clone of ${CLONE_NOTE.from}` : '');
+  document.getElementById('sb-file').textContent = fileLbl;
+  document.getElementById('sb-file').title = cl ? `Account from ${ORIG_SAVE.name || 'the save you loaded'}; progress cloned from ${CLONE_NOTE.from}` : ORIG_SAVE.name || '';
   const st = document.getElementById('sb-state');
   st.className = !pend ? 'sbclean' : !n ? 'sbclean' : UI.curSig === UI.dlSig ? 'sbok' : 'sbdirty';
   st.textContent = !pend ? 'Checking changes…' : !n ? 'No changes yet' : UI.curSig === UI.dlSig ? `✓ ${n} change${n === 1 ? '' : 's'}, downloaded` : `● ${n} unsaved change${n === 1 ? '' : 's'}`;

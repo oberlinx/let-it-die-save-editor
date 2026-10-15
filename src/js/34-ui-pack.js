@@ -232,8 +232,11 @@ function uiStatusUpdate() {
   const n = uiChangeCount(UI.changes), pend = UI.changes !== null;
   const it = (HEALTH && HEALTH.items) || [];
   const np = it.filter(x => x.level === 'problem').length, nw = it.filter(x => x.level === 'warning').length;
-  document.getElementById('sb-file').textContent = ORIG_SAVE.name || 'save';
-  document.getElementById('sb-file').title = ORIG_SAVE.name || '';
+  // after a clone the file name is still the one loaded, so say where the progress came from
+  const cl = typeof CLONE_NOTE !== 'undefined' && CLONE_NOTE.root === RAW_SAV_ROOT && CLONE_NOTE.from;
+  const fileLbl = (ORIG_SAVE.name || 'save') + (cl ? ` · clone of ${CLONE_NOTE.from}` : '');
+  document.getElementById('sb-file').textContent = fileLbl;
+  document.getElementById('sb-file').title = cl ? `Account from ${ORIG_SAVE.name || 'the save you loaded'}; progress cloned from ${CLONE_NOTE.from}` : ORIG_SAVE.name || '';
   const st = document.getElementById('sb-state');
   st.className = !pend ? 'sbclean' : !n ? 'sbclean' : UI.curSig === UI.dlSig ? 'sbok' : 'sbdirty';
   st.textContent = !pend ? 'Checking changes…' : !n ? 'No changes yet' : UI.curSig === UI.dlSig ? `✓ ${n} change${n === 1 ? '' : 's'}, downloaded` : `● ${n} unsaved change${n === 1 ? '' : 's'}`;

@@ -326,8 +326,8 @@ function cmpCopyFighter(cid) {
 // The clone is then loaded as if it were opened from a file, so every tab, the
 // save check and the download work on it as usual. Nothing is written until you
 // download, and neither original file is changed.
-// Notice text shown after a clone, tied to the root it describes.
-let CLONE_NOTE = { root: null, text: '' };
+// Notice text shown after a clone, tied to the root it describes, plus the cloned file's name and its account name.
+let CLONE_NOTE = { root: null, text: '', from: '', fromName: '' };
 // Two-click confirmation flag for the clone button (auto-disarms after 8 s).
 let CLONE_ARMED = false;
 // PlayStation saves: PS-only content belongs there, so the "Include PS-only" boxes start ticked
@@ -426,7 +426,7 @@ async function cmpCloneWhole() {
   else if (ps.length && platA !== 'PS') t += '\n\nIt has PlayStation-only content that an unmodded PC game doesn\'t have:';
   if (platA !== 'PS') for (const g of ps) t += `\n  - ${g.where}: ${g.names.slice(0, 12).join(', ')}${g.names.length > 12 ? ` and ${g.names.length - 12} more` : ''}`;
   if (ps.length && platA !== 'PS') t += '\nTo clean up: Decals tab "Set them to 0", the save check\'s Reward Box fix, and remove PS-only gear from the fighters and Storage Box tabs.';
-  CLONE_NOTE = { root: RAW_SAV_ROOT, text: t };
+  CLONE_NOTE = { root: RAW_SAV_ROOT, text: t, from: fileB, fromName: nmB };
   activeTab = 'compare';
   renderAll();
   toast(`Cloned ${fileB} onto ${nmA}'s account -- check it, then download`);
@@ -468,6 +468,9 @@ function renderCompare() {
   const uA = cmpUidA(), nmA = (RAW_SAV_ROOT.user || {}).nm || 'this save';
   let h = `<div class="toolbar"><label class="subtle" style="cursor:pointer; padding:6px 10px; border:1px solid var(--panel-border);">Load second save (.sav or .json)<input type="file" id="cmp-file" accept=".sav,.json" style="display:none;"></label>
     <span class="count">${CMP.rootB ? `Comparing with <b>${escapeHtml(CMP.file)}</b>` : 'No second save loaded'}</span></div>`;
+  // whose account the save being edited is on (after a clone, that's still this account, with the other save's progress)
+  const cloned = CLONE_NOTE.root === RAW_SAV_ROOT && CLONE_NOTE.from;
+  h += `<div class="capNote" style="margin:0 0 10px; color:var(--text); font-size:12.5px;">The save you're editing is on <b>${escapeHtml(nmA)}</b>'s account (uid ${escapeHtml(uA)}) ${accountPlatform().badge}${cloned ? ` with the progress cloned from <b>${escapeHtml(CLONE_NOTE.from)}</b> (${escapeHtml(CLONE_NOTE.fromName || 'other save')})` : ''}.</div>`;
   if (CLONE_NOTE.root === RAW_SAV_ROOT && CLONE_NOTE.text) h += `<pre class="stewLog"${/WARNING|PlayStation-only/.test(CLONE_NOTE.text) ? ' style="border-color:var(--accent);"' : ''}>${escapeHtml(CLONE_NOTE.text)}</pre>`;
   if (CMP.msg) h += `<pre class="stewLog">${escapeHtml(CMP.msg)}</pre>`;
   if (!CMP.rootB) { host.innerHTML = h; cmpWire(); return; }
