@@ -370,6 +370,7 @@ function uiHelp() {
       <tr><td><kbd>1</kbd> – <kbd>5</kbd></td><td>Jump to Account, Items, Fighters, Run &amp; Floors, Tools</td></tr>
       <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>Move between tabs while a tab button is selected</td></tr>
       <tr><td><kbd>C</kbd></td><td>Open the list of changes</td></tr>
+      <tr><td><kbd>R</kbd></td><td>Location tab: reroll the floor move's rewards or the locked boss floors</td></tr>
       <tr><td><kbd>?</kbd></td><td>This help</td></tr>
       <tr><td><kbd>Esc</kbd></td><td>Close a window or the search</td></tr>
     </table>
@@ -594,7 +595,7 @@ function uiOpenPsGuide() {
 }
 // uiCloseOverlay(): remove the generic UI overlay.
 function uiCloseOverlay() { const o = document.getElementById('ui-overlay'); if (o) o.remove(); }
-// Global shortcuts: Ctrl+S download, Ctrl+K/"/" search, Esc closes overlays, [ ] step tabs, 1-5 jump group, C changes, ? help.
+// Global shortcuts: Ctrl+S download, Ctrl+K/"/" search, Esc closes overlays, [ ] step tabs, 1-5 jump group, C changes, R reroll (Location), ? help.
 document.addEventListener('keydown', e => {
   const k = e.key;
   if ((e.ctrlKey || e.metaKey) && !e.altKey && (k === 's' || k === 'S')) {
@@ -616,6 +617,11 @@ document.addEventListener('keydown', e => {
   if (k === ']') uiStepTab(1); else if (k === '[') uiStepTab(-1);
   else if (k >= '1' && k <= String(TAB_GROUPS.length)) uiGoGroup(TAB_GROUPS[Number(k) - 1].id);
   else if (k === 'c' || k === 'C') uiOpenChanges();
+  else if ((k === 'r' || k === 'R') && activeTab === 'location') {
+    // Location tab: reroll the floor move's rewards (which also redraws a boss floor lock), else the lock alone
+    const b = document.getElementById('loc-reroll-again') || document.getElementById('blk-reroll');
+    if (b) { b.click(); toast('Rerolled'); }
+  }
 });
 
 // ==== Max everything safe ====
