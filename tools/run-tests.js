@@ -11,6 +11,9 @@
 //                    everything, Max all fighters, the Save check's fix buttons, Clone) made on a sample of saves; each
 //                    edited save must download, read back and load again with no new Save check problem or warning
 //                    (see tools/lib/edit-scenarios.js).
+//   5. Tab tests     one edit on each tab (Research, Decals, Storage, Rewards, Quests, Stamp Rally, Jackals, Dates, VIP,
+//                    Stews, Layouts, Fighters), made in a hidden Edge or Chrome by clicking the tab's own buttons; what
+//                    the edit changed must read back the same after the download (see tools/lib/tab-scenarios.js).
 //
 // Where masters.db and the saves are comes from tools/tests.config.json (made on the first run; edit it to change).
 // The report goes to test-reports/report-<date>_<time>.md, and a copy to test-reports/latest.md. Saves are only
@@ -22,6 +25,8 @@ const crypto = require('crypto');
 const { execFileSync } = require('child_process');
 const { createEditor, roundTrip, collectSaves, plain, kindOf, ROOT } = require('./lib/editor-sandbox');
 const { SCENARIOS, runEdits, runClone } = require('./lib/edit-scenarios');
+const TAB = require('./lib/tab-scenarios');
+const { startBrowser, startServer, PAGE_HELPERS } = require('./lib/browser');
 
 const CONFIG = path.join(__dirname, 'tests.config.json');
 const REPORTS = path.join(ROOT, 'test-reports');
@@ -34,13 +39,14 @@ function defaultConfig() {
   const home = os.homedir();
   const saves = [ path.join(home, 'Desktop'), path.join(home, 'Downloads'), 'D:\\Downloads' ].filter(p => fs.existsSync(p));
   return {
-    _help: 'masters: the masters.db to test with (the game\'s own is in the LET IT DIE Content folder). saves: files or folders to test; folders are searched "depth" levels deep for .sav files. includeNotes: also list Save check notes in the report, not only problems and warnings. editSaves: how many saves get the edit tests (a number, or "all"; saves paused in a run go first). clones: how many pairs of saves to clone onto each other.',
+    _help: 'masters: the masters.db to test with (the game\'s own is in the LET IT DIE Content folder). saves: files or folders to test; folders are searched "depth" levels deep for .sav files. includeNotes: also list Save check notes in the report, not only problems and warnings. editSaves: how many saves get the edit tests (a number, or "all"; saves paused in a run go first). clones: how many pairs of saves to clone onto each other. tabSaves: how many of those saves also get the tab tests in a hidden browser (a number, "all", or 0 to skip them).',
     masters: steam || '',
     saves,
     depth: 2,
     includeNotes: false,
     editSaves: 30,
-    clones: 6
+    clones: 6,
+    tabSaves: 10
   };
 }
 let firstRun = false;
@@ -118,6 +124,29 @@ const md = s => String(s).replace(/\|/g, '\\|');
     if (r) { clones.push(Object.assign(r, { a: short(a.file), b: short(b.file) })); console.log(`clone ${r.status === 'ok' ? 'ok  ' : 'FAIL'} ${short(b.file)} onto ${short(a.file)}${r.error ? ' -- ' + r.error : ''}`); }
   }
 
+  // 5. tab tests in a hidden browser, on the first of the edit-tested saves
+  const nTab = cfg.tabSaves === 'all' ? editSet.length : Math.max(0, Number(cfg.tabSaves == null ? 10 : cfg.tabSaves) || 0);
+  const tabSet = editSet.slice(0, nTab);
+  let tabNote = '';
+  if (tabSet.length) {
+    let srv = null, br = null;
+    try {
+      srv = await startServer(); br = await startBrowser();
+      await br.open(srv.base + '/');
+      await br.evaluate(PAGE_HELPERS); await br.evaluate(TAB.scenarioSource());
+      if (!await br.evaluate(`__T.loadUrl(${JSON.stringify(srv.url(cfg.masters))}, 'masters.db', 'file-masters')`)) throw new Error('masters.db did not load in the test browser');
+      console.log(`\nTab tests in a hidden browser on ${tabSet.length} save${tabSet.length === 1 ? '' : 's'}:`);
+      for (const [ i, s ] of tabSet.entries()) {
+        const r = await br.evaluate(`__T.runAll(${JSON.stringify(srv.url(s.file))}, ${JSON.stringify(path.basename(s.file))})`);
+        for (const x of r) x.tab = true;
+        s.edits = (s.edits || []).concat(r);
+        const bad = r.filter(e => e.status === 'fail');
+        console.log(`[${String(i + 1).padStart(String(tabSet.length).length)}/${tabSet.length}] ${bad.length ? 'FAIL ' : 'ok   '} ${short(s.file)} (${r.length} tab edit${r.length === 1 ? '' : 's'})${bad.map(e => `\n      ${e.name}: ${e.error}`).join('')}`);
+      }
+    } catch (err) { tabNote = err.message || String(err); console.log(`\nTab tests skipped: ${tabNote}`); }
+    finally { if (br) await br.close(); if (srv) srv.close(); }
+  }
+
   // ---- report ----
   const count = st => saves.filter(s => s.status === st).length;
   const tested = saves.filter(s => s.findings);
@@ -137,9 +166,12 @@ const md = s => String(s).replace(/\|/g, '\\|');
   L.push(`| Round trip | ${count('ok')} ok, ${count('fail') ? `**${count('fail')} failed**` : '0 failed'}, ${count('error') ? `**${count('error')} errors**` : '0 errors'}, ${count('skip')} skipped (not a save) |`);
   L.push(`| Save check | ${withLevel('problem')} save${withLevel('problem') === 1 ? '' : 's'} with problems, ${withLevel('warning')} with warnings, out of ${tested.length} |`);
   const edited = saves.filter(s => s.edits), editRuns = edited.flatMap(s => s.edits);
-  const ec = st => editRuns.filter(e => e.status === st).length, cf = clones.filter(c => c.status !== 'ok').length;
-  L.push(`| Edit tests | ${ec('ok')} ok, ${ec('fail') ? `**${ec('fail')} failed**` : '0 failed'}, ${ec('skip')} skipped, on ${edited.length} save${edited.length === 1 ? '' : 's'} |`);
+  const ec = (st, tab) => editRuns.filter(e => e.status === st && !!e.tab === tab).length, cf = clones.filter(c => c.status !== 'ok').length;
+  const tabbed = edited.filter(s => s.edits.some(e => e.tab)).length;
+  L.push(`| Edit tests | ${ec('ok', false)} ok, ${ec('fail', false) ? `**${ec('fail', false)} failed**` : '0 failed'}, ${ec('skip', false)} skipped, on ${edited.length} save${edited.length === 1 ? '' : 's'} |`);
+  if (tabbed) L.push(`| Tab tests | ${ec('ok', true)} ok, ${ec('fail', true) ? `**${ec('fail', true)} failed**` : '0 failed'}, ${ec('skip', true)} skipped, on ${tabbed} save${tabbed === 1 ? '' : 's'} (in a hidden browser) |`);
   L.push(`| Clone | ${clones.length - cf} ok, ${cf ? `**${cf} failed**` : '0 failed'} (${clones.length} pair${clones.length === 1 ? '' : 's'}) |`);
+  if (tabNote) L.push(`| Tab tests | **skipped**: ${md(tabNote)} |`);
   const pe = saves.filter(s => s.pageErrors.length).length;
   L.push(`| Page errors | ${pe ? `**${pe} save${pe === 1 ? '' : 's'}** logged errors` : 'none'} |`, '');
 
@@ -159,7 +191,7 @@ const md = s => String(s).replace(/\|/g, '\\|');
   }
   if (edited.length) {
     L.push(`## Edit tests by kind`, '', `| Edit | Saves it applied to | ok | Failed | Skipped |`, `|---|---|---|---|---|`);
-    for (const sc of SCENARIOS) {
+    for (const sc of [ ...SCENARIOS, ...TAB.SCENARIOS ]) {
       const runs = editRuns.filter(e => e.name === sc.name);
       L.push(`| ${md(sc.name)} | ${runs.length} | ${runs.filter(e => e.status === 'ok').length} | ${runs.filter(e => e.status === 'fail').length} | ${runs.filter(e => e.status === 'skip').length} |`);
     }
