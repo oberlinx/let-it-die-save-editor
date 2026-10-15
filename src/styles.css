@@ -430,11 +430,12 @@
   /* ===== UI pack 2 ===== */
   .stickyNav { background: var(--bg); }
   /* The pinned tab bar stays at the top of the window once the header has scrolled away (--hdrh is the height of a
-     pinned header, which is now always 0). It carries a solid strip above itself so no sliver of the page can show
-     over it, and its own bottom padding replaces the tab row's margin, which used to fall outside the bar and let the
-     page show right under the tabs. */
+     pinned header, which is now always 0). Its own bottom padding replaces the tab row's margin, which used to fall
+     outside the bar and let the page show right under the tabs. (It no longer carries a solid strip above itself: that
+     hid a gap under a pinned header, and with the header scrolling away it only painted over the Save check box's
+     bottom edge.) */
   @media (min-width: 641px) {
-    .stickyNav { position: sticky; top: calc(var(--hdrh, 0px) - 1px); z-index: 45; padding-top: 7px; margin-top: -6px; padding-bottom: 10px; margin-bottom: 4px; box-shadow: 0 -16px 0 var(--bg), 0 6px 8px -6px rgba(0,0,0,.45); }
+    .stickyNav { position: sticky; top: calc(var(--hdrh, 0px) - 1px); z-index: 45; padding-top: 7px; margin-top: -6px; padding-bottom: 10px; margin-bottom: 4px; box-shadow: 0 6px 8px -6px rgba(0,0,0,.45); }
     .stickyNav .tabbar { margin-bottom: 0; }
   }
   .healthRow, .block, .block-head { scroll-margin-top: 110px; }   /* jumps land below the pinned tab bar */
