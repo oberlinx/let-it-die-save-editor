@@ -31,7 +31,7 @@ function uiTabbarHtml() {
   const vis = TABS.filter(t => !t.when || t.when()), byId = new Map(vis.map(t => [ t.id, t ]));
   const cur = uiGroupOf(activeTab);
   const ordered = uiVisibleTabIds().map(id => byId.get(id));
-  return `<div class="stickyNav"><div class="grpbar" role="tablist" aria-label="Sections">${TAB_GROUPS.map((g, i) => `<button class="grpbtn ${g.id === cur ? 'active' : ''}" data-grp="${g.id}" title="${g.label} (key ${i + 1})">${g.label}</button>`).join('')}</div>
+  return `<div class="stickyNav"><div class="grpbar" role="tablist" aria-label="Sections">${TAB_GROUPS.map((g, i) => `<button class="grpbtn ${g.id === cur ? 'active' : ''}" data-grp="${g.id}" title="${g.label} (key ${i + 1})"><span class="grpKey" aria-hidden="true">${i + 1}</span>${g.label}</button>`).join('')}</div>
     <div class="tabbar">${ordered.map(t => `<button class="tabbtn ${activeTab === t.id ? 'active' : ''} ${uiGroupOf(t.id) === cur ? 'ingroup' : ''}" data-group="${uiGroupOf(t.id)}" data-tab-btn="${t.id}">${t.label}</button>`).join('')}</div></div>`;
 }
 // uiSyncTabs(): after a tab change, highlight the right group and remember the last tab per group.

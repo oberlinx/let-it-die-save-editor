@@ -325,10 +325,13 @@
   a.gitlink:hover { color: var(--accent-bright); }
 
   /* ===== UI pack (2026-10-08): groups, search, status bar, changes drawer, hints, light theme ===== */
-  .grpbar { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
-  .grpbtn { padding: 8px 16px; border: 1px solid var(--panel-border-bright); background: var(--bg-raised); color: var(--text-dim); font-family: var(--mono); font-size: 13px; cursor: pointer; border-radius: 3px; }
-  .grpbtn:hover { color: var(--text); }
-  .grpbtn.active { background: var(--panel); color: var(--text); border-color: var(--accent-bright); box-shadow: inset 0 -2px 0 var(--accent-bright); }
+  .grpbar { display: flex; flex-wrap: wrap; gap: 6px; padding-bottom: 9px; margin-bottom: 8px; border-bottom: 1px solid var(--panel-border); }
+  .grpbtn { display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px 7px 9px; border: 1px solid var(--panel-border); background: rgba(255,255,255,0.025); color: var(--text-dim); font-family: var(--mono); font-size: 13px; letter-spacing: 0.3px; cursor: pointer; border-radius: 3px; transition: background 0.15s, color 0.15s, border-color 0.15s; }
+  .grpbtn:hover { color: var(--text); border-color: var(--panel-border-bright); background: rgba(255,255,255,0.05); }
+  .grpbtn.active { background: rgba(214,57,44,0.14); color: var(--text); border-color: var(--accent); box-shadow: inset 0 -2px 0 var(--accent-bright); }
+  /* the group's number key, as a small key cap */
+  .grpKey { display: inline-flex; align-items: center; justify-content: center; min-width: 17px; height: 17px; padding: 0 3px; border: 1px solid var(--panel-border-bright); border-radius: 3px; font-size: 10px; color: var(--text-faint); line-height: 1; }
+  .grpbtn.active .grpKey { border-color: var(--accent-bright); color: var(--accent-bright); }
   .tabbtn[data-tab-btn]:not(.ingroup) { display: none; }
   .tabbtn:focus-visible, .grpbtn:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent-bright); outline-offset: 1px; }
 
@@ -410,6 +413,9 @@
     .stewTable, .runTable, .dtTable { display: block; overflow-x: auto; max-width: 100%; }
     select { min-width: 0; max-width: 100%; }
     .field { min-width: 0; }
+    /* sub-tabs wrap onto more rows here, so they're whole buttons rather than tabs sitting on the bar's edge */
+    .stickyNav .tabbar { padding-bottom: 9px; }
+    .stickyNav .tabbtn { border-bottom: 1px solid var(--panel-border); border-radius: 3px; }
   }
 
   html[data-theme="light"] {
@@ -420,6 +426,9 @@
   html[data-theme="light"] { --bgtint1: rgba(244,241,236,0.82); --bgtint2: rgba(244,241,236,0.88); }
   html[data-theme="light"] header { background: linear-gradient(180deg, #ffffff, #f4f1ec); }
   html[data-theme="light"] .graveRow:hover td { background: rgba(0,0,0,0.04); }
+  html[data-theme="light"] .grpbtn, html[data-theme="light"] .stickyNav .tabbtn { background: rgba(0,0,0,0.03); }
+  html[data-theme="light"] .grpbtn.active { background: rgba(168,41,31,0.10); }
+  html[data-theme="light"] .stickyNav .tabbtn.active { background: var(--accent); }
   html[data-theme="light"] #chg-drawer, html[data-theme="light"] #qs-drop, html[data-theme="light"] .hmenuPop { box-shadow: 0 8px 24px rgba(0,0,0,.18); }
   html[data-theme="light"] .run .up { color: #12652b; } html[data-theme="light"] .run .down { color: #a8291f; }
   html[data-theme="light"] .rwdBp { color: #0b5560; background: rgba(53,198,216,.18); }
@@ -428,15 +437,18 @@
   html[data-theme="light"] [style*="color:#f2d33a"] { color: #7a5f00 !important; border-color: #7a5f00 !important; }
   html[data-theme="light"] ::selection { color: #fff; }
   /* ===== UI pack 2 ===== */
-  .stickyNav { background: var(--bg); }
+  .stickyNav { background: linear-gradient(180deg, var(--bg-raised), var(--panel)); border: 1px solid var(--panel-border); border-top: 2px solid var(--accent); padding: 9px 10px 0; }
+  .stickyNav .tabbar { margin-bottom: 0; border-bottom: none; }
+  .stickyNav .tabbtn { border-radius: 3px 3px 0 0; background: rgba(255,255,255,0.025); }
+  .stickyNav .tabbtn:hover { background: rgba(255,255,255,0.06); }
+  .stickyNav .tabbtn.active { background: var(--accent); }
   /* The pinned tab bar stays at the top of the window once the header has scrolled away (--hdrh is the height of a
      pinned header, which is now always 0). Its own bottom padding replaces the tab row's margin, which used to fall
      outside the bar and let the page show right under the tabs. (It no longer carries a solid strip above itself: that
      hid a gap under a pinned header, and with the header scrolling away it only painted over the Save check box's
      bottom edge.) */
   @media (min-width: 641px) {
-    .stickyNav { position: sticky; top: calc(var(--hdrh, 0px) - 1px); z-index: 45; padding-top: 7px; margin-top: -6px; padding-bottom: 10px; margin-bottom: 4px; box-shadow: 0 6px 8px -6px rgba(0,0,0,.45); }
-    .stickyNav .tabbar { margin-bottom: 0; }
+    .stickyNav { position: sticky; top: calc(var(--hdrh, 0px) - 1px); z-index: 45; box-shadow: 0 6px 8px -6px rgba(0,0,0,.45); }
   }
   .healthRow, .block, .block-head { scroll-margin-top: 110px; }   /* jumps land below the pinned tab bar */
   .tabbtn.dirty::after, .grpbtn.dirty::after { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--warn); margin-left: 7px; vertical-align: middle; }
