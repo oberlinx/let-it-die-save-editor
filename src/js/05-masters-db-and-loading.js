@@ -325,6 +325,7 @@ async function loadSaveFiles(files) {
       reviewSnapshot(soulEntry.file);
       document.getElementById('btn-download-sav').disabled = false;
       document.getElementById('btn-download-json').disabled = false;
+      document.getElementById('btn-download-more').disabled = false;
       document.getElementById('btn-report').disabled = false;
     }
     // keys other than soul that are copied from the loaded files into SAVE

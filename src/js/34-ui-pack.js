@@ -794,6 +794,28 @@ function uiAfterRender() {
   if (UI.recRoot !== RAW_SAV_ROOT) { UI.recRoot = RAW_SAV_ROOT; if (RAW_SAV_ROOT) recRecord(); }
 }
 
+// uiWireMenus(): the header drop-downs (.hmenu). Its .hmenuBtn opens or closes it; picking an item, clicking
+// elsewhere or Escape closes it. Only one is open at a time.
+function uiWireMenus() {
+  const menus = [ ...document.querySelectorAll('.hmenu') ];
+  const setOpen = (m, on) => {
+    m.classList.toggle('open', on);
+    m.querySelector('.hmenuBtn').setAttribute('aria-expanded', on ? 'true' : 'false');
+    if (!on) return;
+    // open towards whichever side has room, so the menu never runs off a narrow screen
+    const pop = m.querySelector('.hmenuPop'), r = m.getBoundingClientRect();
+    pop.style.left = pop.style.right = '';
+    const w = pop.offsetWidth, vw = document.documentElement.clientWidth;
+    if (r.left + w > vw - 8) { pop.style.left = 'auto'; pop.style.right = Math.min(0, r.right - Math.max(w + 8, r.right)) + 'px'; }
+  };
+  for (const m of menus) {
+    m.querySelector('.hmenuBtn').addEventListener('click', () => { const on = !m.classList.contains('open'); for (const o of menus) setOpen(o, false); setOpen(m, on); });
+    m.querySelector('.hmenuPop').addEventListener('click', e => { if (e.target.closest('button, a')) setOpen(m, false); });
+  }
+  document.addEventListener('click', e => { for (const m of menus) if (!m.contains(e.target)) setOpen(m, false); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') for (const m of menus) setOpen(m, false); });
+}
+
 // ==== One-time wiring ====
 // ---- one-time wiring --------------------------------------------------------------------------------------
 // Startup wiring for the header buttons, search, drop and theme observer (runs once at script load).
@@ -807,6 +829,7 @@ function uiAfterRender() {
   document.getElementById('btn-steamguide').addEventListener('click', uiOpenSteamGuide);
   // links elsewhere in the page that open the PlayStation to Steam guide (PlayStation how-to, the Clone box)
   document.addEventListener('click', e => { const a = e.target.closest && e.target.closest('[data-steam-guide]'); if (a) { e.preventDefault(); uiOpenSteamGuide(); } });
+  uiWireMenus();
   document.getElementById('btn-tour').addEventListener('click', uiTourStart);
   document.getElementById('sb-check').addEventListener('click', uiJumpProblem);
   uiTrackHeader();

@@ -231,7 +231,13 @@
   .toast.error { border-color: var(--accent); color: var(--accent-bright); }
 
   .psnNote { font-size: 11.5px; color: var(--text-dim); max-width: 420px; line-height: 1.4; }
-  .psnNote a { color: var(--accent-bright); }
+  /* header drop-down menus (Guides, other download formats): .open on .hmenu shows its .hmenuPop */
+  .hmenu { position: relative; display: inline-flex; }
+  .hmenuPop { position: absolute; left: 0; top: calc(100% + 4px); z-index: 400; display: none; flex-direction: column; gap: 6px; min-width: 260px; max-width: 92vw; padding: 8px; background: var(--panel); border: 1px solid var(--panel-border-bright); box-shadow: 0 8px 24px rgba(0,0,0,.45); }
+  .hmenu.open .hmenuPop { display: flex; }
+  .hmenuPop > button { text-align: left; }
+  .hmenuPop .psnNote { padding: 4px 2px 0; border-top: 1px solid var(--panel-border); margin-top: 2px; }
+  .splitBtn .hmenuBtn { border-left: none; padding: 7px 9px; }  .psnNote a { color: var(--accent-bright); }
   .psnNote a:hover { color: #fff; }
   .eqRow { display: grid; grid-template-columns: 100px 1fr auto; gap: 10px; align-items: center; padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,0.04); font-size: 12.5px; }
   .eqRow .slotname { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.4px; }
@@ -393,7 +399,7 @@
   html[data-theme="light"] { --bgtint1: rgba(244,241,236,0.82); --bgtint2: rgba(244,241,236,0.88); }
   html[data-theme="light"] header { background: linear-gradient(180deg, #ffffff, #f4f1ec); }
   html[data-theme="light"] .graveRow:hover td { background: rgba(0,0,0,0.04); }
-  html[data-theme="light"] #chg-drawer, html[data-theme="light"] #qs-drop { box-shadow: 0 8px 24px rgba(0,0,0,.18); }
+  html[data-theme="light"] #chg-drawer, html[data-theme="light"] #qs-drop, html[data-theme="light"] .hmenuPop { box-shadow: 0 8px 24px rgba(0,0,0,.18); }
   html[data-theme="light"] .run .up { color: #12652b; } html[data-theme="light"] .run .down { color: #a8291f; }
   html[data-theme="light"] .rwdBp { color: #0b5560; background: rgba(53,198,216,.18); }
   html[data-theme="light"] [style*="color:#9fd39f"] { color: #2d6a2d !important; }
@@ -489,8 +495,8 @@
     <button class="subtle" id="btn-forget-masters" style="display:none;" title="Stop loading masters.db automatically in this browser">Forget masters.db</button>
     <label class="loadchip" id="chip-save"><span class="dot"></span>2. Load your save (.sav or .json)<input type="file" id="file-save" accept=".sav,.json"></label>
     <div class="sep"></div>
-    <button class="action" id="btn-download-sav" disabled title="Review your changes, then save them as brggame_date_time.sav">⬇ Download .sav</button>
-    <button class="action" id="btn-download-json" disabled title="Review your changes, then save them as brggame_date_time.json (uncompressed)">⬇ Download .json</button>
+    <span class="hmenu splitBtn"><button class="action" id="btn-download-sav" disabled title="Review your changes, then save them as brggame_date_time.sav">⬇ Download .sav</button><button class="action hmenuBtn" id="btn-download-more" disabled aria-haspopup="true" aria-expanded="false" title="Other download formats">▾</button>
+      <div class="hmenuPop" role="menu"><button class="subtle" id="btn-download-json" role="menuitem" disabled title="Review your changes, then save them as brggame_date_time.json (uncompressed)">⬇ Download .json (uncompressed)</button></div></span>
     <button class="subtle" id="btn-report" disabled title="A summary of this save and its Save check, to paste when asking for help">📋 Save report</button>
     <button class="subtle" id="btn-recent" title="The last saves you loaded, kept in this browser">📂 Recent saves</button>
     <button class="subtle" id="btn-history" title="Saves you downloaded with this editor, kept in this browser">🕘 Download history</button>
@@ -498,7 +504,9 @@
     <button class="subtle" id="btn-keys" title="Keyboard shortcuts (?)">⌨</button>
     <button class="subtle" id="btn-tour" title="A short tour of the editor">Take the tour</button>
     <button class="subtle" id="btn-theme" title="Switch theme">☀</button>
-    <div class="psnNote"><button class="subtle" id="btn-pcguide" title="Step by step: back up your Steam save, load it, edit, check, download and put it back">🖥️ Steam users: how-to</button> <button class="subtle" id="btn-psguide" title="Step by step: copy a PS4/PS5 save to USB, decrypt, edit, re-encrypt, copy back">🎮 PlayStation users: how-to</button> <button class="subtle" id="btn-steamguide" title="Step by step: copy a PS4/PS5 save to USB, decrypt, clone it onto your Steam save, put it in the Steam folder">💻 PlayStation to Steam: how-to</button><br>PSN saves must first be decrypted. Use <a href="https://garlicsaves.com" target="_blank" rel="noopener">garlicsaves.com</a> or read <a href="https://discord.com/channels/256677044174323713/1544630372208480316/1547464159804002397" target="_blank" rel="noopener">this guide</a></div>
+    <span class="hmenu"><button class="subtle hmenuBtn" id="btn-guides" aria-haspopup="true" aria-expanded="false" title="Step-by-step guides for Steam and PlayStation saves">📖 Guides ▾</button>
+      <div class="hmenuPop" role="menu"><button class="subtle" id="btn-pcguide" role="menuitem" title="Step by step: back up your Steam save, load it, edit, check, download and put it back">🖥️ Steam users: how-to</button><button class="subtle" id="btn-psguide" role="menuitem" title="Step by step: copy a PS4/PS5 save to USB, decrypt, edit, re-encrypt, copy back">🎮 PlayStation users: how-to</button><button class="subtle" id="btn-steamguide" role="menuitem" title="Step by step: copy a PS4/PS5 save to USB, decrypt, clone it onto your Steam save, put it in the Steam folder">💻 PlayStation to Steam: how-to</button>
+        <div class="psnNote">PSN saves must first be decrypted. Use <a href="https://garlicsaves.com" target="_blank" rel="noopener">garlicsaves.com</a> or read <a href="https://discord.com/channels/256677044174323713/1544630372208480316/1547464159804002397" target="_blank" rel="noopener">this guide</a>.</div></div></span>
   </div>
 </header>
 
@@ -2419,6 +2427,7 @@ async function loadSaveFiles(files) {
       reviewSnapshot(soulEntry.file);
       document.getElementById('btn-download-sav').disabled = false;
       document.getElementById('btn-download-json').disabled = false;
+      document.getElementById('btn-download-more').disabled = false;
       document.getElementById('btn-report').disabled = false;
     }
     // keys other than soul that are copied from the loaded files into SAVE
@@ -2768,6 +2777,7 @@ function startSave(soul) {
   document.getElementById('app').style.display = 'block';
   document.getElementById('btn-download-sav').disabled = true;
   document.getElementById('btn-download-json').disabled = true;
+  document.getElementById('btn-download-more').disabled = true;
   document.getElementById('btn-report').disabled = true;
   renderAll();
 }
@@ -15027,6 +15037,28 @@ function uiAfterRender() {
   if (UI.recRoot !== RAW_SAV_ROOT) { UI.recRoot = RAW_SAV_ROOT; if (RAW_SAV_ROOT) recRecord(); }
 }
 
+// uiWireMenus(): the header drop-downs (.hmenu). Its .hmenuBtn opens or closes it; picking an item, clicking
+// elsewhere or Escape closes it. Only one is open at a time.
+function uiWireMenus() {
+  const menus = [ ...document.querySelectorAll('.hmenu') ];
+  const setOpen = (m, on) => {
+    m.classList.toggle('open', on);
+    m.querySelector('.hmenuBtn').setAttribute('aria-expanded', on ? 'true' : 'false');
+    if (!on) return;
+    // open towards whichever side has room, so the menu never runs off a narrow screen
+    const pop = m.querySelector('.hmenuPop'), r = m.getBoundingClientRect();
+    pop.style.left = pop.style.right = '';
+    const w = pop.offsetWidth, vw = document.documentElement.clientWidth;
+    if (r.left + w > vw - 8) { pop.style.left = 'auto'; pop.style.right = Math.min(0, r.right - Math.max(w + 8, r.right)) + 'px'; }
+  };
+  for (const m of menus) {
+    m.querySelector('.hmenuBtn').addEventListener('click', () => { const on = !m.classList.contains('open'); for (const o of menus) setOpen(o, false); setOpen(m, on); });
+    m.querySelector('.hmenuPop').addEventListener('click', e => { if (e.target.closest('button, a')) setOpen(m, false); });
+  }
+  document.addEventListener('click', e => { for (const m of menus) if (!m.contains(e.target)) setOpen(m, false); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') for (const m of menus) setOpen(m, false); });
+}
+
 // ==== One-time wiring ====
 // ---- one-time wiring --------------------------------------------------------------------------------------
 // Startup wiring for the header buttons, search, drop and theme observer (runs once at script load).
@@ -15040,6 +15072,7 @@ function uiAfterRender() {
   document.getElementById('btn-steamguide').addEventListener('click', uiOpenSteamGuide);
   // links elsewhere in the page that open the PlayStation to Steam guide (PlayStation how-to, the Clone box)
   document.addEventListener('click', e => { const a = e.target.closest && e.target.closest('[data-steam-guide]'); if (a) { e.preventDefault(); uiOpenSteamGuide(); } });
+  uiWireMenus();
   document.getElementById('btn-tour').addEventListener('click', uiTourStart);
   document.getElementById('sb-check').addEventListener('click', uiJumpProblem);
   uiTrackHeader();
@@ -15290,11 +15323,12 @@ const TOUR_KEY = 'lid.tour';
 // Tour steps: CSS selector to highlight (null = centered), title, text and optional fallback shown when the target is hidden.
 const TOUR_STEPS = [
   { sel: '#chip-masters', title: 'Load masters.db', text: "Start here. Load the masters.db from your game's Content folder. It tells the editor what the game allows, so edits stay in range. PlayStation saves need a PC masters.db." },
-  { sel: '#chip-save', title: 'Load your save', text: 'Then load your save, or drag a .sav anywhere on the page. PlayStation saves must be decrypted first; the 🎮 button next to it explains how.' },
+  { sel: '#chip-save', title: 'Load your save', text: 'Then load your save, or drag a .sav anywhere on the page. PlayStation saves must be decrypted first; the Guides menu explains how.' },
+  { sel: '#btn-guides', title: 'Guides', text: 'Step-by-step how-tos for Steam saves, PlayStation saves, and moving a PlayStation save to Steam, plus where to decrypt a PSN save.' },
   { sel: '.stickyNav', title: 'The tabs', text: 'Five sections hold the tabs: Account, Items, Fighters, Run & Floors and Tools. A dot on a tab means you changed something there.', fallback: 'They appear here once a save is loaded.' },
   { sel: '#qs', title: 'Search', text: "Press Ctrl+K and type what you're after, such as 'bloodnium' or 'storage', and it takes you straight to it." },
   { sel: '#statusbar', title: 'Status bar', text: 'This counts your unsaved changes and shows the Save check. Changes lists every edit with an Undo for each, and the Save check button jumps to the next problem.', fallback: 'It appears at the bottom once a save is loaded.' },
-  { sel: '#btn-download-sav', title: 'Download safely', text: 'Download shows a full review of what changed before anything is saved. The editor keeps a copy of your original, so you can always go back. Keep your own backup too.' },
+  { sel: '#btn-download-sav', title: 'Download safely', text: 'Download shows a full review of what changed before anything is saved. The editor keeps a copy of your original, so you can always go back. Keep your own backup too. The ▾ next to it saves a .json instead.' },
   { sel: null, title: "That's it", text: 'Press ? any time for shortcuts, or hover the small ? circles for help on odd settings. You can replay this tour from the header.' }
 ];
 // Tour state: current step index and whether it is showing.

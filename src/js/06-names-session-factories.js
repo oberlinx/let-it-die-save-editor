@@ -294,6 +294,7 @@ function startSave(soul) {
   document.getElementById('app').style.display = 'block';
   document.getElementById('btn-download-sav').disabled = true;
   document.getElementById('btn-download-json').disabled = true;
+  document.getElementById('btn-download-more').disabled = true;
   document.getElementById('btn-report').disabled = true;
   renderAll();
 }
