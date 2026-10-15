@@ -13,3 +13,8 @@ desktop.ini
 .DS_Store
 .vscode/
 __pycache__/
+
+# Local test runs: config (paths on this PC), cached sql.js, reports (they name your saves and fighters)
+tools/tests.config.json
+tools/.cache/
+test-reports/

@@ -7,3 +7,4 @@
 *.json text eol=lf
 *.b64 text eol=lf
 *.yml text eol=lf
+*.cmd text eol=crlf

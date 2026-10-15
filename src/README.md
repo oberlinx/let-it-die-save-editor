@@ -11,13 +11,25 @@ node build.js --check    # fails if index.html doesn't match src/ (run before co
 
 You need [Node.js](https://nodejs.org/) (any current version). The build only stitches files together: no minifying and no reformatting, so `index.html` is exactly the source, concatenated.
 
-## Round-trip test
+## Tests
+
+Double-click `run-tests.cmd` in the repo folder, or run:
 
 ```
-node tools/roundtrip-test.js --masters <masters.db> <save.sav | folder> ...
+node tools/run-tests.js
 ```
 
-Loads masters.db and each save through the built `index.html` (in Node, with a stand-in page), makes no edit, and checks that Download would write the save exactly as it was loaded, and that the `.sav` it writes reads back the same. Folders are searched two levels deep for `.sav` files, and saves are only read. Run it after `node build.js` when you change the load adapter, the writeback or the download pipeline: a `FAIL` line names the first field that changed. The one change made on purpose (the defense lineup's copies of each defender's grade, class and level brought in step with the fighter) is expected and reported on the `ok` line. It needs Node 18+ and internet access, because sql.js comes from cdnjs as in the editor. Keep your test saves outside the repo; they hold account ids.
+It runs every test against your own saves and writes a report to `test-reports/latest.md` (plus a dated copy). Saves are only read, never changed.
+
+1. **Build check:** `index.html` matches the `src/` files.
+2. **Round trip:** each save is loaded through the built `index.html` (in Node, with a stand-in page) and, with no edits, Download must write it back exactly as loaded, and the `.sav` it writes must read back the same. A failure names the first field that changed. The one change made on purpose (the defense lineup's copies of each defender's grade, class and level brought in step with the fighter) is expected.
+3. **Save check:** the editor's Save check runs on each save, and the report groups its problems and warnings by kind, with the saves each one appeared in.
+
+The first run makes `tools/tests.config.json` with the masters.db and save folders it finds on your PC (the game's Content folder, your Desktop and Downloads). Edit it to test other saves; folders are searched `depth` levels deep for `.sav` files, and identical copies are tested once. The first run also downloads sql.js from cdnjs into `tools/.cache/`; after that the tests run offline. You need Node 18 or newer.
+
+**Sharing a report:** attach `test-reports/latest.md` in a Claude chat (type `@` and pick the file) and ask about the findings. The report names your save folders and fighters and stays on your PC unless you share it. The config, the cache and the reports are git-ignored.
+
+To run only the round trip on particular saves: `node tools/roundtrip-test.js --masters <masters.db> <save.sav | folder> ...`. Keep test saves outside the repo; they hold account ids.
 
 ## How it fits together
 
