@@ -385,6 +385,12 @@ function reviewDiff(A, B, rawA, rawB) {
     if (bl.lines.length === 1) bl.lines.push('No planned boss floors needed changing');
     else if (bl.lines.length > 14) { const n = bl.lines.length - 1; bl.lines.length = 1; bl.lines.push(`${n} boss floors written`); }
   }
+  // Floors an earlier lock planned past the game's own, removed with no lock set.
+  if (BOSS_LOCK.root === RAW_SAV_ROOT && !BOSS_LOCK.mode && BOSS_LOCK.clear && !(RUN_END.root === RAW_SAV_ROOT && RUN_END.on)) {
+    const keepB = new Set(arr(rawB.soul && rawB.soul.hvntrinfo).map(e => e.flrid));
+    const gone = blkExtraPlanned(blkFrom()).filter(id => !keepB.has(id)).map(id => (hvnFloor(id) || {}).no + 'F');
+    if (gone.length) sec('Boss floor plan').lines.push(`Removed the ${gone.length} boss floor${gone.length === 1 ? '' : 's'} planned past the game's own (${gone[0]}${gone.length > 1 ? '–' + gone[gone.length - 1] : ''}); the game plans them as you go`);
+  }
   // Armor skins unlocked by researching armor to +4.
   const sk = sec('Armor Skins (unlocked by R&D at +4)');
   const skA = armorSkinsUnlocked(ra), skB = armorSkinsUnlocked(rb);

@@ -32,7 +32,7 @@ function uiDirtyTabs() {
     const r = RAW_SAV_ROOT;
     if (r) {
       if (FLOOR_MOVE.root === r && FLOOR_MOVE.target) set.add('location');
-      if (BOSS_LOCK.root === r && BOSS_LOCK.mode) set.add('location');
+      if (BOSS_LOCK.root === r && (BOSS_LOCK.mode || BOSS_LOCK.clear)) set.add('location');
       if (LUCKY.root === r && LUCKY.seed) set.add('location');
       if (RUN_END.root === r && RUN_END.on) set.add('location');
       if (REWIND.root === r && REWIND.on) set.add('location');

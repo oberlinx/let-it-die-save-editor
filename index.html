@@ -6069,10 +6069,27 @@ function applyFloorMove(root) {
 //             with rewards and the mid-boss dropped one (the game rolled them), but there was NO Legendary Chest:
 //             the game doesn't roll that one itself.
 // which: '' = any boss of the mode's kinds, or one boss: 'boss:1'..'boss:4' (Dons) / 'mboss:1'..'mboss:4' (mid-bosses)
-// State of the boss-floor lock UI: mode ('' = off, a BLK_MODES key), which (specific boss), extend (write all remaining floors), rewards policy, cached plan.
-let BOSS_LOCK = { root: null, mode: '', which: '', extend: true, rewards: 'roll', plan: null };
+// State of the boss-floor lock UI: mode ('' = off, a BLK_MODES key), which (specific boss), extend (write all remaining floors), rewards policy, cached plan,
+// redraw (Reroll again was pressed: floors that already fit the lock are redrawn too) and clear (with no lock: remove the floors planned beyond the game's own).
+let BOSS_LOCK = { root: null, mode: '', which: '', extend: true, rewards: 'roll', plan: null, redraw: false, clear: false };
 // blkSync(): reset BOSS_LOCK when a different save is loaded.
-function blkSync() { if (BOSS_LOCK.root !== RAW_SAV_ROOT) BOSS_LOCK = { root: RAW_SAV_ROOT, mode: '', which: '', extend: true, rewards: 'roll', plan: null }; }
+function blkSync() { if (BOSS_LOCK.root !== RAW_SAV_ROOT) BOSS_LOCK = { root: RAW_SAV_ROOT, mode: '', which: '', extend: true, rewards: 'roll', plan: null, redraw: false, clear: false }; }
+// How many boss floors past the current floor the game itself plans in soul.hvntrinfo. Every save the game wrote mid-run
+// (no editor lock) has exactly the next 3, plus the current floor when the fighter is on a boss floor; anything past
+// that was written by an editor lock with "write every remaining boss floor".
+const GAME_PLAN_AHEAD = 3;
+// blkBeyondGame(from): ids of the route's boss floors after `from` that the game wouldn't have planned yet (past GAME_PLAN_AHEAD).
+function blkBeyondGame(from) {
+  const cur = hvnFloor(from);
+  if (!cur) return new Set();
+  return new Set(flmRouteBoss(from).filter(x => x.no > cur.no).sort((a, b) => a.no - b.no).slice(GAME_PLAN_AHEAD).map(x => x.id));
+}
+// blkExtraPlanned(from): ids of the floors past the game's own plan that have a planned entry (as they'll be after any
+// floor move; a moved entry is keyed by its new floor), sorted by floor.
+function blkExtraPlanned(from) {
+  const ids = blkBeyondGame(from);
+  return [ ...blkExisting(from).keys() ].filter(id => ids.has(id)).sort((a, b) => (hvnFloor(a) || {}).no - (hvnFloor(b) || {}).no);
+}
 // blkWhichOptions(mode): list of {v, label} single-boss choices for a mode.
 // the boss choices a lock mode offers
 function blkWhichOptions(mode) {
@@ -6193,14 +6210,15 @@ function blkPlan() {
     }
     // keep the planned entry if it already satisfies the lock; floors the game hasn't planned are only written when 'extend' is on
     const oldK = old && blkKind(old.refareaid);
+    // (after Reroll again, those are redrawn too: a new arena of the same kind and new rewards)
     const keep = old && (!want.length || (one ? want.some(r => r.refareaid === old.refareaid) : kinds.includes(oldK.kind)));
-    if (keep) { items.push({ floor: f, old, entry: null, fallback }); continue; }
+    if (keep && !(BOSS_LOCK.redraw && want.length)) { items.push({ floor: f, old, entry: null, fallback }); continue; }
     if (!old && !BOSS_LOCK.extend) continue;
     const r = blkPick(want.length ? want : rows);
     // a floor the game hasn't planned yet gets a rare (yellow on the map) Legendary Chest as often as the game gives one
-    items.push({ floor: f, old, entry: r && blkEntry(f, r.refareaid, old ? Number(old.is_rare) === 1 : Math.random() < HVN_RARE_CHANCE, BOSS_LOCK.rewards), fallback });
+    items.push({ floor: f, old, entry: r && blkEntry(f, r.refareaid, old ? Number(old.is_rare) === 1 : Math.random() < HVN_RARE_CHANCE, BOSS_LOCK.rewards), fallback, redrawn: !!keep });
   }
-  return { from, mode: BOSS_LOCK.mode, which: BOSS_LOCK.which, extend: BOSS_LOCK.extend, rewards: BOSS_LOCK.rewards, items };
+  return { from, mode: BOSS_LOCK.mode, which: BOSS_LOCK.which, extend: BOSS_LOCK.extend, rewards: BOSS_LOCK.rewards, redraw: BOSS_LOCK.redraw, items };
 }
 // blkPlanFresh(): returns the cached BOSS_LOCK.plan, rebuilding it when its inputs (floor, mode, options, floor-move rolls) changed.
 function blkPlanFresh() {
@@ -6209,12 +6227,20 @@ function blkPlanFresh() {
   const mv = blkFrom() !== (RAW_SAV_ROOT && RAW_SAV_ROOT.soul && RAW_SAV_ROOT.soul.flrid);
   // a floor move's rolls (its re-picked floors and rerolled rewards) are what the lock starts from, so a new roll means a new plan
   const rolls = mv ? FLOOR_MOVE.rolls : null, reroll = mv ? FLOOR_MOVE.reroll : null;
-  if (!p || p.from !== blkFrom() || p.mode !== BOSS_LOCK.mode || p.which !== BOSS_LOCK.which || p.extend !== BOSS_LOCK.extend || p.rewards !== BOSS_LOCK.rewards || p.rolls !== rolls || p.reroll !== reroll) { const np = blkPlan(); BOSS_LOCK.plan = np && Object.assign(np, { rolls, reroll }); }
+  if (!p || p.from !== blkFrom() || p.mode !== BOSS_LOCK.mode || p.which !== BOSS_LOCK.which || p.extend !== BOSS_LOCK.extend || p.rewards !== BOSS_LOCK.rewards || p.redraw !== BOSS_LOCK.redraw || p.rolls !== rolls || p.reroll !== reroll) { const np = blkPlan(); BOSS_LOCK.plan = np && Object.assign(np, { rolls, reroll }); }
   return BOSS_LOCK.plan;
 }
-// applyBossLock(root): download-pipeline step. Writes the planned entries into root.soul.hvntrinfo (replacing or, when extend is on, appending). Returns root.
+// applyBossLock(root): download-pipeline step. Writes the planned entries into root.soul.hvntrinfo (replacing or, when extend is on, appending).
+// With no lock and 'clear' ticked, it instead removes the entries past the game's own plan, so the game plans those floors itself. Returns root.
 function applyBossLock(root) {
-  if (BOSS_LOCK.root !== RAW_SAV_ROOT || !BOSS_LOCK.mode || !root || !root.soul) return root;
+  if (BOSS_LOCK.root !== RAW_SAV_ROOT || !root || !root.soul) return root;
+  if (!BOSS_LOCK.mode) {
+    if (!BOSS_LOCK.clear || !Array.isArray(root.soul.hvntrinfo)) return root;
+    flmOwnHvn(root);
+    const ids = blkBeyondGame(root.soul.flrid);
+    root.soul.hvntrinfo = root.soul.hvntrinfo.filter(e => !(e && ids.has(e.flrid)));
+    return root;
+  }
   const p = blkPlanFresh();
   if (!p || p.from !== root.soul.flrid) return root;
   flmOwnHvn(root);
@@ -6258,6 +6284,14 @@ function renderBossLock() {
   h += `<div class="toolbar"><select id="blk-mode" style="${sel} min-width:min(340px, 100%); max-width:100%;"><option value="">Leave as rolled</option>${Object.entries(BLK_MODES).map(([ k, m ]) => `<option value="${k}" ${BOSS_LOCK.mode === k ? 'selected' : ''}>${escapeHtml(m.label)}</option>`).join('')}</select>${blkWhichOptions(BOSS_LOCK.mode).length ? `<select id="blk-which" style="${sel} min-width:min(220px, 100%); max-width:100%;"><option value="">Any ${escapeHtml(BLK_MODES[BOSS_LOCK.mode].noun)}</option>${blkWhichOptions(BOSS_LOCK.mode).map(o => `<option value="${o.v}" ${BOSS_LOCK.which === o.v ? 'selected' : ''}>Only ${escapeHtml(o.label)}</option>`).join('')}</select>` : ''}</div>
     ${lockOn ? `<label style="cursor:pointer; display:block; margin:6px 0;"><input type="checkbox" id="blk-extend" ${BOSS_LOCK.extend ? 'checked' : ''} style="width:auto; margin-right:6px;">Also write every remaining boss floor of the route (${remaining} after ${escapeHtml(shownFrom.no + 'F')}), not only the ones the game has planned so far, so the lock lasts the whole run.</label>
     <div class="toolbar" style="margin:4px 0 6px;"><label style="font-size:12px;">Rewards on the floors it writes <select id="blk-rewards" style="${sel} max-width:100%;"><option value="roll" ${BOSS_LOCK.rewards === 'roll' ? 'selected' : ''}>Roll all now: Legendary Chest, large boxes, boss drop (confirmed in game)</option><option value="chest" ${BOSS_LOCK.rewards === 'chest' ? 'selected' : ''}>Legendary Chest now, the rest rolled by the game (confirmed in game)</option><option value="hidden" ${BOSS_LOCK.rewards === 'hidden' ? 'selected' : ''}>Spoiler free: like the above, and the editor never shows the rewards</option><option value="none" ${BOSS_LOCK.rewards === 'none' ? 'selected' : ''}>None: the game rolls the boxes and boss drop, no Legendary Chest (confirmed in game)</option></select></label></div>${BOSS_LOCK.rewards === 'none' ? '<div class="warnNote" style="margin:0 0 8px;"><b>These floors have no Legendary Chest.</b> Tested in game: the large boxes and the boss drop are rolled by the game as usual, but the game doesn\'t make a Legendary Chest for a floor without one, so the map shows it blank and the floor has none.</div>' : BOSS_LOCK.rewards === 'hidden' ? '<div class="capNote" style="margin:0 0 8px;">Spoiler free: each floor it writes gets a Legendary Chest (rare at the game\'s rate) and the game rolls the large boxes and boss drop, the same as the option above, but the editor won\'t show any of it here, whatever "Show rewards" is set to. You find out in game. If you load the downloaded save in the editor again, keep "Show rewards (spoilers)" unticked.</div>' : BOSS_LOCK.rewards === 'chest' ? '<div class="capNote" style="margin:0 0 8px;">Only the Legendary Chest is written; the game rolls the large boxes and boss drop itself when it builds the floor (confirmed in game).</div>' : ''}` : ''}`;
+  if (!lockOn) {
+    // no lock: offer to take out what earlier locks wrote past the game's own plan
+    const extra = blkExtraPlanned(from), fl = id => (hvnFloor(id) || {}).no + 'F';
+    if (extra.length) {
+      h += `<label style="cursor:pointer; display:block; margin:6px 0;"><input type="checkbox" id="blk-clear" ${BOSS_LOCK.clear ? 'checked' : ''} style="width:auto; margin-right:6px;">Remove the ${extra.length} boss floor${extra.length === 1 ? '' : 's'} planned past the game's own (${escapeHtml(fl(extra[0]))}${extra.length > 1 ? '–' + escapeHtml(fl(extra[extra.length - 1])) : ''}), so the game rolls them itself as you go.</label>
+        <div class="capNote" style="margin:0 0 6px;">The game plans the next ${GAME_PLAN_AHEAD} boss floors ahead of you; more than that were written by an earlier lock. Those ${GAME_PLAN_AHEAD} (and the floor you're on) are kept as they are. To change them too, pick a lock above and press Reroll again.${BOSS_LOCK.clear ? ' <b>Not yet tested in game</b>: saves the game writes look like this, but keep a backup.' : ''}</div>`;
+    }
+  }
   const p = blkPlanFresh();
   if (p) {
     const nm = rwdNameHtml;
@@ -6267,24 +6301,26 @@ function renderBossLock() {
     h += `<table class="stewTable" style="margin-top:6px;"><thead><tr><th>Floor</th><th>Now</th><th>On download</th><th>${LOC_SPOIL && p.rewards !== 'hidden' ? 'Legendary Chest and other rewards' : 'Rewards (names hidden)'}</th></tr></thead><tbody>`;
     h += p.items.map(it => {
       const was = it.old ? blkKind(it.old.refareaid).label : '<span class="id">not planned yet</span>';
-      const now = (it.entry ? `<b>${escapeHtml(blkKind(it.entry.refareaid).label)}</b>${it.old ? '' : ' <span class="id">(added)</span>'}` : '<span class="id">unchanged</span>') + (it.fallback ? ` <span class="id">(no ${escapeHtml(p.which ? (blkWhichOptions(p.mode).find(o => o.v === p.which) || {}).label || BLK_MODES[p.mode].noun : BLK_MODES[p.mode].noun)} on this floor)</span>` : '');
+      const now = (it.entry ? `<b>${escapeHtml(blkKind(it.entry.refareaid).label)}</b>${it.old ? (it.redrawn ? ' <span class="id">(rerolled)</span>' : '') : ' <span class="id">(added)</span>'}` : '<span class="id">unchanged</span>') + (it.fallback ? ` <span class="id">(no ${escapeHtml(p.which ? (blkWhichOptions(p.mode).find(o => o.v === p.which) || {}).label || BLK_MODES[p.mode].noun : BLK_MODES[p.mode].noun)} on this floor)</span>` : '');
       return `<tr><td>${escapeHtml(hvnFloorLabel(it.floor))}</td><td>${it.old ? escapeHtml(was) : was}</td><td>${now}</td><td>${p.rewards === 'hidden' ? '<span class="id">hidden (spoiler free)</span>' : blkRewardText(it.entry || it.old, nm)}</td></tr>`;
     }).join('');
     h += '</tbody></table>';
-    h += `<div class="capNote">Not changed: the floor you're on (already built), NEO map B floors (one fixed arena), and planned floors that are already ${escapeHtml(BLK_MODES[p.mode].noun)} floors.${p.mode === 'don' ? ' Regular Heaven has no Dons below 100F (the game only offers a mid-boss or a Screamer Pit there), so those floors become mid-boss floors.' : ''}${p.mode === 'don' || p.mode === 'boss' ? ' Dons have no boss drop: their floors get a Legendary Chest and three large chests, as the game writes them.' : ''}${from !== s.flrid ? ' Applied after the floor move above, so it replaces the moved floors\' rerolled rewards.' : ''} Floors the game hadn't planned get a Legendary Chest that's rare (yellow on the map) as often as the game makes one.</div>`;
+    h += `<div class="capNote">Not changed: the floor you're on (already built), NEO map B floors (one fixed arena), and${p.redraw ? '' : ' (until you press Reroll again)'} planned floors that are already ${escapeHtml(BLK_MODES[p.mode].noun)} floors.${p.mode === 'don' ? ' Regular Heaven has no Dons below 100F (the game only offers a mid-boss or a Screamer Pit there), so those floors become mid-boss floors.' : ''}${p.mode === 'don' || p.mode === 'boss' ? ' Dons have no boss drop: their floors get a Legendary Chest and three large chests, as the game writes them.' : ''}${from !== s.flrid ? ' Applied after the floor move above, so it replaces the moved floors\' rerolled rewards.' : ''} Floors the game hadn't planned get a Legendary Chest that's rare (yellow on the map) as often as the game makes one.</div>`;
     if (p.items.some(it => /_KIS_RUSH/.test((arr(AP.hvnBossKis).find(r => r.areaid === (it.entry || it.old || {}).refareaid) || {}).kis || ''))) h += `<div class="capNote">Screamer Pit chests (treasure enemies) can hold any faction's metal, on every route: the game's own pit table mixes all four (a W.E pit can drop D.O.D. ARMS, Candle Wolf or M.I.L.K. metal). The large boxes, featured reward and boss drop stay the route's own faction.</div>`;
   }
   host.innerHTML = h;
   const wh = document.getElementById('blk-which');
-  if (wh) wh.addEventListener('change', () => { BOSS_LOCK.which = wh.value; BOSS_LOCK.plan = null; renderLocation(); });
+  if (wh) wh.addEventListener('change', () => { BOSS_LOCK.which = wh.value; BOSS_LOCK.redraw = false; BOSS_LOCK.plan = null; renderLocation(); });
   const ms = document.getElementById('blk-mode');
-  if (ms) ms.addEventListener('change', () => { BOSS_LOCK.mode = ms.value; if (!blkWhichOptions(ms.value).some(o => o.v === BOSS_LOCK.which)) BOSS_LOCK.which = ''; BOSS_LOCK.plan = null; renderLocation(); toast(ms.value ? 'Boss floor lock set — download to apply' : 'Boss floors left as rolled'); });
+  if (ms) ms.addEventListener('change', () => { BOSS_LOCK.mode = ms.value; BOSS_LOCK.redraw = false; if (!blkWhichOptions(ms.value).some(o => o.v === BOSS_LOCK.which)) BOSS_LOCK.which = ''; BOSS_LOCK.plan = null; renderLocation(); toast(ms.value ? 'Boss floor lock set — download to apply' : 'Boss floors left as rolled'); });
   const ex = document.getElementById('blk-extend');
-  if (ex) ex.addEventListener('change', () => { BOSS_LOCK.extend = ex.checked; BOSS_LOCK.plan = null; renderLocation(); });
+  if (ex) ex.addEventListener('change', () => { BOSS_LOCK.extend = ex.checked; BOSS_LOCK.redraw = false; BOSS_LOCK.plan = null; renderLocation(); });
   const rws = document.getElementById('blk-rewards');
-  if (rws) rws.addEventListener('change', () => { BOSS_LOCK.rewards = rws.value; BOSS_LOCK.plan = null; renderLocation(); });
+  if (rws) rws.addEventListener('change', () => { BOSS_LOCK.rewards = rws.value; BOSS_LOCK.redraw = false; BOSS_LOCK.plan = null; renderLocation(); });
   const rr = document.getElementById('blk-reroll');
-  if (rr) rr.addEventListener('click', () => { BOSS_LOCK.plan = null; renderLocation(); });
+  if (rr) rr.addEventListener('click', () => { BOSS_LOCK.redraw = true; BOSS_LOCK.plan = null; renderLocation(); });
+  const cl = document.getElementById('blk-clear');
+  if (cl) cl.addEventListener('change', () => { BOSS_LOCK.clear = cl.checked; renderLocation(); toast(cl.checked ? "Floors past the game's plan will be removed on download" : 'Planned floors kept'); });
 }
 // ==== Location tab: floor move / End the run / Rewind ====
 // Block shell for the "Location" tab (Heaven run state). Only emits the section markup and the
@@ -13801,6 +13837,12 @@ function reviewDiff(A, B, rawA, rawB) {
     if (bl.lines.length === 1) bl.lines.push('No planned boss floors needed changing');
     else if (bl.lines.length > 14) { const n = bl.lines.length - 1; bl.lines.length = 1; bl.lines.push(`${n} boss floors written`); }
   }
+  // Floors an earlier lock planned past the game's own, removed with no lock set.
+  if (BOSS_LOCK.root === RAW_SAV_ROOT && !BOSS_LOCK.mode && BOSS_LOCK.clear && !(RUN_END.root === RAW_SAV_ROOT && RUN_END.on)) {
+    const keepB = new Set(arr(rawB.soul && rawB.soul.hvntrinfo).map(e => e.flrid));
+    const gone = blkExtraPlanned(blkFrom()).filter(id => !keepB.has(id)).map(id => (hvnFloor(id) || {}).no + 'F');
+    if (gone.length) sec('Boss floor plan').lines.push(`Removed the ${gone.length} boss floor${gone.length === 1 ? '' : 's'} planned past the game's own (${gone[0]}${gone.length > 1 ? '–' + gone[gone.length - 1] : ''}); the game plans them as you go`);
+  }
   // Armor skins unlocked by researching armor to +4.
   const sk = sec('Armor Skins (unlocked by R&D at +4)');
   const skA = armorSkinsUnlocked(ra), skB = armorSkinsUnlocked(rb);
@@ -14445,7 +14487,7 @@ function uiSig(sections) { return sections ? JSON.stringify(sections.map(s => s.
 // cheap fingerprint of everything that can differ from the loaded save; the (slow) change list is only rebuilt when it moves
 function uiInputSig() {
   try {
-    return JSON.stringify([ SAVE, FLOOR_MOVE.root === RAW_SAV_ROOT && FLOOR_MOVE.target, BOSS_LOCK.root === RAW_SAV_ROOT && [ BOSS_LOCK.mode, BOSS_LOCK.which, BOSS_LOCK.extend, BOSS_LOCK.rewards ], LUCKY.root === RAW_SAV_ROOT && [ LUCKY.seed, LUCKY.masks ], RUN_END.root === RAW_SAV_ROOT && RUN_END.on,
+    return JSON.stringify([ SAVE, FLOOR_MOVE.root === RAW_SAV_ROOT && FLOOR_MOVE.target, BOSS_LOCK.root === RAW_SAV_ROOT && [ BOSS_LOCK.mode, BOSS_LOCK.which, BOSS_LOCK.extend, BOSS_LOCK.rewards, BOSS_LOCK.clear ], LUCKY.root === RAW_SAV_ROOT && [ LUCKY.seed, LUCKY.masks ], RUN_END.root === RAW_SAV_ROOT && RUN_END.on,
       REWIND.root === RAW_SAV_ROOT && REWIND.on, FREE_CONT.root === RAW_SAV_ROOT && [ FREE_CONT.on, FREE_CONT.perDay ], STAMP_MARK.root === RAW_SAV_ROOT && STAMP_MARK.on, JKL.root === RAW_SAV_ROOT && JKL.edits,
       SHUTDOWN_RESET.root === RAW_SAV_ROOT && [ ...SHUTDOWN_RESET.cids ], FIGHTER_DELETES.root === RAW_SAV_ROOT && [ [ ...FIGHTER_DELETES.cids ], [ ...FIGHTER_DELETES.eids ] ], FIGHTER_RECOVERS.root === RAW_SAV_ROOT && [ ...FIGHTER_RECOVERS.cids ],
       RALLY.root === RAW_SAV_ROOT && [ RALLY.stamps, RALLY.bonus ], RAW_VIEW.edAt, DATE_RULES, RAW_SAV_ROOT === UI.origRoot ]);
@@ -14501,6 +14543,7 @@ function uiPending() {
   const out = [], r = RAW_SAV_ROOT; if (!r) return out;
   if (FLOOR_MOVE.root === r && FLOOR_MOVE.target) out.push({ text: `Move to floor ${hvnFloor(FLOOR_MOVE.target) ? hvnFloorLabel(hvnFloor(FLOOR_MOVE.target)) : FLOOR_MOVE.target}`, cancel: () => { FLOOR_MOVE.target = ''; FLOOR_MOVE.armed = false; FLOOR_MOVE.msg = ''; FLOOR_MOVE.rolls = null; } });
   if (BOSS_LOCK.root === r && BOSS_LOCK.mode) out.push({ text: `Boss floor lock: ${(BLK_MODES[BOSS_LOCK.mode] || {}).label || BOSS_LOCK.mode}`, cancel: () => { BOSS_LOCK.mode = ''; BOSS_LOCK.which = ''; BOSS_LOCK.plan = null; } });
+  if (BOSS_LOCK.root === r && !BOSS_LOCK.mode && BOSS_LOCK.clear) out.push({ text: "Remove boss floors planned past the game's own", cancel: () => { BOSS_LOCK.clear = false; } });
   if (luckyPending()) out.push({ text: 'Lucky run planned', cancel: () => { LUCKY.seed = 0; } });
   if (RUN_END.root === r && RUN_END.on) out.push({ text: 'End the run (fighter goes home)', cancel: () => { RUN_END.on = false; } });
   if (REWIND.root === r && REWIND.on) out.push({ text: 'Rewind the run', cancel: () => { REWIND.on = false; } });
@@ -15127,7 +15170,7 @@ function uiDirtyTabs() {
     const r = RAW_SAV_ROOT;
     if (r) {
       if (FLOOR_MOVE.root === r && FLOOR_MOVE.target) set.add('location');
-      if (BOSS_LOCK.root === r && BOSS_LOCK.mode) set.add('location');
+      if (BOSS_LOCK.root === r && (BOSS_LOCK.mode || BOSS_LOCK.clear)) set.add('location');
       if (LUCKY.root === r && LUCKY.seed) set.add('location');
       if (RUN_END.root === r && RUN_END.on) set.add('location');
       if (REWIND.root === r && REWIND.on) set.add('location');
