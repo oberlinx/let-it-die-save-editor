@@ -297,7 +297,10 @@
   .photoModalInner { background: var(--panel); border: 1px solid var(--panel-border-bright); padding: 12px; max-width: 95vw; text-align: center; }
   .photoModalInner img { width: min(768px, 85vw, 75vh); height: auto; image-rendering: pixelated; display: block; }
   .healthPanel { border: 1px solid var(--panel-border); background: var(--panel); margin-bottom: 14px; }
-  .healthPanel > summary { display: flex; align-items: center; gap: 8px; padding: 9px 12px; cursor: pointer; font-size: 12.5px; }
+  .healthPanel > summary { display: flex; align-items: center; gap: 8px; padding: 9px 12px; cursor: pointer; font-size: 12.5px; list-style: none; }
+  .healthPanel > summary::-webkit-details-marker { display: none; }
+  .healthPanel > summary::before { content: '▸'; color: var(--text-dim); transition: transform 0.15s; }
+  .healthPanel[open] > summary::before { transform: rotate(90deg); }
   .healthBody { padding: 4px 12px 12px; }
   .healthRow { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-top: 1px solid rgba(255,255,255,0.05); font-size: 12px; flex-wrap: wrap; }
   .healthText { flex: 1; min-width: 220px; }
@@ -339,6 +342,7 @@
   #statusbar .sbok { color: var(--good-bright); }
   #statusbar .sbprob { color: var(--accent-bright); font-weight: bold; }
   #statusbar .sbspace { flex: 1; }
+  #statusbar .sbbtns { display: flex; gap: 8px; margin-left: auto; }
   main { padding-bottom: 64px; }   /* room for the fixed status bar, and no more: extra padding made short pages scroll */
 
   #chg-drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(560px, 100vw); z-index: 900; background: var(--panel); border-left: 1px solid var(--panel-border-bright); box-shadow: -10px 0 30px rgba(0,0,0,.5); display: none; flex-direction: column; }
@@ -373,7 +377,9 @@
     main { padding: 14px 12px 110px; }
     #qs { width: 100%; max-width: 100%; }
     .qswrap { display: block; width: 100%; }
-    #statusbar { padding: 6px 10px; gap: 8px; flex-wrap: nowrap; overflow-x: auto; font-size: 11px; white-space: nowrap; }
+    /* phones: the status and the Save check on one row, Changes and Download on the next, nothing off screen */
+    #statusbar { padding: 6px 10px; gap: 6px 10px; font-size: 11px; white-space: nowrap; }
+    #statusbar .sbspace { display: none; }
     #statusbar .sbfile, #statusbar .sbsep { display: none; }
     header { position: static; }
     .bankRow { grid-template-columns: 1fr 1fr; }
@@ -382,6 +388,14 @@
     .block-head > div { flex-wrap: wrap; min-width: 0; }
     .subTabs { flex-wrap: wrap; }
     .toast { bottom: 70px; right: 8px; left: 8px; }
+  }
+
+  /* phone width only (not every touch screen): nothing may widen the page past the screen, so wide tables scroll in
+     their own box, and dropdowns and fields shrink */
+  @media (max-width: 640px) {
+    .stewTable, .runTable, .dtTable { display: block; overflow-x: auto; max-width: 100%; }
+    select { min-width: 0; max-width: 100%; }
+    .field { min-width: 0; }
   }
 
   html[data-theme="light"] {

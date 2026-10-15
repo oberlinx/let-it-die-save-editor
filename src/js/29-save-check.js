@@ -714,7 +714,8 @@ function runSaveCheck() {
   HEALTH = { items: out, ranAt: Date.now(), open: HEALTH.open, lastMsg: '' };
 }
 
-// Builds the collapsible Save check panel HTML from HEALTH (open by default only when there are problems).
+// Builds the collapsible Save check panel HTML from HEALTH (open by default only when there are problems, and never on a
+// phone-width screen, where it would fill the screen; the status bar shows the count and its button opens the panel).
 // Fix/jump buttons carry data-health-fix / data-health-go indexes that wireHealth() handles.
 function blockHealth() {
   if (!SAVE) return '';
@@ -722,7 +723,8 @@ function blockHealth() {
   const n = { problem: 0, warning: 0, note: 0 };
   for (const it of items) n[it.level]++;
   const bad = n.problem + n.warning;
-  const open = HEALTH.open != null ? HEALTH.open : n.problem > 0;
+  const narrow = window.matchMedia && window.matchMedia('(max-width: 640px)').matches;
+  const open = HEALTH.open != null ? HEALTH.open : n.problem > 0 && !narrow;
   const color = n.problem ? 'var(--accent-bright)' : n.warning ? 'var(--warn)' : 'var(--good-bright)';
   const summary = !items.length ? 'No problems found' : [ n.problem && `${n.problem} problem${n.problem === 1 ? '' : 's'}`, n.warning && `${n.warning} warning${n.warning === 1 ? '' : 's'}`, n.note && `${n.note} note${n.note === 1 ? '' : 's'}` ].filter(Boolean).join(' · ');
   const badge = { problem: '<span class="hcBadge hcProblem">Problem</span>', warning: '<span class="hcBadge hcWarn">Warning</span>', note: '<span class="hcBadge hcNote">Note</span>' };
