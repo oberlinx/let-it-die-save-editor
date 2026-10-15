@@ -218,6 +218,17 @@ function runSaveCheck() {
   // load-time repairs
   if (HEALTH_LOAD.repairedChars) add('note', `${HEALTH_LOAD.repairedChars} broken character${HEALTH_LOAD.repairedChars === 1 ? '' : 's'} in text fields were repaired while loading. The rest of the save loaded normally.`);
 
+  // fighters at a grade or limit break the game doesn't have for their class (masters.db bodydetail): nothing else is
+  // checked right for them, since every limit is looked up by class, grade and limit break
+  safe('fighter grade', () => {
+    const bad = fightersBadGrade();
+    if (!bad.length) return;
+    const lbl = o => `${escapeHtml(o.c.name || 'a fighter')} (${escapeHtml(o.c.type || '?')} ${o.grade ? `Grade ${escapeHtml(String(o.c.grade))} Limit Break ${escapeHtml(String(o.c.limit_break || 0))}: this grade goes up to Limit Break ${o.lbMax}` : `Grade ${escapeHtml(String(o.c.grade))}: the game has Grade 1 to ${o.gMax}`})`;
+    add('problem', `${bad.length} fighter${bad.length === 1 ? ' is' : 's are'} at a grade or limit break the game doesn't have: ${bad.slice(0, 4).map(lbl).join('; ')}${bad.length > 4 ? '; …' : ''}. The game looks up a fighter's stats and limits by class, grade and limit break, so it has nothing for these. Another tool probably wrote them.`, 'fighters', {
+      label: 'Set them to the nearest real grade', run: () => { const n = fixFightersBadGrade(); return `${n} fighter${n === 1 ? '' : 's'} set to the nearest grade and limit break the game has. Check the Save check again for anything else about them (slots, stats).`; }
+    });
+  });
+
   // fighters with more decal slots, Death Bag or rage than their type, grade and limit break allow
   safe('fighter limits', () => {
     const over = fightersOverCap();
@@ -721,7 +732,14 @@ function runSaveCheck() {
     if (bad.length) add('warning', `Waiting Room spot${bad.length === 1 ? '' : 's'} with no decoration (or more than one) in use: ${escapeHtml(bad.join(', '))}.`, 'hub');
   });
 
-  safe('masters.db match', () => { const t = uiMastersCheckItem(); if (t) add('warning', t); });
+  // the unknown ids themselves are removed by the research and inventory items above, so point there when they're listed
+  safe('masters.db match', () => {
+    const t = uiMastersCheckItem();
+    if (!t) return;
+    const fixes = out.filter(it => it.fix && /isn't in this masters\.db|parts the game doesn't have/.test(it.text));
+    const where = [ ...new Set(fixes.map(it => it.tabName || tabLabel(it.tab))) ].filter(Boolean);
+    add('warning', t + (fixes.length ? ` If it is your game's current one, the item${fixes.length === 1 ? '' : 's'} above for ${where.join(' and ') || 'those parts'} can remove the parts it doesn't know.` : ''), fixes.length ? fixes[0].tab : 'research');
+  });
 
   // Sort worst first (stable), attach the human tab label, and publish the cache.
   const order = { problem: 0, warning: 1, note: 2 };

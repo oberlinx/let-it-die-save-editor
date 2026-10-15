@@ -276,6 +276,37 @@ function fightersOverCap() {
   return out;
 }
 // Clamps over-cap bought slots / bag / rage back to the limits and recomputes the level. Returns number of fighters fixed.
+// fightersBadGrade() -> [{ c, grade (true when the grade exists and only the limit break doesn't), gMax, lbMax }]: fighters
+// whose class has no masters.db row at their grade, or whose limit break is above the highest one for that grade.
+// Classes masters.db doesn't know at all are left to the other checks.
+function fightersBadGrade() {
+  const out = [], rows = arr(AP && AP.bodydetail), gMax = gradeMax();
+  for (const c of arr(SAVE && SAVE.soul && SAVE.soul.chrs)) {
+    if (!c || c.state === 'ENEMY' || c.state === 'DUMMY') continue;
+    const type = c.type || 'BAL';
+    if (!rows.some(r => r.type === type)) continue;
+    const g = Number(c.grade), lb = Number(c.limit_break || 0);
+    const gradeOk = Number.isInteger(g) && rows.some(r => r.type === type && r.grade === g);
+    if (!gradeOk) { out.push({ c, grade: false, gMax }); continue; }
+    const lbMax = maxLimitBreakFor(type, g);
+    if (!Number.isInteger(lb) || lb < 0 || lb > lbMax) out.push({ c, grade: true, gMax, lbMax });
+  }
+  return out;
+}
+// fixFightersBadGrade(): moves each fighter from fightersBadGrade() to the nearest grade its class has (and that grade's
+// highest limit break, if theirs is above it), then brings slots, Death Bag and rage within the new limits. Returns the count.
+function fixFightersBadGrade() {
+  const list = fightersBadGrade(), rows = arr(AP && AP.bodydetail);
+  for (const o of list) {
+    const type = o.c.type || 'BAL', grades = [ ...new Set(rows.filter(r => r.type === type).map(r => r.grade)) ].sort((a, b) => a - b);
+    const g = Number(o.c.grade);
+    if (!o.grade) o.c.grade = Number.isFinite(g) ? grades.reduce((best, x) => Math.abs(x - g) < Math.abs(best - g) ? x : best, grades[0]) : grades[0];
+    const lbMax = maxLimitBreakFor(type, o.c.grade), lb = Number(o.c.limit_break || 0);
+    o.c.limit_break = Number.isInteger(lb) ? Math.max(0, Math.min(lb, lbMax)) : 0;
+  }
+  if (list.length) fixFightersOverCap();
+  return list.length;
+}
 function fixFightersOverCap() {
   const list = fightersOverCap();
   for (const o of list) {
