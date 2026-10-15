@@ -77,6 +77,10 @@
   }
   button.action:hover:not(:disabled) { background: var(--accent); color: #fff0ee; }
   button.action:disabled { opacity: 0.35; cursor: not-allowed; }
+  /* a two-click button waiting for its confirming click: filled and pulsing, so the armed state can't be missed */
+  button.armed, button.armed:hover:not(:disabled) { background: var(--accent); color: #fff; border-color: var(--accent-bright); animation: armedPulse 1s ease-in-out infinite alternate; }
+  @keyframes armedPulse { from { box-shadow: 0 0 0 0 rgba(214,57,44,0.55); } to { box-shadow: 0 0 0 5px rgba(214,57,44,0); } }
+  @media (prefers-reduced-motion: reduce) { button.armed { animation: none; } }
   button.subtle {
     padding: 5px 10px; border: 1px solid var(--panel-border); background: var(--panel); color: var(--text-dim);
     font-family: var(--mono); font-size: 11.5px; cursor: pointer;
@@ -230,7 +234,10 @@
   .hmenu.open .hmenuPop { display: flex; }
   .hmenuPop > button { text-align: left; }
   .hmenuPop .psnNote { padding: 4px 2px 0; border-top: 1px solid var(--panel-border); margin-top: 2px; }
-  .splitBtn .hmenuBtn { border-left: none; padding: 7px 9px; }  .psnNote a { color: var(--accent-bright); }
+  .splitBtn .hmenuBtn { border-left: none; padding: 7px 9px; }
+  /* "More" menu: only a menu on phones; on wider screens its button is hidden and its buttons join the header bar */
+  .moreMenu, .moreMenu > .hmenuPop { display: contents; }
+  .moreMenu > .hmenuBtn, .moreMenu .moreLbl { display: none; }  .psnNote a { color: var(--accent-bright); }
   .psnNote a:hover { color: #fff; }
   .eqRow { display: grid; grid-template-columns: 100px 1fr auto; gap: 10px; align-items: center; padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,0.04); font-size: 12.5px; }
   .eqRow .slotname { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.4px; }
@@ -304,6 +311,8 @@
   .healthBody { padding: 4px 12px 12px; }
   .healthRow { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-top: 1px solid rgba(255,255,255,0.05); font-size: 12px; flex-wrap: wrap; }
   .healthText { flex: 1; min-width: 220px; }
+  .hcFold.folded { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+  .healthText .hcMore { font-size: 11.5px; margin-top: 2px; }
   .hcBadge { display: inline-block; width: 64px; text-align: center; padding: 1px 0; font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px; border: 1px solid; }
   .hcProblem { color: var(--accent-bright); border-color: var(--accent-bright); }
   .hcWarn { color: var(--warn); border-color: var(--warn); opacity: 0.85; }
@@ -380,6 +389,11 @@
     /* phones: the status and the Save check on one row, Changes and Download on the next, nothing off screen */
     #statusbar { padding: 6px 10px; gap: 6px 10px; font-size: 11px; white-space: nowrap; }
     #statusbar .sbspace { display: none; }
+    .moreMenu { display: inline-flex; }
+    .moreMenu > .hmenuBtn { display: inline-block; }
+    .moreMenu > .hmenuPop { display: none; }
+    .moreMenu.open > .hmenuPop { display: flex; }
+    .moreMenu .moreLbl { display: inline; }
     #statusbar .sbfile, #statusbar .sbsep { display: none; }
     header { position: static; }
     .bankRow { grid-template-columns: 1fr 1fr; }

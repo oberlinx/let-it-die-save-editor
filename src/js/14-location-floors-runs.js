@@ -17,9 +17,14 @@
 // and the waiting boss is set to the new floor's boss level. Records (clear_times, playlog) are kept.
 // ---------------------------------------------------------------------------
 // State of the pending floor move: chosen target floor id, whether to reroll boss-floor rewards, and the last computed rolls (flmRoll output).
-let FLOOR_MOVE = { root: null, target: '', armed: false, msg: '', reroll: true, rolls: null };
+// past: earlier rolls for the same target (newest last, at most ROLL_HISTORY), so "Previous roll" can bring one back.
+let FLOOR_MOVE = { root: null, target: '', armed: false, msg: '', reroll: true, rolls: null, past: [] };
 // flmSync(): reset FLOOR_MOVE when a different save is loaded.
-function flmSync() { if (FLOOR_MOVE.root !== RAW_SAV_ROOT) FLOOR_MOVE = { root: RAW_SAV_ROOT, target: '', armed: false, msg: '', reroll: true, rolls: null }; }
+function flmSync() { if (FLOOR_MOVE.root !== RAW_SAV_ROOT) FLOOR_MOVE = { root: RAW_SAV_ROOT, target: '', armed: false, msg: '', reroll: true, rolls: null, past: [] }; }
+// How many earlier rolls the floor move and the boss floor lock each keep for "Previous roll".
+const ROLL_HISTORY = 10;
+// rollPush(list, x): remember x as the latest earlier roll, dropping the oldest past ROLL_HISTORY.
+function rollPush(list, x) { if (x) { list.push(x); if (list.length > ROLL_HISTORY) list.shift(); } }
 // Boss-floor rewards. The unopened treasure boxes on the floor (root.floor.trbox, contentid = an item with
 // owner TRBOX) and the boss's own drop (floor.mboss.mbss[].eitemid) were rolled by the game for the
 // floor you were on. master_floor_drop_gen gives, per floor / map / reference area / gen type, weighted
@@ -107,6 +112,8 @@ function rwdNameHtml(id) {
 // Probability that a newly written Legendary Chest entry is flagged rare.
 const HVN_RARE_CHANCE = 0.55;
 // legendTag(): HTML badge marking a rare Legendary Chest.
+// preplanTag(): marks a planned boss floor past the 3 the game plans ahead (written by an earlier lock, not the game).
+function preplanTag() { return ' <span class="badge" style="border-color:var(--text-faint); color:var(--text-dim); font-size:10.5px; padding:1px 7px;" title="Planned past the 3 boss floors the game plans ahead, so an earlier boss floor lock wrote it, not the game">pre-planned</span>'; }
 function legendTag() { return ' <span class="badge" style="border-color:#f2d33a; color:#f2d33a; font-size:10.5px; padding:1px 7px;" title="Rare Legendary Chest: yellow on the game\'s map, filled from the rare table">rare</span>'; }
 // flmUnplaced(e): Set of indexes of hvntrinfo rwds that never become chests (see comment above): pit TRBOX_L, and mid-boss third TRBOX_L.
 function flmUnplaced(e) {
@@ -487,9 +494,9 @@ function applyFloorMove(root) {
 // which: '' = any boss of the mode's kinds, or one boss: 'boss:1'..'boss:4' (Dons) / 'mboss:1'..'mboss:4' (mid-bosses)
 // State of the boss-floor lock UI: mode ('' = off, a BLK_MODES key), which (specific boss), extend (write all remaining floors), rewards policy, cached plan,
 // redraw (Reroll again was pressed: floors that already fit the lock are redrawn too) and clear (with no lock: remove the floors planned beyond the game's own).
-let BOSS_LOCK = { root: null, mode: '', which: '', extend: true, rewards: 'roll', plan: null, redraw: false, clear: false };
+let BOSS_LOCK = { root: null, mode: '', which: '', extend: true, rewards: 'roll', plan: null, redraw: false, clear: false, past: [] };
 // blkSync(): reset BOSS_LOCK when a different save is loaded.
-function blkSync() { if (BOSS_LOCK.root !== RAW_SAV_ROOT) BOSS_LOCK = { root: RAW_SAV_ROOT, mode: '', which: '', extend: true, rewards: 'roll', plan: null, redraw: false, clear: false }; }
+function blkSync() { if (BOSS_LOCK.root !== RAW_SAV_ROOT) BOSS_LOCK = { root: RAW_SAV_ROOT, mode: '', which: '', extend: true, rewards: 'roll', plan: null, redraw: false, clear: false, past: [] }; }
 // How many boss floors past the current floor the game itself plans in soul.hvntrinfo. Every save the game wrote mid-run
 // (no editor lock) has exactly the next 3, plus the current floor when the fighter is on a boss floor; anything past
 // that was written by an editor lock with "write every remaining boss floor".
@@ -643,7 +650,12 @@ function blkPlanFresh() {
   const mv = blkFrom() !== (RAW_SAV_ROOT && RAW_SAV_ROOT.soul && RAW_SAV_ROOT.soul.flrid);
   // a floor move's rolls (its re-picked floors and rerolled rewards) are what the lock starts from, so a new roll means a new plan
   const rolls = mv ? FLOOR_MOVE.rolls : null, reroll = mv ? FLOOR_MOVE.reroll : null;
-  if (!p || p.from !== blkFrom() || p.mode !== BOSS_LOCK.mode || p.which !== BOSS_LOCK.which || p.extend !== BOSS_LOCK.extend || p.rewards !== BOSS_LOCK.rewards || p.redraw !== BOSS_LOCK.redraw || p.rolls !== rolls || p.reroll !== reroll) { const np = blkPlan(); BOSS_LOCK.plan = np && Object.assign(np, { rolls, reroll }); }
+  const same = q => q && q.from === blkFrom() && q.mode === BOSS_LOCK.mode && q.which === BOSS_LOCK.which && q.extend === BOSS_LOCK.extend && q.rewards === BOSS_LOCK.rewards && q.redraw === BOSS_LOCK.redraw && q.rolls === rolls && q.reroll === reroll;
+  if (!same(p)) {
+    // earlier plans only stay worth going back to while the lock's settings and the floor move's roll are the same
+    BOSS_LOCK.past = arr(BOSS_LOCK.past).filter(same);
+    const np = blkPlan(); BOSS_LOCK.plan = np && Object.assign(np, { rolls, reroll });
+  }
   return BOSS_LOCK.plan;
 }
 // applyBossLock(root): download-pipeline step. Writes the planned entries into root.soul.hvntrinfo (replacing or, when extend is on, appending).
@@ -711,14 +723,14 @@ function renderBossLock() {
   const p = blkPlanFresh();
   if (p) {
     const nm = rwdNameHtml;
-    const changed = p.items.filter(it => it.entry);
+    const changed = p.items.filter(it => it.entry), beyond = blkBeyondGame(p.from);
     // the Reroll button goes above the table, so it stays put however long the rolled rows are
-    h += `<div class="toolbar" style="margin-top:6px;"><button class="subtle" id="blk-reroll" title="Draw these boss floors again (R)">Reroll again (R)</button><span class="capNote" style="margin:0;">${changed.length} floor${changed.length === 1 ? '' : 's'} will be written. ${p.rewards === 'none' ? 'No Legendary Chest; the game rolls their large boxes and boss drop.' : p.rewards === 'hidden' ? 'Rewards are rolled but not shown (spoiler free).' : p.rewards === 'chest' ? 'Their Legendary Chest is drawn now; the game rolls the large boxes and boss drop.' : 'Rewards are drawn from each floor\'s own tables for the new arena.'}</span></div>`;
+    h += `<div class="toolbar" style="margin-top:6px;"><button class="subtle" id="blk-reroll" title="Draw these boss floors again (R)">Reroll again (R)</button>${arr(BOSS_LOCK.past).length ? `<button class="subtle" id="blk-reroll-prev" title="Go back to the roll before this one (Shift+R)">Previous roll (Shift+R)</button>` : ''}<span class="capNote" style="margin:0;">${changed.length} floor${changed.length === 1 ? '' : 's'} will be written. ${p.rewards === 'none' ? 'No Legendary Chest; the game rolls their large boxes and boss drop.' : p.rewards === 'hidden' ? 'Rewards are rolled but not shown (spoiler free).' : p.rewards === 'chest' ? 'Their Legendary Chest is drawn now; the game rolls the large boxes and boss drop.' : 'Rewards are drawn from each floor\'s own tables for the new arena.'}</span></div>`;
     h += `<table class="stewTable" style="margin-top:6px;"><thead><tr><th>Floor</th><th>Now</th><th>On download</th><th>${LOC_SPOIL && p.rewards !== 'hidden' ? 'Legendary Chest and other rewards' : 'Rewards (names hidden)'}</th></tr></thead><tbody>`;
     h += p.items.map(it => {
       const was = it.old ? blkKind(it.old.refareaid).label : '<span class="id">not planned yet</span>';
       const now = (it.entry ? `<b>${escapeHtml(blkKind(it.entry.refareaid).label)}</b>${it.old ? (it.redrawn ? ' <span class="id">(rerolled)</span>' : '') : ' <span class="id">(added)</span>'}` : '<span class="id">unchanged</span>') + (it.fallback ? ` <span class="id">(no ${escapeHtml(p.which ? (blkWhichOptions(p.mode).find(o => o.v === p.which) || {}).label || BLK_MODES[p.mode].noun : BLK_MODES[p.mode].noun)} on this floor)</span>` : '');
-      return `<tr><td>${escapeHtml(hvnFloorLabel(it.floor))}</td><td>${it.old ? escapeHtml(was) : was}</td><td>${now}</td><td>${p.rewards === 'hidden' ? '<span class="id">hidden (spoiler free)</span>' : blkRewardText(it.entry || it.old, nm)}</td></tr>`;
+      return `<tr><td>${escapeHtml(hvnFloorLabel(it.floor))}</td><td>${it.old ? escapeHtml(was) + (beyond.has(it.floor.id) ? preplanTag() : '') : was}</td><td>${now}</td><td>${p.rewards === 'hidden' ? '<span class="id">hidden (spoiler free)</span>' : blkRewardText(it.entry || it.old, nm)}</td></tr>`;
     }).join('');
     h += '</tbody></table>';
     h += `<div class="capNote">Not changed: the floor you're on (already built), NEO map B floors (one fixed arena), and${p.redraw ? '' : ' (until you press Reroll again)'} planned floors that are already ${escapeHtml(BLK_MODES[p.mode].noun)} floors.${p.mode === 'don' ? ' Regular Heaven has no Dons below 100F (the game only offers a mid-boss or a Screamer Pit there), so those floors become mid-boss floors.' : ''}${p.mode === 'don' || p.mode === 'boss' ? ' Dons have no boss drop: their floors get a Legendary Chest and three large chests, as the game writes them.' : ''}${from !== s.flrid ? ' Applied after the floor move above, so it replaces the moved floors\' rerolled rewards.' : ''} Floors the game hadn't planned get a Legendary Chest that's rare (yellow on the map) as often as the game makes one.</div>`;
@@ -734,7 +746,13 @@ function renderBossLock() {
   const rws = document.getElementById('blk-rewards');
   if (rws) rws.addEventListener('change', () => { BOSS_LOCK.rewards = rws.value; BOSS_LOCK.redraw = false; BOSS_LOCK.plan = null; renderLocation(); });
   const rr = document.getElementById('blk-reroll');
-  if (rr) rr.addEventListener('click', () => { BOSS_LOCK.redraw = true; BOSS_LOCK.plan = null; renderLocation(); });
+  if (rr) rr.addEventListener('click', () => {
+    // keep this plan for Previous roll; a first Reroll also switches to redrawing matching floors, so the plan before it can't come back
+    if (BOSS_LOCK.redraw) rollPush(BOSS_LOCK.past, BOSS_LOCK.plan); else BOSS_LOCK.past = [];
+    BOSS_LOCK.redraw = true; BOSS_LOCK.plan = null; renderLocation();
+  });
+  const rp = document.getElementById('blk-reroll-prev');
+  if (rp) rp.addEventListener('click', () => { const q = BOSS_LOCK.past.pop(); if (q) BOSS_LOCK.plan = q; renderLocation(); });
   const cl = document.getElementById('blk-clear');
   if (cl) cl.addEventListener('change', () => { BOSS_LOCK.clear = cl.checked; renderLocation(); toast(cl.checked ? "Floors past the game's plan will be removed on download" : 'Planned floors kept'); });
 }
@@ -1035,7 +1053,7 @@ function renderLocation() {
     h += `<div class="capNote" style="margin-top:0;">Only boss floors of the same route that use the same map are listed (${escapeHtml(hvnRoute(f.id).name)}, ${escapeHtml(hvnMapLabel(f.areaid))}). The boss waiting on the floor is set to the new floor's boss level. Your records (deepest floor, clear times) are left as they are.</div>${arenaNote}
 ${pitNote}
       <div class="toolbar"><select id="loc-target" style="${sel} min-width:min(340px, 100%); max-width:100%;"><option value="">— keep ${escapeHtml(f.no + 'F')} —</option>${targets.map(x => `<option value="${x.id}" ${FLOOR_MOVE.target === x.id ? 'selected' : ''}>${escapeHtml(hvnFloorLabel(x))} · boss Lv ${x.mbslvlmin}${x.no < f.no ? ' (lower)' : ''}${flmSwapRef(x.id) ? ' · pit converted (experimental)' : ''}</option>`).join('')}</select>
-      <button class="action" id="loc-apply">${FLOOR_MOVE.armed ? 'Click again to confirm' : 'Move to this floor'}</button>${FLOOR_MOVE.target ? '<button class="subtle" id="loc-undo">Undo</button>' : ''}</div>`;
+      <button class="action${FLOOR_MOVE.armed ? ' armed' : ''}" id="loc-apply">${FLOOR_MOVE.armed ? 'Click again to confirm' : 'Move to this floor'}</button>${FLOOR_MOVE.target ? '<button class="subtle" id="loc-undo">Undo</button>' : ''}</div>`;
     if (t) {
       h += `<div class="capNote">On download the fighter will be on <b>${escapeHtml(hvnFloorLabel(t))}</b> (from ${escapeHtml(f.no + 'F')}), boss Lv ${t.mbslvlmin}.</div>`;
       if (flmSwapRef(t.id)) h += `<div class="warnNote" style="margin:6px 0;"><b>EXPERIMENTAL: pit converted.</b> ${escapeHtml(t.no + 'F')} can't have this floor's pit (RUSH${flmPitNo(curRef)}), so it's turned into its twin RUSH${flmPitNo(flmSwapRef(t.id))} (arena ${escapeHtml(flmSwapRef(t.id))}): the built arena, its spawn points and the floor's reward plan are renamed to it. The map and its layout don't change. Not yet tested in game; keep a backup and tell us how it goes.</div>`;
@@ -1045,7 +1063,7 @@ ${pitNote}
       h += `<div class="capNote">The map's upcoming rewards move with you: ${up.length ? up.map(u => u.floor.no + 'F').join(', ') : 'no further boss floors on this route'}.</div>`;
       h += `<div class="subDetails" style="padding:10px; margin-top:8px;"><label style="cursor:pointer;"><input type="checkbox" id="loc-reroll" ${FLOOR_MOVE.reroll ? 'checked' : ''} style="width:auto; margin-right:6px;">Reroll the boss floor rewards for ${escapeHtml(t.no + 'F')}</label>`;
       // the Reroll button sits right under the tick box, above anything a roll changes, so it stays put between rolls
-      if (n && FLOOR_MOVE.reroll) h += `<div class="toolbar" style="margin-top:6px;"><button class="subtle" id="loc-reroll-again" title="Draw these rewards again (R)">Reroll again (R)</button><span class="capNote" style="margin:0;">Drawn from ${escapeHtml(t.no + 'F')}'s own drop table, the way the game rolls them.</span></div>`;
+      if (n && FLOOR_MOVE.reroll) h += `<div class="toolbar" style="margin-top:6px;"><button class="subtle" id="loc-reroll-again" title="Draw these rewards again (R)">Reroll again (R)</button>${FLOOR_MOVE.past.length ? `<button class="subtle" id="loc-reroll-prev" title="Go back to the roll before this one (Shift+R)">Previous roll (Shift+R)</button>` : ''}<span class="capNote" style="margin:0;">Drawn from ${escapeHtml(t.no + 'F')}'s own drop table, the way the game rolls them.</span></div>`;
       if (!n) h += `<div class="capNote">No unopened rewards on this floor to reroll.</div>`;
       else if (FLOOR_MOVE.reroll && !LOC_SPOIL) {
         h += `<div class="capNote">${n} reward${n === 1 ? '' : 's'} will be rerolled from ${escapeHtml(t.no + 'F')}'s own drop table (${r.boxes.length} on this floor${r.boss ? ' plus the boss drop' : ''}${arr(r.upcoming).length ? `, and the map's upcoming ${arr(r.upcoming).map(u => u.no + 'F').join(', ')}` : ''}). Tick <b>Show rewards (spoilers)</b> to see them.</div>`;
@@ -1056,7 +1074,8 @@ ${pitNote}
         if (r.featured) h += `<tr><td>Legendary Chest (map)</td><td>${nm(r.featured.from)}</td><td>${nm(r.featured.to)}</td></tr>`;
         const lockP = BOSS_LOCK.root === RAW_SAV_ROOT && BOSS_LOCK.mode ? blkPlanFresh() : null;
         const lockWrites = id => !!(lockP && lockP.items.some(it => it.floor.id === id && it.entry));
-        for (const u of arr(r.upcoming)) h += `<tr${lockWrites(u.id) ? ' style="opacity:.55;"' : ''}><td>Upcoming ${u.no}F${u.rare && !lockWrites(u.id) ? legendTag() : ''}${u.refix ? `<br><span class="id">${escapeHtml(blkKind(u.refix.from).label)} → ${escapeHtml(blkKind(u.refix.to).label)}</span>` : ''}</td><td class="id">${lockWrites(u.id) ? 'replaced by Lock boss floors below' : 'shown on the map'}</td><td>${lockWrites(u.id) ? '<span class="id">—</span>' : `${u.featured ? 'Legendary Chest: ' + nm(u.featured.to) : '—'} ${flmUpText(u.rwds, nm)}`}</td></tr>`;
+        const beyond = blkBeyondGame(t.id);
+        for (const u of arr(r.upcoming)) h += `<tr${lockWrites(u.id) ? ' style="opacity:.55;"' : ''}><td>Upcoming ${u.no}F${u.rare && !lockWrites(u.id) ? legendTag() : ''}${beyond.has(u.id) && !lockWrites(u.id) ? preplanTag() : ''}${u.refix ? `<br><span class="id">${escapeHtml(blkKind(u.refix.from).label)} → ${escapeHtml(blkKind(u.refix.to).label)}</span>` : ''}</td><td class="id">${lockWrites(u.id) ? 'replaced by Lock boss floors below' : 'shown on the map'}</td><td>${lockWrites(u.id) ? '<span class="id">—</span>' : `${u.featured ? 'Legendary Chest: ' + nm(u.featured.to) : '—'} ${flmUpText(u.rwds, nm)}`}</td></tr>`;
         h += '</tbody></table>';
       } else h += `<div class="capNote">The rewards rolled for ${escapeHtml(f.no + 'F')} are kept.</div>`;
       h += '</div>';
@@ -1079,6 +1098,7 @@ ${pitNote}
     FLOOR_MOVE.armed = false;
     FLOOR_MOVE.target = pick;
     FLOOR_MOVE.rolls = flmRoll(pick);
+    FLOOR_MOVE.past = [];
     FLOOR_MOVE.msg = `Set to move to ${hvnFloorLabel(hvnFloor(pick))}. Download the .sav to apply it.`;
     renderLocation();
     toast('Floor move set — download to apply');
@@ -1086,9 +1106,11 @@ ${pitNote}
   const rr = document.getElementById('loc-reroll');
   if (rr) rr.addEventListener('change', () => { FLOOR_MOVE.reroll = rr.checked; if (rr.checked && !FLOOR_MOVE.rolls) FLOOR_MOVE.rolls = flmRoll(FLOOR_MOVE.target); renderLocation(); });
   const ra = document.getElementById('loc-reroll-again');
-  if (ra) ra.addEventListener('click', () => { FLOOR_MOVE.rolls = flmRoll(FLOOR_MOVE.target); renderLocation(); });
+  if (ra) ra.addEventListener('click', () => { rollPush(FLOOR_MOVE.past, FLOOR_MOVE.rolls); FLOOR_MOVE.rolls = flmRoll(FLOOR_MOVE.target); renderLocation(); });
+  const rp = document.getElementById('loc-reroll-prev');
+  if (rp) rp.addEventListener('click', () => { const q = FLOOR_MOVE.past.pop(); if (q) FLOOR_MOVE.rolls = q; renderLocation(); });
   const un = document.getElementById('loc-undo');
-  if (un) un.addEventListener('click', () => { FLOOR_MOVE.target = ''; FLOOR_MOVE.armed = false; FLOOR_MOVE.msg = ''; FLOOR_MOVE.rolls = null; renderLocation(); });
+  if (un) un.addEventListener('click', () => { FLOOR_MOVE.target = ''; FLOOR_MOVE.armed = false; FLOOR_MOVE.msg = ''; FLOOR_MOVE.rolls = null; FLOOR_MOVE.past = []; renderLocation(); });
 }
 // Tab hook: render only when the Location tab is active.
 function wireLocation() { if (activeTab === 'location') renderLocation(); }

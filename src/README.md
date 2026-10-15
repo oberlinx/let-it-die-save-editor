@@ -11,6 +11,14 @@ node build.js --check    # fails if index.html doesn't match src/ (run before co
 
 You need [Node.js](https://nodejs.org/) (any current version). The build only stitches files together: no minifying and no reformatting, so `index.html` is exactly the source, concatenated.
 
+## Round-trip test
+
+```
+node tools/roundtrip-test.js --masters <masters.db> <save.sav | folder> ...
+```
+
+Loads masters.db and each save through the built `index.html` (in Node, with a stand-in page), makes no edit, and checks that Download would write the save exactly as it was loaded, and that the `.sav` it writes reads back the same. Folders are searched two levels deep for `.sav` files, and saves are only read. Run it after `node build.js` when you change the load adapter, the writeback or the download pipeline: a `FAIL` line names the first field that changed. The one change made on purpose (the defense lineup's copies of each defender's grade, class and level brought in step with the fighter) is expected and reported on the `ok` line. It needs Node 18+ and internet access, because sql.js comes from cdnjs as in the editor. Keep your test saves outside the repo; they hold account ids.
+
 ## How it fits together
 
 `index.shell.html` is the page skeleton. Every `@@INCLUDE(path)@@` marker in it is replaced by the file at `src/<path>`. The JavaScript files are plain classic scripts that share one global scope, and they run **in the order they are listed in the shell**. That order matters: a file can only use top-level `const`/`let` values from files listed before it, at load time. Functions can be called from anywhere once everything has loaded.

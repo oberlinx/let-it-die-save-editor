@@ -406,14 +406,15 @@ function buildRawSavRootFromSave(SAVE, rawRoot, mainUid) {
   root.item.items = inOrigOrder(preservedItems.concat(newItems), rawRoot.item && rawRoot.item.items);
   // presents / prison; released prisoners are removed from root.abduct
   root.soul.present = SAVE.presents;
-  root.soul.prison = Object.assign({}, root.soul.prison, {
-    [mainUid]: SAVE.prison.map(p => {
-      const c = Object.assign({}, p);
-      delete c.state;
-      delete c.abduct;
-      return c;
-    })
+  // (a save with no prison list for the account, and no prisoners, is left without one)
+  const prisonRows = SAVE.prison.map(p => {
+    const c = Object.assign({}, p);
+    delete c.state;
+    delete c.abduct;
+    return c;
   });
+  const rawPrison = (rawRoot.soul || {}).prison;
+  if (prisonRows.length || (rawPrison && typeof rawPrison === 'object' && mainUid in rawPrison)) root.soul.prison = Object.assign({}, root.soul.prison, { [mainUid]: prisonRows });
   const origPrisonAbids = new Set(arr((rawRoot.soul || {}).prison && (rawRoot.soul || {}).prison[mainUid]).map(p => p.abid).filter(Boolean));
   const currentPrisonAbids = new Set(SAVE.prison.map(p => p.abid).filter(Boolean));
   const releasedAbids = new Set([ ...origPrisonAbids ].filter(a => !currentPrisonAbids.has(a)));

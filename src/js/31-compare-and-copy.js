@@ -328,8 +328,11 @@ function cmpCopyFighter(cid) {
 // download, and neither original file is changed.
 // Notice text shown after a clone, tied to the root it describes, plus the cloned file's name and its account name.
 let CLONE_NOTE = { root: null, text: '', from: '', fromName: '' };
-// Two-click confirmation flag for the clone button (auto-disarms after 8 s).
+// Two-click confirmation for the clone button: false, or the time (ms) it disarms itself, CLONE_ARM_MS after the first click.
 let CLONE_ARMED = false;
+const CLONE_ARM_MS = 8000;
+// Seconds left before the armed clone button disarms itself.
+const cloneArmLeft = () => Math.max(1, Math.ceil((CLONE_ARMED - Date.now()) / 1000));
 // PlayStation saves: PS-only content belongs there, so the "Include PS-only" boxes start ticked
 // and the save check / clone notes don't warn about it. PC saves start with them unticked.
 // True when the loaded save is from PlayStation (see savePlatform).
@@ -443,7 +446,7 @@ function cloneBlockHtml() {
   return `<div class="subDetails" style="padding:10px; margin-bottom:12px;"><div class="eyebrow" style="margin-bottom:6px;">Clone the whole save</div>
     <div class="capNote" style="margin-top:0;">Replace everything in the save you're editing with <b>${escapeHtml(nmB)}</b>'s save (${platformName(platB)}): fighters, gear, research, decals, money, quests, settings and flags. Only the account stays <b>${escapeHtml(nmA)}</b>'s (uid ${escapeHtml(cmpUidA())}, ${platformName(platA)}): the account id is moved everywhere the save uses it, and the name, Steam/PSN ids and login ids are kept. Changes you made to this save that you haven't downloaded are lost. Nothing is written until you download.</div>
     ${warn}
-    <button class="action" id="cmp-clone">${CLONE_ARMED ? 'Click again to replace this save with the clone' : `Clone ${escapeHtml(nmB)}'s save onto ${escapeHtml(nmA)}'s account`}</button></div>`;
+    <button class="action${CLONE_ARMED ? ' armed' : ''}" id="cmp-clone">${CLONE_ARMED ? `Click again to replace this save with the clone (<span id="cmp-clone-left">${cloneArmLeft()}</span>)` : `Clone ${escapeHtml(nmB)}'s save onto ${escapeHtml(nmA)}'s account`}</button></div>`;
 }
 
 // ---- UI ---------------------------------------------------------------------
@@ -525,7 +528,17 @@ function cmpWire() {
   });
   const cl = document.getElementById('cmp-clone');
   if (cl) cl.addEventListener('click', () => {
-    if (!CLONE_ARMED) { CLONE_ARMED = true; renderCompare(); setTimeout(() => { if (CLONE_ARMED) { CLONE_ARMED = false; if (activeTab === 'compare') renderCompare(); } }, 8000); return; }
+    if (!CLONE_ARMED) {
+      const until = CLONE_ARMED = Date.now() + CLONE_ARM_MS;
+      renderCompare();
+      // count down on the button, then disarm (unless it was clicked or re-armed meanwhile)
+      const tick = setInterval(() => {
+        if (CLONE_ARMED !== until) { clearInterval(tick); return; }
+        if (Date.now() >= until) { clearInterval(tick); CLONE_ARMED = false; if (activeTab === 'compare') renderCompare(); return; }
+        const left = document.getElementById('cmp-clone-left'); if (left) left.textContent = cloneArmLeft();
+      }, 250);
+      return;
+    }
     CLONE_ARMED = false;
     cmpCloneWhole();
   });

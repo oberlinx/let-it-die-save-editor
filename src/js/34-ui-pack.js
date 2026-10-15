@@ -239,7 +239,9 @@ function uiStatusUpdate() {
   document.getElementById('sb-file').title = cl ? `Account from ${ORIG_SAVE.name || 'the save you loaded'}; progress cloned from ${CLONE_NOTE.from}` : ORIG_SAVE.name || '';
   const st = document.getElementById('sb-state');
   st.className = !pend ? 'sbclean' : !n ? 'sbclean' : UI.curSig === UI.dlSig ? 'sbok' : 'sbdirty';
-  st.textContent = !pend ? 'Checking changes…' : !n ? 'No changes yet' : UI.curSig === UI.dlSig ? `✓ ${n} change${n === 1 ? '' : 's'}, downloaded` : `● ${n} unsaved change${n === 1 ? '' : 's'}`;
+  st.textContent = !pend ? 'Checking changes…' : !n ? 'No changes yet' : UI.curSig === UI.dlSig ? `✓ ${cl ? 'Cloned save' : `${n} change${n === 1 ? '' : 's'}`}, downloaded` : cl ? '● Cloned save, not downloaded yet' : `● ${n} unsaved change${n === 1 ? '' : 's'}`;
+  // a clone differs from the loaded file almost everywhere, so its count says little; it stays in the tooltip
+  st.title = cl && pend && n ? `${n} differences from ${ORIG_SAVE.name || 'the save you loaded'}` : '';
   const ck = document.getElementById('sb-check');
   ck.className = 'linkbtn ' + (np ? 'sbprob' : nw ? 'sbdirty' : 'sbok');
   uiStatusDots(); ck.disabled = !(np || nw); ck.style.cursor = (np || nw) ? 'pointer' : 'default';
@@ -375,6 +377,7 @@ function uiHelp() {
       <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>Move between tabs while a tab button is selected</td></tr>
       <tr><td><kbd>C</kbd></td><td>Open the list of changes</td></tr>
       <tr><td><kbd>R</kbd></td><td>Location tab: reroll the floor move's rewards or the locked boss floors</td></tr>
+      <tr><td><kbd>Shift</kbd>+<kbd>R</kbd></td><td>Location tab: go back to the previous roll (up to 10)</td></tr>
       <tr><td><kbd>?</kbd></td><td>This help</td></tr>
       <tr><td><kbd>Esc</kbd></td><td>Close a window or the search</td></tr>
     </table>
@@ -599,7 +602,7 @@ function uiOpenPsGuide() {
 }
 // uiCloseOverlay(): remove the generic UI overlay.
 function uiCloseOverlay() { const o = document.getElementById('ui-overlay'); if (o) o.remove(); }
-// Global shortcuts: Ctrl+S download, Ctrl+K/"/" search, Esc closes overlays, [ ] step tabs, 1-5 jump group, C changes, R reroll (Location), ? help.
+// Global shortcuts: Ctrl+S download, Ctrl+K/"/" search, Esc closes overlays, [ ] step tabs, 1-5 jump group, C changes, R / Shift+R reroll / previous roll (Location), ? help.
 document.addEventListener('keydown', e => {
   const k = e.key;
   if ((e.ctrlKey || e.metaKey) && !e.altKey && (k === 's' || k === 'S')) {
@@ -622,9 +625,11 @@ document.addEventListener('keydown', e => {
   else if (k >= '1' && k <= String(TAB_GROUPS.length)) uiGoGroup(TAB_GROUPS[Number(k) - 1].id);
   else if (k === 'c' || k === 'C') uiOpenChanges();
   else if ((k === 'r' || k === 'R') && activeTab === 'location') {
-    // Location tab: reroll the floor move's rewards (which also redraws a boss floor lock), else the lock alone
-    const b = document.getElementById('loc-reroll-again') || document.getElementById('blk-reroll');
-    if (b) { b.click(); toast('Rerolled'); }
+    // Location tab: R rerolls the floor move's rewards (which also redraws a boss floor lock), else the lock alone;
+    // Shift+R goes back to the previous roll the same way
+    const b = e.shiftKey ? document.getElementById('loc-reroll-prev') || (!document.getElementById('loc-reroll-again') && document.getElementById('blk-reroll-prev'))
+      : document.getElementById('loc-reroll-again') || document.getElementById('blk-reroll');
+    if (b) { b.click(); toast(e.shiftKey ? 'Back to the previous roll' : 'Rerolled'); } else if (e.shiftKey) toast('No earlier roll to go back to');
   }
 });
 

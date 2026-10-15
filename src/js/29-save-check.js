@@ -730,6 +730,10 @@ function runSaveCheck() {
   HEALTH = { items: out, ranAt: Date.now(), open: HEALTH.open, lastMsg: '' };
 }
 
+// Save check items opened with "more" (keyed by their text), so a re-render keeps them open.
+const HEALTH_EXPANDED = new Set();
+// Items longer than this many characters of plain text show two lines and a "more" button.
+const HEALTH_FOLD_CHARS = 170;
 // Builds the collapsible Save check panel HTML from HEALTH (open by default only when there are problems, and never on a
 // phone-width screen, where it would fill the screen; the status bar shows the count and its button opens the panel).
 // Fix/jump buttons carry data-health-fix / data-health-go indexes that wireHealth() handles.
@@ -748,9 +752,11 @@ function blockHealth() {
     <summary><span style="color:${color}; font-weight:bold;">Save check:</span> ${summary}<span style="flex:1;"></span><button class="subtle" id="health-recheck">Re-check</button></summary>
     <div class="healthBody">
       ${HEALTH.lastMsg ? `<div class="stewLog" style="margin-bottom:8px;">${escapeHtml(HEALTH.lastMsg)}</div>` : ''}
-      ${items.length ? items.map((it, i) => `<div class="healthRow">${badge[it.level]}<div class="healthText">${it.text}</div>
+      ${items.length ? items.map((it, i) => {
+        const long = String(it.text).replace(/<[^>]*>/g, '').length > HEALTH_FOLD_CHARS, folded = long && !HEALTH_EXPANDED.has(it.text);
+        return `<div class="healthRow">${badge[it.level]}<div class="healthText">${long ? `<div class="hcFold${folded ? ' folded' : ''}">${it.text}</div><button class="linkbtn hcMore" data-health-more="${i}">${folded ? 'more' : 'less'}</button>` : it.text}</div>
         ${it.fix ? `<button class="action" data-health-fix="${i}">${escapeHtml(it.fix.label)}</button>` : ''}
-        ${it.tab ? `<button class="subtle" data-health-go="${it.tab}">Open ${escapeHtml(it.tabName)}</button>` : ''}</div>`).join('') : '<div style="font-size:12px; color:var(--text-dim);">Nothing the editor knows to look for is wrong with this save.</div>'}
+        ${it.tab ? `<button class="subtle" data-health-go="${it.tab}">Open ${escapeHtml(it.tabName)}</button>` : ''}</div>`; }).join('') : '<div style="font-size:12px; color:var(--text-dim);">Nothing the editor knows to look for is wrong with this save.</div>'}
       <div class="capNote" style="margin:6px 0 0;">Checked ${HEALTH.ranAt ? new Date(HEALTH.ranAt).toLocaleTimeString() : 'never'}. The check looks for problems the editor understands; it can't prove a save is perfect.</div>
     </div>
   </details>`;
@@ -769,6 +775,14 @@ function wireHealth() {
     renderAll();
     toast('Save checked');
   });
+  // "more" / "less" on a long item: toggles it in place (no re-render, so the panel doesn't jump)
+  panel.querySelectorAll('[data-health-more]').forEach(b => b.addEventListener('click', () => {
+    const it = HEALTH.items[Number(b.dataset.healthMore)], box = b.previousElementSibling;
+    if (!it || !box) return;
+    const open = box.classList.toggle('folded') === false;
+    if (open) HEALTH_EXPANDED.add(it.text); else HEALTH_EXPANDED.delete(it.text);
+    b.textContent = open ? 'less' : 'more';
+  }));
   panel.querySelectorAll('[data-health-go]').forEach(b => b.addEventListener('click', () => {
     const btn = document.querySelector(`[data-tab-btn="${b.dataset.healthGo}"]`);
     if (btn) btn.click();
