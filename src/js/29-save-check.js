@@ -505,6 +505,22 @@ function runSaveCheck() {
     });
   });
 
+  // a run planned further ahead than the game plans it (an earlier boss floor lock wrote every remaining boss floor)
+  safe('pre-planned run', () => {
+    const rs = RAW_SAV_ROOT && RAW_SAV_ROOT.soul;
+    if (!rs || !rs.pause || rs.stgid !== 'S_HVN' || (RUN_END.root === RAW_SAV_ROOT && RUN_END.on)) return;
+    blkSync();
+    const extra = blkExtraPlanned(blkFrom());
+    if (!extra.length) return;
+    const fl = id => (hvnFloor(id) || {}).no + 'F', range = escapeHtml(fl(extra[0]) + (extra.length > 1 ? '–' + fl(extra[extra.length - 1]) : ''));
+    const armed = !BOSS_LOCK.mode && BOSS_LOCK.clear;
+    const text = `This run is pre-planned: ${extra.length} boss floor${extra.length === 1 ? ' is' : 's are'} already written past the ${GAME_PLAN_AHEAD} the game plans ahead (${range}), most likely by an earlier boss floor lock. The game plays them as written, so the bosses and rewards there are already decided.${armed ? ' They will be removed on download, so the game rolls them itself as you go.' : ' To let the game roll them as you go, remove them on the Location tab.'}`;
+    // the fix arms the Location tab's "remove the floors planned past the game's own" (only with no lock set, which would rewrite them)
+    add('note', text, 'location', armed || BOSS_LOCK.mode ? undefined : {
+      label: 'Let the game plan them', run: () => { BOSS_LOCK.clear = true; return `The ${extra.length} pre-planned boss floor${extra.length === 1 ? '' : 's'} (${fl(extra[0])}${extra.length > 1 ? '–' + fl(extra[extra.length - 1]) : ''}) will be removed when you download; the game plans them as you go.`; }
+    });
+  });
+
   // fighters: bag overflow, duplicate or unknown items
   safe('fighters', () => {
     const seen = new Map;
