@@ -1,8 +1,8 @@
 // Runs the built editor (index.html) inside Node, with a stand-in page, so tests can load masters.db and saves through
 // the editor's own code and call its functions. Used by tools/roundtrip-test.js and tools/run-tests.js.
 //
-// sql.js (the SQLite library the editor fetches from cdnjs) is downloaded once into tools/.cache/ and read from there
-// afterwards, so tests run offline after the first time.
+// sql.js is built into index.html, so the sandbox needs no network. (A page built without it would fetch sql.js from
+// cdnjs; then it's downloaded once into tools/.cache/ and read from there afterwards.)
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
@@ -50,7 +50,7 @@ async function cachedSqlJs(base, name) {
 async function createEditor() {
   const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
   const dataScripts = {};
-  for (const m of html.matchAll(/<script id="([^"]+)" type="application\/json">([\s\S]*?)<\/script>/g)) dataScripts[m[1]] = m[2];
+  for (const m of html.matchAll(/<script id="([^"]+)" type="application\/(?:json|octet-stream)">([\s\S]*?)<\/script>/g)) dataScripts[m[1]] = m[2];
   const code = [ ...html.matchAll(/<script>([\s\S]*?)<\/script>/g) ].map(m => m[1]).join('\n;\n');
   const SQLJS_BASE = (code.match(/SQLJS_CDN_BASE = '([^']+)'/) || [])[1];
   if (!SQLJS_BASE) throw new Error("Couldn't find the sql.js address in index.html");
@@ -89,7 +89,8 @@ async function createEditor() {
   // top-level const/let of the page live in the script scope, not on the sandbox, so they're read with an expression
   const run = expr => vm.runInContext(expr, sandbox);
 
-  vm.runInContext((await cachedSqlJs(SQLJS_BASE, 'sql-wasm.js')).toString('utf8'), sandbox, { filename: 'sql-wasm.js' });
+  // only a page without built-in sql.js needs it from the cache
+  if (!/var initSqlJs\b|initSqlJs\s*=/.test(code)) vm.runInContext((await cachedSqlJs(SQLJS_BASE, 'sql-wasm.js')).toString('utf8'), sandbox, { filename: 'sql-wasm.js' });
   vm.runInContext(code, sandbox, { filename: 'index.html' });
 
   return {
@@ -99,9 +100,11 @@ async function createEditor() {
       if (!run('AP')) throw new Error(`${file} did not load as masters.db`);
     },
     // Loads one save the way the editor's file input does. Returns true when it became the edited save.
-    async loadSave(file) {
+    async loadSave(file) { return this.loadBytes(fs.readFileSync(file), path.basename(file)); },
+    // The same for save bytes in memory (a .sav or .json the tests built).
+    async loadBytes(bytes, name) {
       const before = run('RAW_SAV_ROOT');
-      await run('loadSaveFiles')([ new File([ fs.readFileSync(file) ], path.basename(file)) ]);
+      await run('loadSaveFiles')([ new File([ bytes ], name) ]);
       return !!run('RAW_SAV_ROOT') && run('RAW_SAV_ROOT') !== before;
     }
   };
@@ -149,4 +152,10 @@ function collectSaves(p, depth = 2) {
   });
 }
 
-module.exports = { createEditor, roundTrip, firstDiff, collectSaves, ROOT };
+// Save check text as plain text.
+const plain = html => String(html).replace(/<[^>]*>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\s+/g, ' ').trim();
+// A Save check finding's "kind": its text with numbers and parentheses stripped, so the same check on different saves
+// (or before and after an edit) compares equal.
+const kindOf = text => plain(text).replace(/\([^)]*\)/g, '').replace(/[\d,.]+/g, '#').replace(/: .*$/, '').split(' ').slice(0, 14).join(' ');
+
+module.exports = { createEditor, roundTrip, firstDiff, collectSaves, plain, kindOf, ROOT };

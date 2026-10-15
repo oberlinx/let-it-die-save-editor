@@ -361,12 +361,12 @@ function reviewDiff(A, B, rawA, rawB) {
   const jk = sec('Jackals');
   const jA = new Map(arr(rawA.floor && rawA.floor.jkls).map(j => [ j.type, j.rwd ])), jB = arr(rawB.floor && rawB.floor.jkls);
   for (const j of jB) if (jA.get(j.type) !== j.rwd) { const l = (() => { const r = jklParse(j) || {}; if (arr(r.items).length) return itemDisplayName(r.items[0].itemId); if (arr(r.pts).length) { const i = jklPartsOf(rawB).find(p => p.eid === r.pts[0].eptid); return i ? (PT_INDEX[i.ptid] || {}).name || i.ptid : 'a part'; } return Number(r.money) ? `${Number(r.money).toLocaleString()} Kill Coins` : 'nothing'; })(); jk.lines.push(`${String(j.type).replace(/^JACKAL_/, 'Jackal ')}: now drops ${l}`); }
-  // Location: the paused floor (soul.flrid), the experimental Screamer Pit twin swap noted by a pending floor move, and the Boss floor lock plan.
+  // Location: the paused floor (soul.flrid), the Screamer Pit twin swap noted by a pending floor move, and the Boss floor lock plan.
   const lc = sec('Location');
   const fa = rawA.soul && rawA.soul.flrid, fb = rawB.soul && rawB.soul.flrid;
   const locLbl = id => !id ? 'none' : hvnFloor(id) ? hvnFloorLabel(hvnFloor(id)) : id;
   if (fa !== fb) lc.lines.push(`Paused floor: ${locLbl(fa)} → ${locLbl(fb)}`);
-  if (fa !== fb && FLOOR_MOVE.root === RAW_SAV_ROOT && FLOOR_MOVE.target === fb && flmSwapRef(fb)) lc.lines.push(`Screamer Pit turned into its ${flmPitNo(flmSwapRef(fb)) > 5 ? '100F+' : 'below-100F'} twin (RUSH${flmPitNo(flmCurRef())} → RUSH${flmPitNo(flmSwapRef(fb))}) so it can be on ${hvnFloor(fb).no}F (EXPERIMENTAL)`);
+  if (fa !== fb && FLOOR_MOVE.root === RAW_SAV_ROOT && FLOOR_MOVE.target === fb && flmSwapRef(fb)) lc.lines.push(`Screamer Pit turned into its ${flmPitNo(flmSwapRef(fb)) > 5 ? '100F+' : 'below-100F'} twin (RUSH${flmPitNo(flmCurRef())} → RUSH${flmPitNo(flmSwapRef(fb))}) so it can be on ${hvnFloor(fb).no}F`);
   if (LUCKY_LAST && luckyPending()) lc.lines.push('Lucky run planned');
   // Boss lock is shown only if it will actually be written (a run end overrides it); hvntrinfo is the per-floor area plan.
   if (BOSS_LOCK.root === RAW_SAV_ROOT && BOSS_LOCK.mode && !(RUN_END.root === RAW_SAV_ROOT && RUN_END.on)) {

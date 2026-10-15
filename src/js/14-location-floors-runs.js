@@ -351,7 +351,7 @@ function flmCurrent() {
   if (!s) return null;
   return { pause: s.pause || '', stgid: s.stgid || '', flrid: s.flrid || '', areaid: s.areaid || '' };
 }
-// Screamer Pit twins (EXPERIMENTAL). Regular Heaven uses the RUSH1-5 pits (HVN_AREA_011-015) only below 100F and
+// Screamer Pit twins (confirmed in game, 2026-10-15). Regular Heaven uses the RUSH1-5 pits (HVN_AREA_011-015) only below 100F and
 // RUSH6-10 (HVN_AREA_018-022) only from 100F. In every save seen, a pit and its twin five numbers apart are built
 // the same way: same units (BOSS_START / BOSS / BOSS_GOAL), the same 5 ZAKO + 50 ZMB spawn points (named
 // HVN_R<nn>_...), the same goal points and the same map layout; only the arena id, the KIS (enemy set) and the
@@ -1049,14 +1049,14 @@ function renderLocation() {
     const sel = 'background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);';
     const t = FLOOR_MOVE.target ? hvnFloor(FLOOR_MOVE.target) : null;
     const twinN = flmPitNo(flmPitTwin(curRef)), conv = targets.filter(x => flmSwapRef(x.id));
-    const pitNote = conv.length ? `<div class="capNote" style="margin-top:0;">This floor is a <b>Screamer Pit</b> (RUSH${flmPitNo(curRef)}). Regular Heaven uses RUSH1-5 pits only below 100F and RUSH6-10 only from 100F, so on ${conv[0].no < f.no ? 'floors below 100F' : '100F and up'} the pit is turned into its twin, <b>RUSH${twinN}</b>: same map and spawn points, the ${twinN > 5 ? 'deeper' : 'shallower'} floors' enemy set. Those floors are marked <b>pit converted (experimental)</b>: not yet tested in game, so keep a backup. A mid-boss floor moves anywhere without this.</div>` : '';
+    const pitNote = conv.length ? `<div class="capNote" style="margin-top:0;">This floor is a <b>Screamer Pit</b> (RUSH${flmPitNo(curRef)}). Regular Heaven uses RUSH1-5 pits only below 100F and RUSH6-10 only from 100F, so on ${conv[0].no < f.no ? 'floors below 100F' : '100F and up'} the pit is turned into its twin, <b>RUSH${twinN}</b>: same map and spawn points, the ${twinN > 5 ? 'deeper' : 'shallower'} floors' enemy set. Those floors are marked <b>pit converted</b> (confirmed in game). A mid-boss floor moves anywhere without this.</div>` : '';
     h += `<div class="capNote" style="margin-top:0;">Only boss floors of the same route that use the same map are listed (${escapeHtml(hvnRoute(f.id).name)}, ${escapeHtml(hvnMapLabel(f.areaid))}). The boss waiting on the floor is set to the new floor's boss level. Your records (deepest floor, clear times) are left as they are.</div>${arenaNote}
 ${pitNote}
-      <div class="toolbar"><select id="loc-target" style="${sel} min-width:min(340px, 100%); max-width:100%;"><option value="">— keep ${escapeHtml(f.no + 'F')} —</option>${targets.map(x => `<option value="${x.id}" ${FLOOR_MOVE.target === x.id ? 'selected' : ''}>${escapeHtml(hvnFloorLabel(x))} · boss Lv ${x.mbslvlmin}${x.no < f.no ? ' (lower)' : ''}${flmSwapRef(x.id) ? ' · pit converted (experimental)' : ''}</option>`).join('')}</select>
+      <div class="toolbar"><select id="loc-target" style="${sel} min-width:min(340px, 100%); max-width:100%;"><option value="">— keep ${escapeHtml(f.no + 'F')} —</option>${targets.map(x => `<option value="${x.id}" ${FLOOR_MOVE.target === x.id ? 'selected' : ''}>${escapeHtml(hvnFloorLabel(x))} · boss Lv ${x.mbslvlmin}${x.no < f.no ? ' (lower)' : ''}${flmSwapRef(x.id) ? ' · pit converted' : ''}</option>`).join('')}</select>
       <button class="action${FLOOR_MOVE.armed ? ' armed' : ''}" id="loc-apply">${FLOOR_MOVE.armed ? 'Click again to confirm' : 'Move to this floor'}</button>${FLOOR_MOVE.target ? '<button class="subtle" id="loc-undo">Undo</button>' : ''}</div>`;
     if (t) {
       h += `<div class="capNote">On download the fighter will be on <b>${escapeHtml(hvnFloorLabel(t))}</b> (from ${escapeHtml(f.no + 'F')}), boss Lv ${t.mbslvlmin}.</div>`;
-      if (flmSwapRef(t.id)) h += `<div class="warnNote" style="margin:6px 0;"><b>EXPERIMENTAL: pit converted.</b> ${escapeHtml(t.no + 'F')} can't have this floor's pit (RUSH${flmPitNo(curRef)}), so it's turned into its twin RUSH${flmPitNo(flmSwapRef(t.id))} (arena ${escapeHtml(flmSwapRef(t.id))}): the built arena, its spawn points and the floor's reward plan are renamed to it. The map and its layout don't change. Not yet tested in game; keep a backup and tell us how it goes.</div>`;
+      if (flmSwapRef(t.id)) h += `<div class="capNote" style="margin:6px 0;"><b>Pit converted.</b> ${escapeHtml(t.no + 'F')} can't have this floor's pit (RUSH${flmPitNo(curRef)}), so it's turned into its twin RUSH${flmPitNo(flmSwapRef(t.id))} (arena ${escapeHtml(flmSwapRef(t.id))}): the built arena, its spawn points and the floor's reward plan are renamed to it. The map and its layout don't change (confirmed in game).</div>`;
       const r = FLOOR_MOVE.rolls, nm = rwdNameHtml;
       const n = r ? r.boxes.length + (r.boss ? 1 : 0) + (r.featured ? 1 : 0) + arr(r.upcoming).length : 0;
       const up = flmUpcoming(t.id);

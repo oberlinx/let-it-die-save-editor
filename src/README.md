@@ -24,8 +24,11 @@ It runs every test against your own saves and writes a report to `test-reports/l
 1. **Build check:** `index.html` matches the `src/` files.
 2. **Round trip:** each save is loaded through the built `index.html` (in Node, with a stand-in page) and, with no edits, Download must write it back exactly as loaded, and the `.sav` it writes must read back the same. A failure names the first field that changed. The one change made on purpose (the defense lineup's copies of each defender's grade, class and level brought in step with the fighter) is expected.
 3. **Save check:** the editor's Save check runs on each save, and the report groups its problems and warnings by kind, with the saves each one appeared in.
+4. **Edit tests:** the main edits are made on a sample of saves the way their buttons do: floor move, Lock boss floors (Don, every remaining floor), removing pre-planned floors, End the run, Max everything safe, Max all fighters, every Save check fix button, and Clone (pairs of saves from different accounts). Each edited save must download, write and read back as a `.sav`, and load into the editor again. It fails if the edit didn't take, or if the Save check finds a problem or warning the save didn't have before. Rolls are random, so run again to see if a failure repeats. Scenarios are in `tools/lib/edit-scenarios.js`.
 
-The first run makes `tools/tests.config.json` with the masters.db and save folders it finds on your PC (the game's Content folder, your Desktop and Downloads). Edit it to test other saves; folders are searched `depth` levels deep for `.sav` files, and identical copies are tested once. The first run also downloads sql.js from cdnjs into `tools/.cache/`; after that the tests run offline. You need Node 18 or newer.
+These prove the editor writes saves it can read back and check; they can't prove the game accepts them. [docs/in-game-status.md](../docs/in-game-status.md) lists what's been confirmed in the game.
+
+The first run makes `tools/tests.config.json` with the masters.db and save folders it finds on your PC (the game's Content folder, your Desktop and Downloads). Edit it to test other saves; folders are searched `depth` levels deep for `.sav` files, and identical copies are tested once. `editSaves` sets how many saves get the edit tests (default 30, saves paused in a run first; `"all"` for every save, which takes a while), and `clones` how many pairs are cloned (default 6). Everything runs offline, since sql.js is built into `index.html`. You need Node 18 or newer.
 
 **Sharing a report:** attach `test-reports/latest.md` in a Claude chat (type `@` and pick the file) and ask about the findings. The report names your save folders and fighters and stays on your PC unless you share it. The config, the cache and the reports are git-ignored.
 
@@ -38,6 +41,7 @@ To run only the round trip on particular saves: `node tools/roundtrip-test.js --
 | File | What it holds |
 |---|---|
 | `index.shell.html` | Page skeleton: header buttons, status bar, include markers |
+| `vendor/` | sql.js 1.11.0 (`sql-wasm.js`, and its `.wasm` as base64), built into the page so it needs no network; MIT licence in `sql.js-LICENSE.txt` |
 | `styles.css` | All CSS (the background image lives in `assets/background.jpg.b64`) |
 | `data/templates.json` | Blank records the game uses for new entries (kept byte-for-byte) |
 | `data/decal-atlas.json` | Which decal icon sits in which cell of the icon sprite sheet (`assets/decal-atlas.webp.b64`, included by `styles.css`); made by the let-it-die-model-viewer repo's tools |

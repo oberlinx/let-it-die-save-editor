@@ -1,8 +1,9 @@
 // ==== masters.db loading (sql.js) ====
-// Lazily loaded sql.js module (WASM SQLite); the script is fetched from cdnjs on first use.
+// Lazily started sql.js module (WASM SQLite). The page carries sql.js and its .wasm (base64 in #sqljs-wasm), so nothing
+// is fetched; cdnjs is only a fallback for a page built without them.
 let SQL_JS_MODULE = null;
 
-// Base URL for sql-wasm.js and its .wasm file.
+// Base URL for sql-wasm.js and its .wasm file (fallback only; same version as src/vendor).
 const SQLJS_CDN_BASE = 'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.11.0/';
 
 /**
@@ -20,7 +21,11 @@ async function ensureSqlJs() {
       document.head.appendChild(s);
     });
   }
-  SQL_JS_MODULE = await initSqlJs({
+  // the built-in .wasm when the page has it, otherwise the CDN's
+  const b64 = ((document.getElementById('sqljs-wasm') || {}).textContent || '').trim();
+  let wasmBinary = null;
+  if (b64) { const bin = atob(b64); wasmBinary = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) wasmBinary[i] = bin.charCodeAt(i); }
+  SQL_JS_MODULE = await initSqlJs(wasmBinary ? { wasmBinary } : {
     locateFile: file => SQLJS_CDN_BASE + file
   });
   return SQL_JS_MODULE;
@@ -115,7 +120,7 @@ document.getElementById('btn-forget-masters').addEventListener('click', async e 
 async function loadMastersBuffer(buf) {
   let db = null;
   try {
-    toast('Loading sql.js (one-time fetch from cdnjs)...');
+    toast('Reading masters.db...');
     const SQLmod = await ensureSqlJs();
     db = new SQLmod.Database(new Uint8Array(buf));
     // run a query and return rows as plain objects keyed by column name

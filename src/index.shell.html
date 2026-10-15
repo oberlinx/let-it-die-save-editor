@@ -46,6 +46,11 @@
 <script id="body-thumbs-data" type="application/json">@@INCLUDE(data/body-thumbs.json)@@</script>
 <script id="decal-atlas-data" type="application/json">@@INCLUDE(data/decal-atlas.json)@@</script>
 <script id="icon-atlas-data" type="application/json">@@INCLUDE(data/icon-atlas.json)@@</script>
+<!-- sql.js 1.11.0 (MIT, see vendor/sql.js-LICENSE.txt): the SQLite library that reads masters.db, built in so the page needs no network -->
+<script id="sqljs-wasm" type="application/octet-stream">@@INCLUDE(vendor/sql-wasm.wasm.b64)@@</script>
+<script>
+@@INCLUDE(vendor/sql-wasm.js)@@
+</script>
 <script>
 @@INCLUDE(js/01-core-state-and-tables.js)@@
 @@INCLUDE(js/02-save-codec.js)@@

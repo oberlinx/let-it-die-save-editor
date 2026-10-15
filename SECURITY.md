@@ -2,7 +2,7 @@
 
 ## What this project is
 
-A save editor that runs entirely in your browser. Your save and masters.db are read locally and are never uploaded. The only network request is a one-time download of the [sql.js](https://sql.js.org/) library from cdnjs.
+A save editor that runs entirely in your browser. Your save and masters.db are read locally and are never uploaded, and the page makes no network requests: the [sql.js](https://sql.js.org/) library it uses to read masters.db is built into the page (`src/vendor/`, MIT licence).
 
 ## Reporting a vulnerability
 
