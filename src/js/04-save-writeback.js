@@ -16,16 +16,19 @@
  */
 function buildRawSavRootFromSave(SAVE, rawRoot, mainUid) {
   // the on-screen placeholder fighter of a save with no fighters (see startSave) is never written
+  // (SAVE is rebuilt as a copy here instead of edited, so the live editor state keeps its placeholder; crntcid is cleared if it pointed at it.)
   if (arr(SAVE.soul && SAVE.soul.chrs).some(c => c && c.__placeholder)) {
     const chrs = SAVE.soul.chrs.filter(c => !(c && c.__placeholder));
     SAVE = Object.assign({}, SAVE, { soul: Object.assign({}, SAVE.soul, { chrs, crntcid: chrs.some(c => c.cid === SAVE.soul.crntcid) ? SAVE.soul.crntcid : '' }) });
   }
   // work on a deep copy so the raw root stays pristine
   const root = JSON.parse(JSON.stringify(rawRoot));
+  // Unix seconds, the unit the save's timestamps (gettime/created/modified/updated) use.
   const now = Math.floor(Date.now() / 1e3);
   // start from raw soul overlaid with the editor's soul; editor-only keys are deleted again at the end
   root.soul = Object.assign({}, root.soul, SAVE.soul);
   root.soul.chr = root.soul.chr || {};
+  // Stripped because those fields are written to their own tables below (bodyuser, instance rows, eqskl); leaving them here would add keys the game never put on a chr row.
   // soul.chr.chrs[uid] <- fighters, with the nested/derived fields stripped (they live elsewhere in the real save)
   root.soul.chr.chrs = Object.assign({}, root.soul.chr.chrs, {
     [mainUid]: SAVE.soul.chrs.map(c => {
@@ -90,6 +93,7 @@ function buildRawSavRootFromSave(SAVE, rawRoot, mainUid) {
       });
     }
   }
+  // Sorting by the original position (ties by build order) keeps unchanged decals where they were, so an unedited save gives no diff noise.
   // keep the game's order (the rebuild above groups decals by fighter); new or changed ones go last
   const eqsklKey = e => `${e.cid}|${e.slot}|${e.sklid}`;
   const eqsklAt = new Map(arr(root.soul.skl.eqskl[mainUid]).map((e, i) => [ eqsklKey(e), i ]));
@@ -113,6 +117,7 @@ function buildRawSavRootFromSave(SAVE, rawRoot, mainUid) {
   root.mushroom = root.mushroom || {};
   root.beast = root.beast || {};
   root.item = root.item || {};
+  // Rebuilding from the editor lists and preserving everything else means rows the editor never loaded (other owners, unknown rows) are never dropped.
   // eids of every instance the editor now owns (fighters + Storage Box); those rows are rebuilt below,
   // all other existing rows are preserved verbatim. Deleted-fighter eids are dropped entirely.
   const rebuiltPtEids = new Set, rebuiltMsrEids = new Set, rebuiltBstEids = new Set, rebuiltItemEids = new Set;
@@ -135,6 +140,7 @@ function buildRawSavRootFromSave(SAVE, rawRoot, mainUid) {
   // outputs: rebuilt instance lists and the new per-fighter Death Bag map
   const newPts = [], newMsrs = [], newBsts = [], newItems = [];
   const newDeathbag = {};
+  // Order matters in Object.assign: defaults < old row < editor values, so old unknown fields survive and the editor wins on fields it owns.
   // Create/refresh one instance row: keep the original row's fields (and gettime/created) if it
   // existed, overlay the editor's values, stamp modified=now, and drop keys the old row never had.
   function pushInst(list, existingByEid, eid, base) {
@@ -145,6 +151,7 @@ function buildRawSavRootFromSave(SAVE, rawRoot, mainUid) {
       modified: now
     }, old, base);
     if (old) {
+      // (the defaults above would otherwise add gettime/created/modified to rows that never had them)
       for (const k of Object.keys(row)) if (!(k in old)) delete row[k];
     } else if (list === newMsrs || list === newItems) {
       // brand-new mushroom / item rows get exactly the fields the game writes for them
@@ -156,6 +163,7 @@ function buildRawSavRootFromSave(SAVE, rawRoot, mainUid) {
     }
     list.push(row);
   }
+  // Looked up in the raw root (not the clone) so the originals are exactly what was loaded.
   // previous rows by eid, used to preserve unknown fields on rebuilt items
   const oldPtsByEid = {};
   for (const p of arr(rawRoot.part && rawRoot.part.pts && rawRoot.part.pts[mainUid])) oldPtsByEid[p.eid] = p;
@@ -265,6 +273,7 @@ function buildRawSavRootFromSave(SAVE, rawRoot, mainUid) {
         arm_slot: -1
       });
     }
+    // Keeping each item at its original slot index avoids reshuffling the whole bag in the diff and keeps the game's own layout.
     // Death Bag layout: capacity (deathBagCapacity) + 10 spare slots is what the game usually stores.
     // Existing items keep their original slot index; new ones fill the first empty slot.
     const bagArrayLen = deathBagCapacity(c) + 10;
@@ -309,6 +318,7 @@ function buildRawSavRootFromSave(SAVE, rawRoot, mainUid) {
       arm_slot: -1
     });
   }
+  // Bags of fighters that are not in SAVE are normally dropped; only empty ones with a real fighter id are kept, as the game itself keeps them.
   // Death Bags of fighters no longer in SAVE
   root.soul.deathbag = root.soul.deathbag || {};
   for (const cid of Object.keys(oldDeathbagByCid)) {
@@ -404,6 +414,7 @@ function buildRawSavRootFromSave(SAVE, rawRoot, mainUid) {
   root.mushroom.msrs = inOrigOrder(preservedMsrs.concat(newMsrs), rawRoot.mushroom && rawRoot.mushroom.msrs);
   root.beast.bsts = inOrigOrder(preservedBsts.concat(newBsts), rawRoot.beast && rawRoot.beast.bsts);
   root.item.items = inOrigOrder(preservedItems.concat(newItems), rawRoot.item && rawRoot.item.items);
+  // Abduct records are removed for released prisoners so no orphan record is left pointing at a fighter that is no longer in prison.
   // presents / prison; released prisoners are removed from root.abduct
   root.soul.present = SAVE.presents;
   // (a save with no prison list for the account, and no prisoners, is left without one)
@@ -442,10 +453,12 @@ function buildRawSavRootFromSave(SAVE, rawRoot, mainUid) {
   delete root.soul.jointeams;
   delete root.soul.tid;
   delete root.soul.psskls;
+  // (Keeps the downloaded diff small: a key the original never had would show up as an added line.)
   // do not introduce keys the original save never had
   const rawSoul = rawRoot && rawRoot.soul || {};
   for (const k of [ 'dchrs', 'quests', 'freezer_level', 'crntcid' ]) if (!(k in rawSoul)) delete root.soul[k];
   if (rawSoul.waiting && !Array.isArray(rawSoul.waiting) && !(SAVE.soul.waiting || []).length) root.soul.waiting = rawSoul.waiting;
+  // The name is copied elsewhere in the save, so renaming only user.nm would leave the old name on those places.
   // user profile; if the player name changed also update places that copy the name (olid, zombies)
   root.user = Object.assign({}, root.user, SAVE.user);
   const oldName = rawRoot.user && rawRoot.user.nm;

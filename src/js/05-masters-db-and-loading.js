@@ -34,11 +34,13 @@ async function ensureSqlJs() {
 // ---- Remember masters.db in the browser (IndexedDB) so it loads by itself next time ----
 // IndexedDB location of the remembered file: database 'lid-editor', object store 'files', key 'masters.db'.
 // --- remember masters.db in the browser (IndexedDB) so it loads by itself next time ---
+// Remembering the file saves re-picking the large masters.db every visit; it never leaves the browser.
 const MASTERS_IDB = { db: 'lid-editor', store: 'files', key: 'masters.db' };
 /** Open the IndexedDB database (creating the object store on first use). Promise of IDBDatabase. */
 function mastersIdbOpen() {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(MASTERS_IDB.db, 1);
+    // Runs only when the database is first created (version 1); there is nothing to migrate yet.
     req.onupgradeneeded = () => req.result.createObjectStore(MASTERS_IDB.store);
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -60,7 +62,7 @@ async function mastersIdb(mode, value) {
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
     });
-  } finally { idb.close(); }
+  } finally { idb.close(); } // close even on error so a stuck open connection cannot block later opens or deletes
 }
 /** Update the masters.db chip label, tooltip and "forget" button to show whether a copy is remembered (info = stored record or null). */
 function setMastersRemembered(info) {
@@ -72,6 +74,7 @@ function setMastersRemembered(info) {
   if (chip) chip.title = info ? `Loaded automatically from this browser. Saved ${new Date(info.saved).toLocaleString()}. Click to load a different masters.db (e.g. after a game update).` : '';
 }
 
+// The input value is cleared so picking the same file again still fires a change event.
 // User picks a masters.db: load it, then try to remember it in IndexedDB (failure is non-fatal).
 document.getElementById('file-masters').addEventListener('change', async e => {
   const f = e.target.files[0];
@@ -92,6 +95,7 @@ document.getElementById('file-masters').addEventListener('change', async e => {
 
 // "Forget" button: delete the remembered copy so it is not auto-loaded next time.
 document.getElementById('btn-forget-masters').addEventListener('click', async e => {
+  // The button sits inside the masters.db chip/label; stopping the click keeps it from also opening the file picker.
   e.preventDefault();
   e.stopPropagation();
   try { await mastersIdb('delete'); } catch (err) { console.warn(err); }
@@ -101,6 +105,7 @@ document.getElementById('btn-forget-masters').addEventListener('click', async e 
 
 // On startup: if a remembered masters.db exists in IndexedDB, load it automatically.
 (async () => {
+  // Private windows or blocked site data can make IndexedDB fail; that just means no auto-load, so it is only logged.
   let info = null;
   try { info = await mastersIdb('get'); } catch (err) { console.warn('IndexedDB unavailable, masters.db will not be remembered:', err); }
   if (!info || !info.bytes) return;
@@ -122,6 +127,7 @@ async function loadMastersBuffer(buf) {
   try {
     toast('Reading masters.db...');
     const SQLmod = await ensureSqlJs();
+    // The file is opened from memory only: nothing is uploaded, and the original file on disk is not touched.
     db = new SQLmod.Database(new Uint8Array(buf));
     // run a query and return rows as plain objects keyed by column name
     function all(sql) {
@@ -163,7 +169,7 @@ async function loadMastersBuffer(buf) {
       atkattr: all('SELECT * FROM master_part_atkattr'),
       bodydetail: all('SELECT * FROM master_body_detail')
     };
-    // optional tables: tolerate absence
+    // optional tables: tolerate absence (a modded or older masters.db may lack them; the features that use them then fall back to empty or default data instead of the whole load failing)
     for (const [key, sql] of [['questParamText', 'SELECT qid, no, val FROM master_quest_param_text'], ['questParamDesc', 'SELECT qid, no, val FROM master_quest_param_desc_text'], ['rewards', 'SELECT * FROM master_reward'], ['expertLvl', 'SELECT ptarmtp, lvl, abp FROM master_expert_lvl_reward'], ['stampBonus', 'SELECT * FROM master_stamp_bonus'], ['stampFloors', 'SELECT * FROM master_stamp'], ['hvnFloors', "SELECT id, areaid, no, mbsmin, mbsmax, mbslvlmin, mbslvlmax FROM master_floor WHERE stgid = 'S_HVN'"], ['jackals', 'SELECT * FROM master_jackal'], ['magazines', 'SELECT * FROM master_magazine'], ['magazineBonus', 'SELECT * FROM master_magazine_bonus'], ['hvnBossDrops', "SELECT d.flrid, d.areaid, d.refareaid, d.type, d.grp, d.freq FROM master_floor_drop_gen d JOIN master_floor f ON f.id = d.flrid AND f.areaid = d.areaid WHERE f.stgid = 'S_HVN' AND f.mbsmax > 0 AND (d.type IN ('PTGENTP_TRBOX_L', 'PTGENTP_TRBOX_SPXL_RARE', 'PTGENTP_SPXL', 'PTGENTP_TRZAKO') OR d.type LIKE 'PTGENTP_MBOSS%')"], ['questCats', 'SELECT * FROM master_quest_category'], ['bagGen', 'SELECT * FROM master_mysterybag_content_gen'], ['bagGenOdds', "SELECT * FROM master_mysterybag_content_gen_odds WHERE odds_id = (SELECT odds_id FROM master_mysterybag_content_odds ORDER BY expires DESC LIMIT 1)"], ['boxGen', 'SELECT * FROM master_deathbox_content_gen'], ['hubCustom', 'SELECT * FROM master_hubcustomize'], ['floorInfo', 'SELECT id, sname, stgid, stgpfx, name FROM master_floor'], ['freezer', 'SELECT * FROM master_freezer'], ['bodies', 'SELECT id, gender FROM master_body'], ['gasmasks', 'SELECT id, gender FROM master_gasmask'], ['fortWhistle', 'SELECT * FROM master_fort_whistle'], ['hvnBossAreas', 'SELECT flrid, refareaid, freq FROM master_ref_boss_area_setting'], ['hvnBossKis', "SELECT areaid, kis FROM master_area_setting_unit WHERE stgid = 'S_HVN' AND unit = 'HEAVEN_BOSS'"]]) {
       try { AP[key] = all(sql); } catch (err) { AP[key] = []; console.warn(`${key} not available in this masters.db:`, err); }
     }
@@ -177,6 +183,7 @@ async function loadMastersBuffer(buf) {
     } catch (err) {
       console.warn('Stew odds not available in this masters.db:', err);
     }
+    // Without this, loading a different masters.db would keep serving sets computed from the old one.
     // invalidate caches derived from the previous masters.db
     STAMP_ELIGIBLE_SET = null;
     OBTAINABLE_SET = null;
@@ -185,12 +192,14 @@ async function loadMastersBuffer(buf) {
     REAL_BLUEPRINT_SET = null;
     markChip('chip-masters', true);
     toast(`masters.db loaded: ${AP.pts.length} parts, ${AP.items.length} items, ${AP.skls.length} skills, ${AP.msrs.length} mushrooms, ${AP.bsts.length} beasts, ${AP.teams.length} teams, ${Object.keys(LOCDAT_INDEX).length} text keys`);
+    // Indexes are built last because they depend on every AP table and LOCDAT_INDEX being filled.
     tryBuildIndices();
     return true;
   } catch (err) {
     toast('Failed to load masters.db: ' + err.message, true);
     return false;
   } finally {
+    // sql.js databases live in WASM memory and are not garbage collected, so always free it.
     if (db) db.close();
   }
 }
@@ -221,6 +230,7 @@ async function loadSaveFiles(files) {
     return;
   }
   try {
+    // Every file is adapted up front so the main account can be chosen across all of them before anything touches SAVE.
     // read and adapt each file
     const parsed = [];
     const readErrors = [];
@@ -261,6 +271,7 @@ async function loadSaveFiles(files) {
       if (!obj) return null;
       return obj.accountId != null ? String(obj.accountId) : obj.user && obj.user.acid != null ? String(obj.user.acid) : null;
     }
+    // A majority vote guards against someone selecting a stray file from another account along with their own.
     // pick the account id that occurs most often as "main"
     const idCounts = {};
     for (const {obj: obj} of parsed) {
@@ -317,6 +328,7 @@ async function loadSaveFiles(files) {
       return;
     }
     if (repairedChars) console.warn(`Loaded with ${repairedChars} corrupt character(s) escaped in string fields`);
+    // The bag capacity is recorded now, before any edits, so the download can tell whether capacity grew (see buildRawSavRootFromSave).
     // seed SAVE from the soul, then remember each fighter's original Death Bag capacity (see ORIG_BAG_CAP)
     startSave(soul);
     DATE_RULES = [];
@@ -347,6 +359,7 @@ async function loadSaveFiles(files) {
         if (found[key] === undefined && obj && obj[key] !== undefined) found[key] = obj[key];
       }
     }
+    // Collections are normalized because the game stores empty ones as {}; the rest of the editor can then assume arrays (RAW_EMPTY_SHAPES lets the download restore the original shape).
     // overlay those keys, then normalize collections to arrays
     let loadedExtra = 0;
     for (const key of overlayKeys) {
@@ -370,6 +383,7 @@ async function loadSaveFiles(files) {
     SAVE.cl.msrs = arr(SAVE.cl.msrs);
     SAVE.cl.bsts = arr(SAVE.cl.bsts);
     SAVE.cl.items = arr(SAVE.cl.items);
+    // Research is snapshotted so the editor can later tell what the user changed versus what the game already had.
     // snapshot research state for later change detection, then run the health check and draw the UI
     try { RESEARCH_GAME_SKIP = researchGameSkips(SAVE.user_research); } catch (err) { RESEARCH_GAME_SKIP = new Map(); }
     RESEARCH_KNOWN = researchKnownSnapshot(SAVE.user_research);

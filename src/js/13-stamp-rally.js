@@ -23,6 +23,7 @@ function rallySync() {
   if (RALLY.root === RAW_SAV_ROOT) return;
   const st = RAW_SAV_ROOT && RAW_SAV_ROOT.floor && RAW_SAV_ROOT.floor.stamp;
   const f = rallyFlagEntry(RAW_SAV_ROOT);
+  // stamps are deep-copied so edits here never touch RAW_SAV_ROOT; the JSON snapshot below is what rallyChanged compares against
   RALLY = { root: RAW_SAV_ROOT, stamps: st ? JSON.parse(JSON.stringify(arr(st.stamps))) : [], bonus: f ? Number(f.value) || 0 : 0, has: !!st, msg: '' };
   RALLY.orig = JSON.stringify([ RALLY.stamps, RALLY.bonus ]);
 }
@@ -31,17 +32,20 @@ function rallyChanged() { return RALLY.root === RAW_SAV_ROOT && JSON.stringify([
 // applyStampRally(root): download-pipeline step. If edited, writes the stamps into root.floor.stamp.stamps and the
 // bonus mask into the SGF_STAMP_BONUS flag (creating it in gameflg.sv if needed). Returns root.
 function applyStampRally(root) {
+  // untouched or missing rally data is left exactly as loaded so the downloaded file differs as little as possible
   if (!rallyChanged() || !RALLY.has) return root;
   root.floor = root.floor || {};
   root.floor.stamp = root.floor.stamp || { stamps: [], flrstamps: {} };
   root.floor.stamp.stamps = JSON.parse(JSON.stringify(RALLY.stamps));
   const now = Math.floor(Date.now() / 1e3);
   let f = rallyFlagEntry(root);
+  // only create the flag when there is something to record; an all-zero mask doesn't need a new entry
   if (!f && RALLY.bonus) {
     root.gameflg = root.gameflg && typeof root.gameflg === 'object' ? root.gameflg : {};
     if (!Array.isArray(root.gameflg.sv)) root.gameflg.sv = [];
     root.gameflg.sv.push(f = { var: 'SGF_STAMP_BONUS', value: 0, modified: now });
   }
+  // touch the flag (and its modified time) only when the value really changed
   if (f && Number(f.value) !== RALLY.bonus) { f.value = RALLY.bonus; f.modified = now; }
   return root;
 }
@@ -62,6 +66,7 @@ function rallyResetFloors(lo, hi) {
   for (let i = lo; i <= hi; i++) rallySet(i, null);
   let n = 0;
   for (const b of arr(AP && AP.stampBonus)) {
+    // a bonus is affected if its floor range overlaps lo..hi; clearing its bit lets the game award it again
     const f = Number(b.flg);
     if (Number(b.stidx) <= hi && Number(b.edidx) >= lo && (RALLY.bonus & f)) { RALLY.bonus &= ~f; n++; }
   }
@@ -70,6 +75,7 @@ function rallyResetFloors(lo, hi) {
 // rallyBonuses(): master_stamp_bonus rows (sorted by flag bit) with progress: stamps held / perfect count vs. needed,
 // whether the requirement is met, whether the bit is set in RALLY.bonus (claimed), and the reward row.
 function rallyBonuses() {
+  // slice() first so sorting doesn't reorder the shared master data
   return arr(AP && AP.stampBonus).slice().sort((a, b) => Number(a.flg) - Number(b.flg)).map(b => {
     const st = Number(b.stidx), ed = Number(b.edidx), perfect = Number(b.perfect) === 1, flg = Number(b.flg);
     let have = 0, perf = 0;
@@ -140,6 +146,7 @@ function renderRally() {
     if (!b || !b.rw || !b.rw.type) return;
     if (b.rw.type === 'MONEY') addPresent('MONEY', Number(b.rw.num) || 0, '');
     else if (b.rw.type === 'ITEM') addPresent(boxGameType('ITEM', b.rw.val0), Number(b.rw.num) || 1, b.rw.val0);
+    // mark it given as well, otherwise the game could pay the same bonus out a second time
     RALLY.bonus |= b.flg;
     done(`${b.label}: ${rallyRewardLabel(b.rw)} sent to the Reward Box and marked as given`);
   }));

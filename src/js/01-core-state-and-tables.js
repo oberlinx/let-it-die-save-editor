@@ -68,6 +68,7 @@ let RAW_SAV_MAIN_UID = null;
 
 // Bag capacity of each fighter as loaded, keyed by cid. Used so a fighter's
 // death bag slot list is only padded when the fighter actually needs more room.
+// (Padding only when needed keeps untouched fighters byte-identical, so the download diff stays small.)
 let ORIG_BAG_CAP = {};
 
 // Lookup tables built by tryBuildIndices(): id -> master row with a resolved display name
@@ -77,6 +78,7 @@ let PT_INDEX = {}, ITEM_INDEX = {}, SKL_INDEX = {}, MSR_INDEX = {}, BST_INDEX = 
 let NAME_INDEX = [];
 
 // Index into SAVE.soul.chrs of the fighter tab currently shown.
+// (An index, not a cid, because tabs are rebuilt from SAVE.soul.chrs on every render.)
 let activeCharIdx = 0;
 
 // ---- Add-item form defaults ----
@@ -129,6 +131,7 @@ function bindFormState(bindings) {
 
 // Starter data (new user, playlog, research, etc.) embedded in the page as JSON, used by
 // startSave() to seed fields a loaded save does not provide.
+// (Embedded in the page rather than fetched, so the editor works offline and makes no extra network request.)
 const TEMPLATES = JSON.parse(document.getElementById('templates-data').textContent);
 
 // Equipment sites on a fighter: which EQSITE_* slot, its label, and which part type(s)
@@ -163,6 +166,7 @@ function bloodniumMax() { const v = constIntOf('BLOODNIUM_POINT_MAX', 999999); r
 /** [saveKey, label, maxValue] for the two currency fields shown in the editor. */
 function currencyFields() { return [ [ 'bloodnium_point', 'Bloodnium', bloodniumMax() ], [ 'recycle_point', 'Recycle Points', 999999999 ] ]; }
 
+// Fallback so the Freezer UI still works if masters.db is missing or has no master_freezer rows.
 // (see note above) default hanger counts indexed by Freezer level; used when master_freezer is unavailable.
 // hangers per Freezer level: masters.db master_freezer (number = level, count = hangers); the list is the fallback
 const FREEZER_CAPACITY_DEFAULT = [ 0, 3, 4, 5, 6, 7, 8, 9, 10 ];
@@ -187,6 +191,7 @@ const STAMP_LABELS = {
 };
 
 /** Bonus added per researched part, per stamp category, from master_const_float PART_RESEARCH_STAMP_ADD_RATE_<TYPE> (0 if missing). */
+// Rates are read from masters.db instead of hardcoded so the totals follow the game if it rebalances them.
 function stampRatePerCategory() {
   const rates = {};
   for (const type of RESEARCH_STAMP_TYPES) {
@@ -214,6 +219,7 @@ function stampCategoryFor(p) {
 }
 
 // Cache of part ids that count for stamps; reset to null whenever masters.db is (re)loaded.
+// (Cached because building it scans every part and item; it only changes when masters.db or the save platform changes.)
 let STAMP_ELIGIBLE_SET = null;
 
 /**
@@ -222,12 +228,14 @@ let STAMP_ELIGIBLE_SET = null;
  * actually obtainable (a real blueprint item exists or an upgrade chain reaches the part).
  * @returns {Set<string>} part ids
  */
+// The 'obtainable' check matters because masters.db lists stamp parts the player can never get; counting them would show totals the game cannot reach.
 function buildStampEligibleSet() {
   const blueprintIds = new Set((AP.items || []).filter(it => it.itemtype === 'ITTP_RMAP').map(it => it.itemId));
   const nextptidTargets = new Set((AP.pts || []).map(p => p.nextptid).filter(Boolean));
   const openResearch = new Set((AP.partresearch || []).filter(r => r.is_open).map(r => r.ptid));
   const eligible = new Set;
   for (const p of AP.pts || []) {
+    // Platform 1 parts are PlayStation-only; they must not count in a PC save.
     if (!p.is_stamp) continue;
     if (!openResearch.has(p.id)) continue;
     if ((p.platform === 1 && !isPsSave()) || RESEARCH_BLOCKLIST.has(p.id)) continue;
@@ -246,6 +254,7 @@ function buildStampEligibleSet() {
 function computeStampTotals() {
   if (!STAMP_ELIGIBLE_SET) STAMP_ELIGIBLE_SET = buildStampEligibleSet();
   const rates = stampRatePerCategory();
+  // Only FINISHED research counts; entries still in progress give no stamp bonus yet.
   const researchedPtids = new Set(SAVE.user_research.filter(r => r.research_type === 'FINISHED').map(r => r.ptid));
   const totals = {
     SLASH: 0,
@@ -260,10 +269,12 @@ function computeStampTotals() {
     const cat = stampCategoryFor(PT_INDEX[ptid]);
     if (cat && totals[cat] != null) totals[cat] += rates[cat];
   }
+  // Round to 1 decimal to hide floating point noise from summing many fractional rates.
   for (const type of RESEARCH_STAMP_TYPES) totals[type] = Math.round(totals[type] * 10) / 10;
   return totals;
 }
 
+// The character set is stripped so a name cannot break out of HTML attributes/markup or the JSON string when written back.
 /** Sanitize a fighter name: strip control chars and < > " \\, trim, cap at 32 chars. */
 function cleanFighterName(v) { return String(v == null ? '' : v).replace(/[\u0000-\u001f\u007f<>"\\]/g, '').trim().slice(0, 32); }
 /** Highest body grade in master_body_detail (fallback 6). */
@@ -272,7 +283,9 @@ function gradeMax() { const g = arr(AP && AP.bodydetail).map(r => Number(r.grade
 function tdmPointMax() { const t = arr(AP && AP.tdmrank).map(r => Number(r.point_max)).filter(n => n > 0); return t.length ? Math.max(...t) : 10000; }
 /** Look up the Tokyo Death Metro rank row for a point total (highest point_min <= pt). Takes AP explicitly. */
 function tdmRankForPoints(pt, AP) {
+  // slice() first so sorting does not reorder the shared AP.tdmrank table.
   const table = (AP.tdmrank || []).slice().sort((a, b) => a.point_min - b.point_min);
+  // Start at the lowest rank so points below the first threshold still get a valid row.
   let best = table[0];
   for (const r of table) {
     if (pt >= r.point_min) best = r;
@@ -296,6 +309,7 @@ function teamName(tid) {
     const t = AP.teams.find(t => String(t.tid) === String(tid));
     if (t && t.name) return t.name;
   }
+  // masters.db names win; SAVE.teams is the fallback for teams the master table does not list.
   if (!SAVE || !SAVE.teams) return null;
   const entry = SAVE.teams.find(t => String(t.tid) === String(tid) || t.team && String(t.team.tid) === String(tid));
   return entry && (entry.name || entry.team && entry.team.name) || null;
@@ -325,6 +339,7 @@ function bankCapacityForLevel(level, levelField) {
 }
 
 // Smallest Storage Box size (also the number of empty slots a brand-new SAVE.cl starts with).
+// (Also the lower bound used by storageBoxMax() to reject a nonsense value from masters.db.)
 const STORAGE_BOX_MIN = 30;
 
 // Storage Box (the game calls it the coin locker, save key cl): masters.db master_const_int COINLOCKER_EXPAND_LIMIT_COUNT (2000) is its
@@ -335,6 +350,7 @@ function storageBoxMax() { const v = constIntOf('COINLOCKER_EXPAND_LIMIT_COUNT',
 
 // ---- Small utilities ----
 /** Coerce to array: returns x if it is an Array, else [] (the game stores empty collections as {}). */
+// (Used everywhere instead of trusting the field: an empty collection can be {} and would break .map/.filter.)
 const arr = x => Array.isArray(x) ? x : [];
 
 /** Normalize a string for searching: lowercase, drop everything but a-z0-9. */
@@ -352,6 +368,7 @@ function toast(msg, isError) {
 }
 
 /** Concatenate an array of Uint8Arrays into one new Uint8Array. */
+// Used by the codec to join zlib chunks into one buffer in a single allocation instead of repeated copying.
 function u8concat(chunks) {
   let total = 0;
   for (const c of chunks) total += c.length;

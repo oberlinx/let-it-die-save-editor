@@ -12,6 +12,8 @@ function blockCharacters() {
   const atCap = !freeHangers().length;
   const chr = chrs[activeCharIdx] || chrs[0];
   const isCurrent = chr && chr.cid && chr.cid === SAVE.soul.crntcid;
+  // Back-fill a missing bodylvl with level-1 defaults so the stat fields below can always read it
+  // (the render and the change handlers assume chr.bodylvl exists).
   chr.bodylvl = chr.bodylvl || {
     lvl: chr.lvl || 1,
     hp: 1,
@@ -29,15 +31,19 @@ function blockCharacters() {
   const maxLb = maxLimitBreakFor(type, grade);
   const R = fighterRanges(type, grade, lb);
   const statCap = R.statCap, statFloor = R.statFloor;
+  // Totals are clamped into this grade/limit break's legal range so a stale or hand-edited value
+  // never shows as something the game would not allow.
   const skillTotal = Math.min(Math.max(R.skillBase + (chr.bodylvl.skill || 0), R.skillFloor), R.skillCap);
   const bagTotal = Math.min(Math.max(R.bagBase + (chr.bodylvl.bag || 0), R.bagFloor), R.bagCap);
   const rageTotal = rageTotalFor(chr, R);
   const rageLocked = R.rageFloor === R.rageCap;
+  // Model/gas mask are locked for fighters where changing the look makes no sense (reason is shown in the label).
   const modelLock = chr.state === 'ENEMY' ? 'dead: the archive keeps its look' : chr.state === 'DUMMY' ? 'not a real fighter' : chr.abid ? 'kidnapped' : '';
   const combat = combatStatsFor(chr, type, grade);
   // one-line summaries for the section headers and the line under the fighter picker
   const bad = (n, what) => n ? ` · <span class="fsec-bad">${n} ${what}</span>` : '';
   const gearBad = gearProblems(chr).length, invN = fighterItemCount(chr), invCap = deathBagLimit(chr), decN = arr(chr.eqskls).length;
+  // statsMaxed only drives the "all at max" header text; rage is ignored when it is fixed for the class/grade.
   const statsMaxed = [ 'hp', 'str', 'dex', 'vit', 'stm', 'luk' ].every(k => (chr.bodylvl[k] != null ? chr.bodylvl[k] : statFloor) >= statCap) && skillTotal >= R.skillCap && bagTotal >= R.bagCap && (rageLocked || rageTotal >= R.rageCap);
   const weaponsN = Object.values(chr.armslots || {}).filter(Boolean).length, armorN = arr(chr.eqpts).filter(e => /HEAD|BODY|LEGS/.test(e.site)).length;
   const fsumLine = `<div class="fsumLine"><b>${escapeHtml(chr.name || 'Fighter')}</b> · ${escapeHtml(CLASS_NAMES[type] || type)} · Grade ${grade}${lb ? ' · Limit Break ' + lb : ''} · Lv ${chr.lvl != null ? chr.lvl : 1} · Death Bag ${invN}/${invCap} · Decals ${decN}/${skillTotal}${isCurrent ? ' · <span class="badge current">★ SELECTED FIGHTER</span>' : ''}${bad(gearBad, gearBad === 1 ? 'gear problem' : 'gear problems')}</div>`;
@@ -67,6 +73,8 @@ function combatStatsFor(chr, type, grade) {
 // no remove button; everything else gets a remove button (data-fi-remove="cat:index").
 function fighterInventoryRows(chr) {
   const rows = [];
+  // Equipped gear is listed without a remove button: removing it here would leave a dangling eptid in eqpts/armslots.
+  // Use the Equipment section to unequip first.
   const equippedEptids = new Set(arr(chr.eqpts).map(e => e.eptid).concat(Object.values(chr.armslots || {})));
   arr(chr.pspts).forEach((p, i) => {
     const rec = PT_INDEX[p.ptid];
@@ -122,7 +130,8 @@ function gearLabel(p) {
   return `${rec.name} +${displayFromRaw(rec, p.lvl)}${pct != null ? ` (${pct}%)` : ''}`;
 }
 // heldIndex(chr, hand): which of the 3 quick slots (0-2) the hand holds. Prefers the weapon actually in
-// eqpts for that hand site, else select_arm_slots, else 0.
+// eqpts for that hand site, else select_arm_slots, else 0. The site entries win because (per the notes
+// above) they are what decides what is held; select_arm_slots can be empty or stale.
 function heldIndex(chr, hand) {
   const eq = arr(chr.eqpts).find(e => e.site === hand.site);
   if (eq && chr.armslots) for (let i = 0; i < 3; i++) if (chr.armslots[hand.base + i] === eq.eptid) return i;
@@ -131,7 +140,8 @@ function heldIndex(chr, hand) {
   return v >= 0 && v <= 2 ? v : 0;
 }
 // syncHeldWeapons(): rewrite the two hand-site eqpts entries from chr.armslots and the held indexes
-// (held[0] right, held[1] left). arm_slot = base + index.
+// (held[0] right, held[1] left). arm_slot = base + index. Rebuilt from scratch rather than patched so the
+// hand entries can never end up pointing at a weapon that was moved or removed from its quick slot.
 function syncHeldWeapons(chr, held) {
   chr.eqpts = arr(chr.eqpts).filter(e => e.site !== 'EQSITE_ARMR' && e.site !== 'EQSITE_ARML');
   for (const hand of HAND_SITES) {
@@ -213,6 +223,7 @@ function gearProblem(chr, p, site) {
   if (p.dur != null && Number(p.dur) <= 0) return "broken";
   const stat = rec.lvllmttp, pct = stat ? gearDiscountPct(chr, stat) : 100;
   // the game shows (and checks) the requirement rounded down
+  // the 1e-9 nudge stops floating-point error (e.g. 26.999999...) from rounding an exact whole number down
   const need = Math.floor(gearRequirement(rec, p.lvl) * pct / 100 + 1e-9);
   if (stat && need > 0) {
     const have = fighterStatValue(chr, stat);
@@ -233,6 +244,7 @@ function gearProblems(chr) {
     if (why) out.push({ eid: e.eptid, site: e.site, why });
   }
   for (const [k, eid] of Object.entries(chr.armslots || {})) {
+    // weapons already in eqpts were checked above; only report quick-slot-only weapons here
     if (!eid || arr(chr.eqpts).some(e => e.eptid === eid)) continue;
     const why = gearProblem(chr, byEid[eid], Number(k) < 3 ? 'EQSITE_ARMR' : 'EQSITE_ARML');
     if (why) out.push({ eid, site: '', slot: Number(k), why });
@@ -243,6 +255,7 @@ function gearProblems(chr) {
 function unequipProblemGear(chr) {
   const bad = gearProblems(chr);
   for (const b of bad) {
+    // clear both places a piece can be referenced (quick slots and eqpts) so nothing is left half-equipped
     for (const k of Object.keys(chr.armslots || {})) if (chr.armslots[k] === b.eid) delete chr.armslots[k];
     chr.eqpts = arr(chr.eqpts).filter(e => e.eptid !== b.eid);
   }
@@ -257,7 +270,10 @@ function setWeaponSlot(chr, armSlot, eptid) {
     if (why) { toast(`Can't equip that: ${why}`, true); return false; }
   }
   chr.armslots = chr.armslots || {};
+  // remember what is held before moving things, then restore it in syncHeldWeapons, so changing a
+  // quick slot does not silently change which weapon is in hand
   const held = HAND_SITES.map(h => heldIndex(chr, h));
+  // a weapon can only occupy one quick slot, so drop any earlier slot it was in
   for (const k of Object.keys(chr.armslots)) if (chr.armslots[k] === eptid) delete chr.armslots[k];
   if (eptid) chr.armslots[armSlot] = eptid; else delete chr.armslots[armSlot];
   syncHeldWeapons(chr, held);
@@ -276,6 +292,7 @@ function setArmor(chr, site, eptid) {
     const why = gearProblem(chr, arr(chr.pspts).find(x => x.eptid === eptid), site);
     if (why) { toast(`Can't equip that: ${why}`, true); return false; }
   }
+  // also drop the piece from any other site so one item is never equipped in two places
   chr.eqpts = arr(chr.eqpts).filter(e => e.site !== site && e.eptid !== eptid);
   if (eptid) chr.eqpts.push({ site, eptid, arm_slot: -1 });
 }
@@ -284,6 +301,8 @@ function setArmor(chr, site, eptid) {
 function equipEditor(chr) {
   if (!chr.armslots) chr.armslots = {};
   const weapons = arr(chr.pspts).filter(p => (PT_INDEX[p.ptid] || {}).type === 'PTTP_ARM');
+  // sel(): one gear dropdown. Illegal options are disabled (not hidden) so the user sees why, but the
+  // currently selected one stays enabled so an existing illegal choice still displays and can be changed.
   const sel = (cur, list, attr, site) => `<select ${attr} style="width:100%; background:var(--bg); border:1px solid ${cur && gearProblem(chr, list.find(p => p.eptid === cur), site) ? 'var(--bad, #c33)' : 'var(--panel-border)'}; color:var(--text); padding:5px 6px; font-family:var(--mono); font-size:11.5px;">
       <option value="">— empty —</option>${list.map(p => { const why = gearProblem(chr, p, site); return `<option value="${escapeHtml(p.eptid)}" ${p.eptid === cur ? 'selected' : ''} ${why && p.eptid !== cur ? 'disabled' : ''}>${escapeHtml(gearLabel(p))}${why ? ` — ✕ ${escapeHtml(why)}` : ''}</option>`; }).join('')}</select>`;
   let h = '<div class="grid" style="margin-bottom:6px; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));">';
@@ -301,6 +320,7 @@ function equipEditor(chr) {
   h += '</div><div class="grid" style="margin-bottom:6px; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));">';
   for (const slot of SLOT_TYPES.filter(s => s.site !== 'EQSITE_ARMR' && s.site !== 'EQSITE_ARML')) {
     const cur = (arr(chr.eqpts).find(e => e.site === slot.site) || {}).eptid || '';
+    // keep the currently equipped piece in the list even if GEAR_NEVER would hide it, so it still shows
     const list = arr(chr.pspts).filter(p => ptTypeOk(slot, PT_INDEX[p.ptid]) && (p.eptid === cur || !GEAR_NEVER.test(p.ptid)));
     h += `<div class="field"><label>${slot.label}</label>${sel(cur, list, `data-eq-armor="${slot.site}"`, slot.site)}</div>`;
   }
@@ -426,7 +446,8 @@ function wireCharacters() {
   });
   const maxAllBtn = document.getElementById('btn-max-all-chars');
   if (maxAllBtn) maxAllBtn.addEventListener('click', () => {
-    // first click arms the button for 6 seconds; a second click performs the action
+    // first click arms the button for 6 seconds; a second click performs the action. This changes every
+    // fighter at once, so it needs a deliberate second click, and the timeout stops a stale armed state.
     if (!MAX_ALL_ARMED) { MAX_ALL_ARMED = true; renderAll(); setTimeout(() => { if (MAX_ALL_ARMED) { MAX_ALL_ARMED = false; renderAll(); } }, 6000); return; }
     MAX_ALL_ARMED = false;
     const r = maxAllFighters();
@@ -501,6 +522,7 @@ function wireCharacters() {
         v = parseInt(capAttr, 10);
         toast(`Clamped to this grade/limit break's max (${v})`);
       }
+      // the floor check runs after the cap check so the minimum wins if the two ever conflict
       if (floorAttr && v < parseInt(floorAttr, 10)) {
         v = parseInt(floorAttr, 10);
         toast(`Clamped to this grade/limit break's minimum (${v})`);
@@ -510,6 +532,7 @@ function wireCharacters() {
       if (inp.dataset.stat === 'rage') chr.rage = v - parseInt(baseAttr, 10);
       // base-offset fields store (value - base); rage lives on chr.rage, the rest in chr.bodylvl
       else chr.bodylvl[inp.dataset.stat] = baseAttr != null ? v - parseInt(baseAttr, 10) : v;
+      // the displayed level is derived from the stat levels, so refresh it after any stat change
       recomputeLevel(chr);
       renderAll();
     });
@@ -552,7 +575,8 @@ function wireCharacters() {
     toast(n ? `Repaired and refilled ${n} item${n === 1 ? '' : 's'} on ${chr.name || 'this fighter'}` : 'Everything this fighter carries is already at 100% with full ammo');
   });
   document.getElementById('fi-clear-all').addEventListener('click', () => {
-    // clear every unequipped item; equipped gear (in eqpts or quick slots) is kept
+    // clear every unequipped item; equipped gear (in eqpts or quick slots) is kept, so the fighter is
+    // never left with an equipped slot pointing at an item that no longer exists
     const total = arr(chr.pspts).length + arr(chr.psmsrs).length + arr(chr.psbsts).length + arr(chr.psitems).length;
     const worn = new Set(arr(chr.eqpts).map(e => e.eptid).concat(Object.values(chr.armslots || {})));
     if (!confirm(`Delete all ${total - arr(chr.pspts).filter(p => worn.has(p.eptid)).length} unequipped items in ${chr.name}'s Fighter Inventory? Equipped gear is kept. This can't be undone.`)) return;
@@ -580,10 +604,11 @@ function wireCharacters() {
       skillInput.value = '';
       return;
     }
-    // find the lowest unused decal slot number
+    // find the lowest unused decal slot number (so slots stay compact and never collide)
     const used = new Set(chr.eqskls.map(s => s.slot).filter(s => s != null));
     let slot = 0;
     while (used.has(slot)) slot++;
+    // both id and sklid are written because the rest of the editor reads either (s.id || s.sklid)
     chr.eqskls.push({
       id: rec.id,
       sklid: rec.id,
@@ -629,6 +654,7 @@ function wireAutocomplete(input, dropEl, category, onPick, ptType, levelInputId,
   const levelEl = () => levelInputId ? document.getElementById(levelInputId) : null;
   function search(q) {
     const lv = levelEl();
+    // search a bigger pool (400) and trim to 30 after filtering, so filtered-out hits don't leave the list short
     if (category !== 'pt' || !lv || lv.value === '') { hiddenNote = ''; return keep ? searchNames(q, category, 400, ptType).filter(r => keep(r.id)).slice(0, 30) : searchNames(q, category, 30, ptType); }
     const L = parseInt(lv.value, 10) || 0;
     let hidden = 0;
@@ -655,6 +681,7 @@ function wireAutocomplete(input, dropEl, category, onPick, ptType, levelInputId,
     if (input.value) show(search(input.value));
   });
   if (levelEl()) levelEl().addEventListener('input', () => { if (input.value) show(search(input.value)); });
+  // the short delay lets a click on a result register before the dropdown closes
   input.addEventListener('blur', () => setTimeout(() => dropEl.classList.remove('open'), 150));
   input.addEventListener('keydown', e => {
     if (!dropEl.classList.contains('open')) return;

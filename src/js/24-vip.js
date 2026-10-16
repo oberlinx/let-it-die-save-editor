@@ -34,7 +34,8 @@ function setVipPlan(plan, restart) {
 // as no event is running. Holding the reset off would mean a future last_login_date, which the Dates tab
 // treats as damage, so the editor doesn't. The values are written at download.
 // ---------------------------------------------------------------------------
-// Max value the editor allows for free continues.
+// Max value the editor allows for free continues. No game limit exists (see above), so this is only a
+// sanity cap that keeps the number box and the saved value reasonable.
 const FREE_CONT_MAX = 9999;
 // Pending free-continue edit: tied to a loaded save via root; "on" = write at download; perDay = value.
 let FREE_CONT = { root: null, on: false, perDay: 3 };
@@ -42,7 +43,8 @@ let FREE_CONT = { root: null, on: false, perDay: 3 };
 function fcSync() { if (FREE_CONT.root !== RAW_SAV_ROOT) FREE_CONT = { root: RAW_SAV_ROOT, on: false, perDay: 3 }; }
 // Floors/clamps a value to an integer in [0, FREE_CONT_MAX]; non-numbers become 0.
 function fcClamp(v) { v = Math.floor(Number(v)); return Number.isFinite(v) ? Math.max(0, Math.min(FREE_CONT_MAX, v)) : 0; }
-// all of today's free continues are left
+// The same number goes in both fields so that all of today's free continues are left (a lower
+// "left" value would make the first day look partly used).
 // Values written at download: both max-per-day and "left today" set to the same number.
 function fcValues() { const n = fcClamp(FREE_CONT.perDay); return { max: n, count: n }; }
 // force_shutdown_counts {cid: n} (top level of the save): the game adds 1 for the fighter in a run each
@@ -51,11 +53,15 @@ function fcValues() { const n = fcClamp(FREE_CONT.perDay); return { max: n, coun
 // (-100), from ..._LARGE_PENALTY_COUNT (10) the large rate (-500). The save check can reset a count to 0.
 // Fighters (cids) whose force_shutdown_counts entry should be zeroed at download (set elsewhere in the UI).
 const SHUTDOWN_RESET = { root: null, cids: new Set() };
-// Reads an integer from the loaded masters.db constants table (AP.constInt) by id; d is the fallback.
+// Reads an integer from the loaded masters.db constants table (AP.constInt) by id; d is the fallback
+// so the UI still works when masters.db isn't loaded yet or the constant is missing.
 function constIntOf(id, d) { const r = arr(AP && AP.constInt).find(x => x.id === id); return r ? Number(r.value) : d; }
 // Returns root.force_shutdown_counts if it is a plain object (not an array), else an empty object.
+// Saves may lack the field or hold something odd, so callers can loop over the result without checks.
 function shutdownCounts(root) { const f = root && root.force_shutdown_counts; return f && typeof f === 'object' && !Array.isArray(f) ? f : {}; }
 // Download-time hook: zero the selected cids' shutdown counts in the built root. Mutates and returns root.
+// It only touches the built clone (never RAW_SAV_ROOT), and skips if the selection belongs to a
+// previously loaded save, so a stale selection can't zero counts in a different save.
 function applyShutdownReset(root) {
   if (SHUTDOWN_RESET.root !== RAW_SAV_ROOT || !root) return root;
   const f = shutdownCounts(root);
@@ -97,7 +103,7 @@ function fcInner() {
 function wireFreeCont() {
   const on = document.getElementById('fc-on');
   if (!on) return;
-  // rebuilt after the event, so a number box losing focus while it's replaced can't rebuild it twice
+  // rebuilt after the event (not inside it), so a number box losing focus while it's replaced can't rebuild it twice
   const rerender = () => setTimeout(() => { const host = document.getElementById('fc-host'); if (host) { host.innerHTML = fcInner(); wireFreeCont(); } }, 0);
   on.addEventListener('change', () => { FREE_CONT.on = on.checked; rerender(); toast(on.checked ? 'Free continues will be set on download' : 'Free continues left as they are'); });
   const pd = document.getElementById('fc-per-day');
@@ -114,7 +120,8 @@ function blockVip() {
   return `<section class="block">\n    <div class="block-head"><div><div class="eyebrow">Direct Hell Insurance</div><h2>VIP Express Pass</h2></div></div>\n    <div class="block-body">\n      <div class="grid">\n        <div class="field"><label>Express Pass</label><select id="vip-active" style="width:100%; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);"><option value="1" ${Number(vip.vip_flag) ? 'selected' : ''}>On</option><option value="0" ${Number(vip.vip_flag) ? '' : 'selected'}>Off</option></select></div>\n        <div class="field"><label>${iconSpan(Number(vip.vip_type) === 1 ? 'VIPticket_1' : 'VIPticket_2', 24)}Type${Number(vip.vip_flag) ? '' : ' <span class="id">(turn the pass on first)</span>'}</label><select id="vip-plan" ${Number(vip.vip_flag) ? '' : 'disabled'} style="width:100%; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);${Number(vip.vip_flag) ? '' : ' opacity:.4;'}"><option value="day" ${Number(vip.vip_type) === 1 ? 'selected' : ''}>1-Day Express</option><option value="month" ${Number(vip.vip_type) === 1 ? '' : 'selected'}>30-Day Express</option></select></div>\n        <div class="field"><label>${iconSpan('VIPticket_2', 24)}30-Day Passes held</label><input type="number" data-vip="vip_pass_num" value="${vip.vip_pass_num || 0}"></div>\n        <div class="field"><label>${iconSpan('VIPticket_1', 24)}1-Day Passes held</label><input type="number" data-vip="oneday_vip_pass_num" value="${vip.oneday_vip_pass_num || 0}"></div>\n        <div class="field"><label>Expires</label><input type="date" id="vip-expires-date" value="${expiresDate ? `${expiresDate.getFullYear()}-${String(expiresDate.getMonth() + 1).padStart(2, '0')}-${String(expiresDate.getDate()).padStart(2, '0')}` : ''}" style="width:100%; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono); color-scheme:dark;"></div>\n        <div class="field"><label>Auto-renew</label><select data-vip="automatic_renewal" style="width:100%; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);"><option value="1" ${vip.automatic_renewal ? 'selected' : ''}>On</option><option value="0" ${vip.automatic_renewal ? '' : 'selected'}>Off</option></select></div>\n      </div>\n      <div class="toolbar" style="margin-top:10px;"><button class="subtle" id="vip-renew" ${vipPlanOf(vip) === 'none' ? 'disabled style="opacity:.35;"' : ''}>Renew: expires ${vipPlanOf(vip) === 'day' ? '24 hours' : '30 days'} from now</button></div>\n      <div class="capNote">Off = not a member (the type box is locked until it's on). 1-Day Express lasts 24 hours, 30-Day Express lasts 30 days; auto-renew uses your held passes of that kind when it runs out. (In the save: type 1 = 1-Day, type 0 = 30-Day, worked out from saves.)</div>\n    </div>\n  </section>`;
 }
 
-// Wires the VIP block. Number inputs are clamped to 0..99999; plan changes go through setVipPlan()
+// Wires the VIP block. The year limits match the game's date range (see the Dates tab: dates past
+// 2037 can break the game). Number inputs are clamped to 0..99999; plan changes go through setVipPlan()
 // and re-render all tabs; the date picker keeps the existing time of day and limits years to 2020..2037.
 function wireVip() {
   document.querySelectorAll('[data-vip]').forEach(inp => {
@@ -122,10 +129,9 @@ function wireVip() {
       { let v = parseInt(inp.value, 10); if (!(v >= 0)) v = 0; v = Math.min(v, 99999); inp.value = v; SAVE.soul.vip[inp.dataset.vip] = v; }
     });
   });
-  // soul.vip.type: 1 = 30-day Express Pass (the user's active membership),
-  // 0 = 1-Day Express / none (fresh game) -- inferred from saves, not named in
-  // the game data. user.vip_level has matched the type in every save seen, so
-  // it's kept in step when it currently matches.
+  // soul.vip.vip_type: 1 = 1-Day Express, 0 = 30-Day Express (see the top of this file; worked out
+  // from saves, not named in the game data). The On/Off switch below keeps the type the save had, so
+  // switching back on returns to the same pass. user.vip_level is kept in step by setVipPlan().
   document.getElementById('vip-active').addEventListener('change', e => {
     const on = e.target.value === '1';
     setVipPlan(on ? (Number(SAVE.soul.vip.vip_type) === 1 ? 'day' : 'month') : 'none');
@@ -140,7 +146,8 @@ function wireVip() {
   document.getElementById('vip-expires-date').addEventListener('change', e => {
     const m = e.target.value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
     if (!m) { renderAll(); return; }
-    // keep the time of day the save already had, only the date changes
+    // keep the time of day the save already had, only the date changes (a date picker has no time of day,
+    // and a 00:00 default would shift the expiry by hours)
     const old = SAVE.soul.vip.expired_time ? new Date(SAVE.soul.vip.expired_time * 1e3) : null;
     const d = new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10), old ? old.getHours() : 0, old ? old.getMinutes() : 0, old ? old.getSeconds() : 0);
     if (d.getFullYear() < 2020) { toast('Pick a date from 2020 on', true); renderAll(); return; }

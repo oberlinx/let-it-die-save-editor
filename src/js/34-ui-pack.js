@@ -9,7 +9,8 @@
 const UI = { inSig: '', group: 'account', changes: null, curSig: '', dlSig: null, origRoot: null, origObj: null, timer: 0, lastTab: {}, ready: false, restoring: false, qsSel: 0, qsHits: [] };
 // HTML-escape helper for text interpolated into innerHTML.
 const UI_ESC = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-// localStorage wrappers that never throw (storage may be blocked).
+// localStorage wrappers that never throw (storage may be blocked). The remembered tab/fighter/theme are only
+// conveniences, so a failed read or write must never break the editor.
 function uiLsGet(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } }
 function uiLsSet(k, v) { try { window.localStorage.setItem(k, v); } catch (e) { /* storage blocked: fine */ } }
 
@@ -44,6 +45,7 @@ function uiSyncTabs() {
 // uiTabChanged(): called on tab switch; persists the tab in localStorage.
 function uiTabChanged() { uiSyncTabs(); uiLsSet('lid.tab', activeTab); }
 // uiGoGroup(id): switch to a group's last-used (or first visible) tab by clicking its button.
+// It clicks the real tab button instead of setting activeTab, so the normal tab-change code (render, remembering the tab) runs.
 function uiGoGroup(id) {
   const g = TAB_GROUPS.find(x => x.id === id); if (!g) return;
   const vis = uiVisibleTabIds().filter(t => g.tabs.includes(t));
@@ -101,12 +103,15 @@ function uiSearchEntries() {
     const t = TABS.find(x => x.id === id), g = TAB_GROUPS.find(x => x.tabs.includes(id));
     out.push({ tab: id, text: t.label, in: g ? g.label : '', kw: UI_KEYWORDS[id] || '', kind: 'tab' }); seen.add(id + '|' + t.label);
   }
+  // Scrape the rendered panels so the search finds individual settings without a hand-kept list; only panels whose tab is visible count.
   document.querySelectorAll('[data-tab-panel]').forEach(p => {
     const tab = p.dataset.tabPanel; if (!document.querySelector(`[data-tab-btn="${tab}"]`)) return;
     const tl = (TABS.find(x => x.id === tab) || {}).label || tab;
     p.querySelectorAll('label, h2, .eyebrow, summary, button').forEach(el => {
+      // Skip table cells (per-row data, not settings) and the changes drawer (it is not part of a tab).
       if (el.closest('table') || el.closest('#chg-drawer')) return;
       let tx = (el.textContent || '').replace(/\s+/g, ' ').trim();
+      // Very short or very long text is usually an icon button or a paragraph, not something worth jumping to.
       if (!tx || tx.length > 64 || tx.length < 3) return;
       const k = tab + '|' + tx; if (seen.has(k)) return; seen.add(k);
       out.push({ tab, text: tx, in: tl, kw: '', kind: 'item' });
@@ -153,6 +158,7 @@ function uiQsPick(i) {
 function uiGoto(tab, text) {
   const b = document.querySelector(`[data-tab-btn="${tab}"]`);
   if (b && activeTab !== tab) b.click();
+  // Wait a moment so the new tab has rendered before looking for the element.
   if (text) setTimeout(() => uiFlash(tab, text), 90);
   else window.scrollTo(0, 0);
 }
@@ -161,6 +167,7 @@ function uiFlash(tab, text) {
   const p = document.querySelector(`[data-tab-panel="${tab}"]`); if (!p) return;
   const el = [ ...p.querySelectorAll('label, h2, .eyebrow, summary, button') ].find(e => (e.textContent || '').replace(/\s+/g, ' ').trim() === text);
   if (!el) return;
+  // A match can sit inside collapsed sections; open every parent so it is actually visible.
   for (let d = el.closest('details'); d; d = d.parentElement && d.parentElement.closest('details')) d.open = true;
   el.scrollIntoView({ block: 'center', behavior: 'smooth' });
   el.classList.add('flashHit'); setTimeout(() => el.classList.remove('flashHit'), 2300);
@@ -172,6 +179,7 @@ function uiWireSearch() {
   const inp = document.getElementById('qs'), drop = document.getElementById('qs-drop');
   inp.addEventListener('input', () => { UI.qsSel = 0; uiQsRender(); });
   inp.addEventListener('focus', () => { if (inp.value.trim()) uiQsRender(); });
+  // The short delay lets a click on a result land before the dropdown is hidden (the rows also use mousedown for the same reason).
   inp.addEventListener('blur', () => { setTimeout(() => { drop.style.display = 'none'; }, 120); });
   inp.addEventListener('keydown', e => {
     if (e.key === 'ArrowDown') { e.preventDefault(); UI.qsSel = Math.min(UI.qsSel + 1, UI.qsHits.length - 1); uiQsRender(); }
@@ -185,6 +193,7 @@ function uiWireSearch() {
 // ---- 2. status bar + unsaved warning --------------------------------------
 // Total number of change lines across review sections.
 function uiChangeCount(sections) { return sections ? sections.reduce((n, s) => n + s.lines.length, 0) : 0; }
+// The same diff as the download review uses, so the drawer, the status bar and the review dialog always agree.
 // uiComputeChanges() -> review sections for the current edits (SAVE vs the text loaded), or null if no comparable original. Builds the full download root, so it is relatively slow.
 function uiComputeChanges() {
   if (!SAVE || !RAW_SAV_ROOT || !ORIG_SAVE.text || ORIG_SAVE.root !== RAW_SAV_ROOT) return null;
@@ -196,6 +205,8 @@ function uiComputeChanges() {
 function uiSig(sections) { return sections ? JSON.stringify(sections.map(s => s.lines)) : ''; }
 // uiInputSig() -> JSON fingerprint of SAVE and all pending-operation state; the slow change list is rebuilt only when this moves. Returns a random string on failure so it always counts as different.
 // cheap fingerprint of everything that can differ from the loaded save; the (slow) change list is only rebuilt when it moves
+// Every pending-operation state object is included, because those edits live outside SAVE and would otherwise be missed.
+// Each is counted only when its .root is the loaded save, so leftovers from a previously loaded save do not count.
 function uiInputSig() {
   try {
     return JSON.stringify([ SAVE, FLOOR_MOVE.root === RAW_SAV_ROOT && FLOOR_MOVE.target, BOSS_LOCK.root === RAW_SAV_ROOT && [ BOSS_LOCK.mode, BOSS_LOCK.which, BOSS_LOCK.extend, BOSS_LOCK.rewards, BOSS_LOCK.clear ], LUCKY.root === RAW_SAV_ROOT && [ LUCKY.seed, LUCKY.masks ], RUN_END.root === RAW_SAV_ROOT && RUN_END.on,
@@ -209,7 +220,7 @@ function uiScheduleStatus() {
   const sig = uiInputSig();
   if (sig === UI.inSig && UI.changes !== null) return;
   clearTimeout(UI.timer);
-  UI.pendingSig = true;
+  UI.pendingSig = true;   // lets uiDirty() know a count is on its way
   UI.timer = setTimeout(() => {
     UI.pendingSig = false;
     const sg = uiInputSig();
@@ -238,6 +249,7 @@ function uiStatusUpdate() {
   document.getElementById('sb-file').textContent = fileLbl;
   document.getElementById('sb-file').title = cl ? `Account from ${ORIG_SAVE.name || 'the save you loaded'}; progress cloned from ${CLONE_NOTE.from}` : ORIG_SAVE.name || '';
   const st = document.getElementById('sb-state');
+  // Three states: not counted yet, nothing to save, and changes that are either already downloaded (same signature) or still unsaved.
   st.className = !pend ? 'sbclean' : !n ? 'sbclean' : UI.curSig === UI.dlSig ? 'sbok' : 'sbdirty';
   st.textContent = !pend ? 'Checking changes…' : !n ? 'No changes yet' : UI.curSig === UI.dlSig ? `✓ ${cl ? 'Cloned save' : `${n} change${n === 1 ? '' : 's'}`}, downloaded` : cl ? '● Cloned save, not downloaded yet' : `● ${n} unsaved change${n === 1 ? '' : 's'}`;
   // a clone differs from the loaded file almost everywhere, so its count says little; it stays in the tooltip
@@ -249,7 +261,7 @@ function uiStatusUpdate() {
 }
 // Safe wrapper for uiApplyDots.
 function uiStatusDots() { try { uiApplyDots(); } catch (e) { console.warn(e); } }
-// Warn before closing the tab when there are unsaved changes.
+// Warn before closing the tab when there are unsaved changes (everything is only in memory until downloaded).
 window.addEventListener('beforeunload', e => { if (uiDirty()) { e.preventDefault(); e.returnValue = ''; return ''; } });
 
 // ==== Changes drawer and Undo ====
@@ -274,12 +286,13 @@ function uiReverts() {
   if (!UI.origObj || !SAVE) return map;
   const A = UI.origObj, aS = A.soul || {}, bS = SAVE.soul || {}, back = fn => () => fn();
   const same = (x, y) => JSON.stringify(x) === JSON.stringify(y);
+  // Values are cloned when put back so the undone SAVE does not share objects with the UI.origObj snapshot, which must stay pristine for later undos.
   const clone = v => v === undefined ? undefined : JSON.parse(JSON.stringify(v));
   for (const k of new Set(Object.keys(aS).concat(Object.keys(bS)))) {
     if ([ 'chrs', 'chrslots', 'psskls', 'hubcustom', 'mstlvl', 'vip', 'modified', 'uid', 'crntcid' ].includes(k)) continue;
     const a = aS[k], b = bS[k];
     if ((a && typeof a === 'object') || (b && typeof b === 'object') || a === b) continue;
-    if (k === 'tdm_rank') continue; // follows the points
+    if (k === 'tdm_rank') continue; // follows the points (the tdm_point undo restores the rank too)
     map.set(`${REVIEW_SOUL_LABELS[k] || reviewKeyLabel(k)}: ${reviewVal(k, a)} → ${reviewVal(k, b)}`, back(() => {
       if (a === undefined) delete SAVE.soul[k]; else SAVE.soul[k] = a;
       if (k === 'tdm_point') { if (aS.tdm_rank === undefined) delete SAVE.soul.tdm_rank; else SAVE.soul.tdm_rank = aS.tdm_rank; }
@@ -305,7 +318,8 @@ function uiReverts() {
     SAVE.soul.mstlvl = arr(SAVE.soul.mstlvl); const i = SAVE.soul.mstlvl.findIndex(m => m.ptarmtp === id), oe = arr(aS.mstlvl).find(m => m.ptarmtp === id);
     if (oe) { if (i >= 0) SAVE.soul.mstlvl[i] = clone(oe); else SAVE.soul.mstlvl.push(clone(oe)); } else if (i >= 0) SAVE.soul.mstlvl.splice(i, 1);
   }));
-  // fighters (whole fighter put back as it was loaded); only when the name is unique among changed fighters
+  // fighters (whole fighter put back as it was loaded); only when the name is unique among changed fighters,
+  // because the review line is keyed by name and two same-named fighters would make the Undo button ambiguous
   const byA = new Map(arr(aS.chrs).map(c => [ c.cid, c ])), byB = new Map(arr(bS.chrs).map(c => [ c.cid, c ]));
   const changed = [];
   for (const [ cid, b ] of byB) { const a = byA.get(cid); if (a && !same(a, b)) changed.push(b); }
@@ -316,6 +330,7 @@ function uiReverts() {
   return map;
 }
 // uiAfterUndo(msg): re-run Save check, re-render everything, refresh the drawer and toast.
+// The Save check is re-run because an undo can add or clear problems.
 function uiAfterUndo(msg) { try { runSaveCheck(); } catch (e) { /* ignore */ } renderAll(); uiOpenChanges(true); toast(msg); }
 // uiCloseChanges(): hide the drawer.
 function uiCloseChanges() { const d = document.getElementById('chg-drawer'); if (d) d.style.display = 'none'; }
@@ -323,8 +338,10 @@ function uiCloseChanges() { const d = document.getElementById('chg-drawer'); if 
 function uiOpenChanges(keep) {
   const d = document.getElementById('chg-drawer'); if (!d) return;
   if (!SAVE || !RAW_SAV_ROOT) { toast('Load a save first', true); return; }
+  // Recomputed on every open (not read from the cache) so the drawer is never stale.
   let sections = null, why = '';
   try { sections = uiComputeChanges(); UI.changes = sections; UI.curSig = uiSig(sections); UI.inSig = uiInputSig(); uiStatusUpdate(); } catch (err) { why = err.message; }
+  // Cancel buttons (pending operations) are separate from Undo buttons (values): pending operations only exist at download time, so there is no SAVE value to put back.
   const rev = uiReverts(), pend = uiPending(), n = uiChangeCount(sections);
   const secHtml = sections === null ? `<div class="capNote">The change list couldn't be made (${UI_ESC(why)}).</div>`
     : !sections.length ? '<div class="capNote" style="margin:0;">No changes since you loaded this save.</div>'
@@ -346,6 +363,7 @@ function uiOpenChanges(keep) {
   document.getElementById('chg-dl').addEventListener('click', () => { uiCloseChanges(); reviewAndDownload('sav'); });
   const rs = document.getElementById('chg-reset');
   if (rs) rs.addEventListener('click', () => {
+    // Reloading discards everything, so it asks first.
     if (!confirm('Throw away every edit and load the file again?')) return;
     uiCloseChanges(); loadSaveFiles([ ORIG_SAVE.file ]);
   });
@@ -363,6 +381,7 @@ function uiOpenChanges(keep) {
 // ==== Keyboard shortcuts and help overlays ====
 // ---- 5. keyboard shortcuts ----------------------------------------------------
 // uiTyping(e): true when the key event comes from a text-entry element (single-key shortcuts are then ignored).
+// Otherwise typing a number containing "1" or "c" in a field would jump tabs.
 function uiTyping(e) { const t = e.target; return !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable); }
 // uiHelp(): show the keyboard shortcut table.
 function uiHelp() {
@@ -607,6 +626,7 @@ document.addEventListener('keydown', e => {
   const k = e.key;
   if ((e.ctrlKey || e.metaKey) && !e.altKey && (k === 's' || k === 'S')) {
     e.preventDefault();
+    // Goes through the download button so Ctrl+S always shows the review first (never writes a file directly).
     const b = document.getElementById('btn-download-sav'); if (b && !b.disabled) b.click(); else toast('Load a save first', true);
     return;
   }
@@ -616,6 +636,7 @@ document.addEventListener('keydown', e => {
     const d = document.getElementById('chg-drawer'); if (d && d.style.display !== 'none' && d.style.display !== '') { uiCloseChanges(); return; }
     return;
   }
+  // From here on only plain single-key shortcuts, and not while typing, so they never steal normal input or browser shortcuts.
   if (uiTyping(e) || e.ctrlKey || e.metaKey || e.altKey) return;
   if (document.getElementById('review-overlay') || document.getElementById('ui-overlay') || document.getElementById('ui-tour')) return;
   if (k === '/') { e.preventDefault(); document.getElementById('qs').focus(); return; }
@@ -641,15 +662,17 @@ function uiMaxRows() {
   for (const [ label, levelField, valueField ] of [ [ 'Kill Coins', 'safe_level', 'free_money' ], [ 'SPLithium', 'spirit_tank_level', 'spirit' ] ]) {
     const maxLvl = bankMaxLevel(levelField), cap = bankCapacityForLevel(maxLvl, levelField), lvl = s[levelField] != null ? s[levelField] : 1, held = s[valueField] || 0;
     if (lvl < maxLvl || held < cap) rows.push({ label: `${label}: bank level ${lvl} → ${maxLvl}, held ${num(held)} → ${num(cap)}`, on: true, apply() {
-      // Banks also store a *_limit field next to the level on some saves; keep it in step when present.
+      // Banks also store a *_limit field next to the level on some saves; keep it in step when present, so the stored limit does not contradict the new level.
       s[levelField] = maxLvl; const lk = levelField.replace('_level', '_limit'); if (lk in s) s[lk] = cap; s[valueField] = cap; } });
   }
   for (const [ f, label, cap ] of currencyFields()) {
     if (cap && (s[f] || 0) < cap) rows.push({ label: `${label}: ${num(s[f] || 0)} → ${num(cap)}`, on: true, apply() { s[f] = cap; } });
   }
   { const mx = tdmPointMax(); if ((s.tdm_point || 0) < mx) rows.push({ label: `TDM Points: ${num(s.tdm_point || 0)} → ${num(mx)}`, on: true, apply() { s.tdm_point = mx; const r = tdmRankForPoints(mx, AP); if (r) s.tdm_rank = r.id; } }); }
+  // Reuses the Mastery tab's own "max all" button so both places apply the same rules.
   rows.push({ label: 'Weapon Mastery: every category to its top level', on: true, apply() { const b = document.getElementById('mst-max-all'); if (b) b.click(); } });
   const nf = arr(s.chrs).filter(c => c && c.state !== 'ENEMY' && c.state !== 'DUMMY').length;
+  // Off by default: it rewrites every fighter, so the user has to opt in. Fighters in a run, dead or kidnapped are skipped (see the label).
   rows.push({ label: `All fighters (${nf}): Grade ${gradeMax()}, top Limit Break, all stats, slots, Death Bag and Rage. Fighters that are dead, kidnapped or in a run are skipped.`, on: false, apply() { maxAllFighters(); } });
   return rows;
 }
@@ -691,6 +714,7 @@ function uiRememberChar() { try { const c = SAVE && SAVE.soul && SAVE.soul.chrs[
 // ==== Range hints ====
 // ---- 8. range hints --------------------------------------------------------------------
 // Allowed-range text for specific inputs by element id.
+// null means "no fixed text, derive it from the element" (see uiHintFor).
 const UI_RANGE_TEXT = { 'rb-num': '1 to 999,999', 'chr-name': 'Up to 32 characters', 'stew-seed': 'Whole number 0 to 4,294,967,295, or blank', 'tdm-point': null };
 // uiHintFor(el) -> range text for an input, from the table above, data attributes or its min/max/step.
 function uiHintFor(el) {
@@ -710,6 +734,7 @@ function uiRangeHints() {
   document.querySelectorAll('#app input[type="number"], #app input[type="text"][data-currency], #app #chr-name, #app #stew-seed, #app #rb-num').forEach(el => {
     if (el.dataset.rngDone) return; el.dataset.rngDone = '1';
     const h = uiHintFor(el); if (!h) return;
+    // One input alone in its field gets a visible line; shared fields (several inputs) get a tooltip so the layout stays tidy.
     const host = el.closest('.field');
     if (host && host.querySelectorAll('input, select').length === 1 && !host.querySelector('.rng')) { const d = document.createElement('div'); d.className = 'rng'; d.textContent = 'Allowed: ' + h; host.appendChild(d); }
     else el.title = 'Allowed: ' + h + (el.title ? '. ' + el.title : '');
@@ -725,6 +750,7 @@ function uiApplyTheme(t) {
 }
 // Contrast helpers (WCAG-style): parse rgb(), relative luminance, ratio, effective background colour.
 // light theme: rarity and status colours are written inline for the dark theme; darken any that would be hard to read
+// (they cannot be fixed in CSS because the colours are inline styles).
 function uiRgb(c) { const m = String(c).match(/rgba?\(([^)]+)\)/); if (!m) return null; const v = m[1].split(',').map(x => parseFloat(x)); return { r: v[0], g: v[1], b: v[2], a: v.length > 3 ? v[3] : 1 }; }
 function uiLum(c) { const f = x => { x /= 255; return x <= .03928 ? x / 12.92 : Math.pow((x + .055) / 1.055, 2.4); }; return .2126 * f(c.r) + .7152 * f(c.g) + .0722 * f(c.b) + .05; }
 function uiRatio(a, b) { const x = uiLum(a), y = uiLum(b); return Math.max(x, y) / Math.min(x, y); }
@@ -735,12 +761,13 @@ function uiFixLight() {
   document.querySelectorAll('#app [style*="color"], #app .stewRarBadge').forEach(el => {
     if (el.dataset.lfix) return; el.dataset.lfix = '1';
     const fg = uiRgb(getComputedStyle(el).color), bg = uiBgOf(el); if (!fg || !bg) return;
+    // Darken in small steps (max 8) until the contrast is readable; stops early on dark backgrounds, where darkening would make it worse.
     let c = { r: fg.r, g: fg.g, b: fg.b }, n = 0;
     while (uiRatio(c, bg) < 4.5 && n < 8 && uiLum(bg) > .3) { c = { r: c.r * .8, g: c.g * .8, b: c.b * .8 }; n++; }
     if (n) el.style.color = `rgb(${Math.round(c.r)}, ${Math.round(c.g)}, ${Math.round(c.b)})`;
   });
 }
-// Debounce timer for uiFixLight.
+// Debounce timer for uiFixLight (renders fire many DOM changes in a row; one pass after they settle is enough).
 let UI_FIX_T = 0;
 // uiObserveTheme(): re-run uiFixLight after the app re-renders (light theme only).
 function uiObserveTheme() {
@@ -761,7 +788,7 @@ function uiDropFiles(files) {
     if (dbs.length) {
       const dt = new DataTransfer(); dt.items.add(dbs[0]);
       const inp = document.getElementById('file-masters'); inp.files = dt.files; inp.dispatchEvent(new Event('change', { bubbles: true }));
-      // wait for masters.db to finish before a save
+      // wait for masters.db to finish before a save (the save needs its data to be adapted)
       for (let i = 0; i < 400 && !AP; i++) await new Promise(r => setTimeout(r, 100));
     }
     if (saves.length) {
@@ -773,8 +800,10 @@ function uiDropFiles(files) {
 }
 // uiWireDrop(): window-level drag handlers with a depth counter to show/hide the drop veil.
 function uiWireDrop() {
+  // dragenter/dragleave fire again for every child element crossed, so a counter is needed to know when the drag truly left the page.
   let depth = 0;
   const veil = document.getElementById('drop-veil');
+  // Only react to file drags, so dragging text or links around the page does not show the veil.
   const hasFiles = e => e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
   window.addEventListener('dragenter', e => { if (!hasFiles(e)) return; e.preventDefault(); depth++; veil.style.display = 'flex'; });
   window.addEventListener('dragover', e => { if (!hasFiles(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
@@ -797,8 +826,10 @@ function uiAfterRender() {
     document.getElementById('btn-max-safe').addEventListener('click', uiOpenMax);
   }
   if (RAW_SAV_ROOT && UI.origRoot !== RAW_SAV_ROOT) {
+    // Baseline for Undo: a deep copy, taken once per loaded save, before any edit can happen.
     UI.origRoot = RAW_SAV_ROOT; UI.origObj = JSON.parse(JSON.stringify(SAVE)); UI.dlSig = null; UI.changes = null; UI.curSig = '';
     uiSyncTabs();
+    // restoring guards against re-entry: restoring the tab/fighter re-renders, which would call this hook again.
     if (!UI.restoring) { UI.restoring = true; try { uiRestoreLast(); } finally { UI.restoring = false; } }
   }
   uiRememberChar();

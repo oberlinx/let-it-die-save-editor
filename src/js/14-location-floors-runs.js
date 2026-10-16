@@ -20,6 +20,7 @@
 // past: earlier rolls for the same target (newest last, at most ROLL_HISTORY), so "Previous roll" can bring one back.
 let FLOOR_MOVE = { root: null, target: '', armed: false, msg: '', reroll: true, rolls: null, past: [] };
 // flmSync(): reset FLOOR_MOVE when a different save is loaded.
+// (a stale target or reroll from another file would otherwise be applied to the wrong save)
 function flmSync() { if (FLOOR_MOVE.root !== RAW_SAV_ROOT) FLOOR_MOVE = { root: RAW_SAV_ROOT, target: '', armed: false, msg: '', reroll: true, rolls: null, past: [] }; }
 // How many earlier rolls the floor move and the boss floor lock each keep for "Previous roll".
 const ROLL_HISTORY = 10;
@@ -57,16 +58,20 @@ function flmGroup(grp) {
 // floor/map/arena/gen-type (rows with refareaid '-' always match). Uses Math.random(), so each call can differ.
 // Returns null when no table row applies.
 function flmDraw(flrid, areaid, refareaid, type) {
+  // rows with refareaid '-' are the floor's general table and apply to any arena, so they are mixed in with the arena's own rows
   const rows = arr(AP && AP.hvnBossDrops).filter(r => r.flrid === flrid && r.areaid === areaid && r.type === type && (r.refareaid === refareaid || r.refareaid === '-'));
   const pool = [];
   for (const r of rows) {
     const items = flmGroup(r.grp);
+    // a group with no items is skipped so it can't take weight in the draw and then have nothing to give
     if (items.length) pool.push({ w: Number(r.freq) || 0, items });
   }
   const total = pool.reduce((n, p) => n + p.w, 0);
   if (!total) return null;
+  // two steps like the game: pick a group row by freq, then an item uniformly inside the group, so rerolled rewards have the same odds as natural ones
   let x = Math.random() * total;
   for (const p of pool) { if ((x -= p.w) < 0) return p.items[Math.floor(Math.random() * p.items.length)].itemId || p.items[0].itemid; }
+  // only reached if rounding leaves x just above 0 after the loop; take the last group rather than return nothing
   return pool[pool.length - 1].items[0].itemId;
 }
 // soul.hvntrinfo holds the boss floor you're on plus the next three boss floors of the route (what the
@@ -158,10 +163,12 @@ function flmCurRef() {
 function flmRefix(target) {
   const out = {};
   for (const u of flmUpcoming(target)) {
+    // no arena table for the floor (!ok.size) means there is nothing to check against, so the entry is left alone
     const ok = flmAllowed(u.id), ref = u.entry && u.entry.refareaid;
     if (!ref || !ok.size || ok.has(ref)) continue;
     const rows = arr(AP && AP.hvnBossAreas).filter(r => r.flrid === u.id), k = blkKind(ref).kind;
     let pool = rows.filter(r => blkKind(r.refareaid).kind === k);
+    // no arena of the same kind on the new floor: fall back to a mid-boss, then to anything the floor offers, so the floor always gets a valid arena
     if (!pool.length) pool = rows.filter(r => blkKind(r.refareaid).kind === 'mboss');
     if (!pool.length) pool = rows;
     const r = blkPick(pool), entry = r && blkEntry(u.floor, r.refareaid, Number(u.entry.is_rare) === 1);
@@ -176,16 +183,20 @@ function flmShiftHvn(root, from, to, refix) {
   const list = root && root.soul && root.soul.hvntrinfo;
   if (!Array.isArray(list)) return;
   const L = flmRouteBoss(from), iFrom = L.findIndex(f => f.id === from), iTo = L.findIndex(f => f.id === to);
+  // slot shifting needs both floors on the route list; if one isn't, fall back to renaming the current entry only
   if (iFrom < 0 || iTo < 0) { flmRewrite(list, from, to, 0); return; }
   const d = iTo - iFrom;
+  // walk backwards so splicing out an entry doesn't skip the next one
   for (let i = list.length - 1; i >= 0; i--) {
     const e = list[i], j = e ? L.findIndex(f => f.id === e.flrid) : -1;
     if (j < 0) continue;
     const n = L[j + d];
+    // pushed past the end of the route: no boss floor exists there, so the entry has nowhere to go
     if (!n) { list.splice(i, 1); continue; }
     e.flrid = n.id;
     e.areaid = n.areaid;
     const fx = refix && refix[n.id];
+    // copied so the saved entry doesn't share objects with the cached roll (the roll is reused across builds)
     if (fx) Object.assign(e, JSON.parse(JSON.stringify(fx.entry)));
   }
 }
@@ -198,6 +209,7 @@ function flmUpcoming(target) {
   const out = [];
   for (const e of arr(cur.hvntrinfo)) {
     const j = L.findIndex(f => f.id === e.flrid);
+    // only floors after the current one are 'upcoming'; the current floor's own entry is handled separately in flmRoll
     if (j <= iFrom) continue;
     const n = L[j + iTo - iFrom];
     if (n) out.push({ oldId: e.flrid, id: n.id, floor: n, entry: e });
@@ -211,6 +223,7 @@ function flmUpcoming(target) {
 function flmRoll(target) {
   const root = RAW_SAV_ROOT, cur = root && root.soul, t = hvnFloor(target);
   if (!cur || !t) return null;
+  // ref = the arena the floor will have AFTER the move (a pit may be turned into its twin), so rewards are drawn from the right table
   const items = flmItemsOf(root), ref = flmSwapRef(target) || flmRefArea(root, cur.flrid);
   const out = { boxes: [], boss: null, featured: null, upcoming: [], refix: flmRefix(target) };
   const hCur = arr(cur.hvntrinfo).find(e => e && e.flrid === cur.flrid);
@@ -239,6 +252,8 @@ function flmRoll(target) {
   // left as it is rather than drawn from a table it doesn't come from.
   const popType = {};
   const pt0 = root.floor && root.floor.pop && root.floor.pop.trbox;
+  // Box types are looked up in the floor's spawn list too because the floor's trbox entries and the spawn list name the
+  // extra-large box differently (TBTP_EXLARGE vs TBTP_SPXL). Only this floor's spawn points (keys 'flrid-...') count.
   if (pt0 && typeof pt0 === 'object') for (const k of Object.keys(pt0)) if (k.startsWith(cur.flrid + '-')) for (const e of arr(pt0[k])) if (e && e.pntid) popType[e.pntid] = e.type;
   for (const b of arr(root.floor && root.floor.trbox)) {
     if (!b || b.rwdtype !== 'TBRWD_ITEM') continue;
@@ -246,6 +261,7 @@ function flmRoll(target) {
     if (!inst) continue;
     const isFeatured = b.type === 'TBTP_EXLARGE' || b.type === 'TBTP_SPXL' || popType[b.pntid] === 'TBTP_SPXL';
     if (isFeatured) {
+      // no hvntrinfo entry for the floor: derive the featured reward from the box itself so it can still be rerolled
       if (!out.featured) { const to = flmDraw(t.id, t.areaid, flmSwapRef(target) || (hCur && hCur.refareaid) || ref, hCur && Number(hCur.is_rare) ? 'PTGENTP_TRBOX_SPXL_RARE' : 'PTGENTP_SPXL'); if (to) out.featured = { from: (hCur && hCur.rwdid) || inst.itemid, to }; }
       if (out.featured) out.boxes.push({ eid: b.contentid, pntid: b.pntid, from: inst.itemid, to: out.featured.to, gentype: 'featured' });
     } else if (b.type === 'TBTP_LARGE') {
@@ -265,6 +281,7 @@ function flmRoll(target) {
   for (const m of arr(root.floor && root.floor.mboss && root.floor.mboss.mbss)) {
     if (!m || !m.eitemid) continue;
     const inst = items.find(i => i.eid === m.eitemid);
+    // '-' = the floor's general table: a mid-boss drop is not tied to a boss arena (blkEntry draws it the same way)
     const to = inst && flmDraw(t.id, t.areaid, '-', 'PTGENTP_' + m.type);
     if (to) out.boss = { eid: m.eitemid, from: inst.itemid, to, gentype: 'PTGENTP_' + m.type };
   }
@@ -298,18 +315,21 @@ function flmApplyRolls(root, from, to) {
   if (!r) return;
   const items = flmItemsOf(root);
   const swaps = r.boxes.concat(r.boss ? [ r.boss ] : []);
+  // the item instance holds what the chest or boss really gives, so changing its itemid changes the reward
   for (const s of swaps) { const inst = items.find(i => i.eid === s.eid); if (inst) inst.itemid = s.to; }
   // the floor's spawn list names the box contents by item id
   const pt = root.floor && root.floor.pop && root.floor.pop.trbox;
   if (pt && typeof pt === 'object') for (const k of Object.keys(pt)) if (k.startsWith(to + '-')) for (const e of arr(pt[k])) { const s = r.boxes.find(b => b.pntid === e.pntid); if (s && e.contentid === s.from) e.contentid = s.to; }
   // the boss floor's reward list (already renamed to the new floor)
   const h = arr(root.soul && root.soul.hvntrinfo).find(x => x && x.flrid === to);
+  // only swap when the entry still holds the value we rolled from, so an entry changed since the roll (e.g. re-picked) is left alone
   if (h && r.featured && h.rwdid === r.featured.from) h.rwdid = r.featured.to;
   // the next boss floors (already shifted): featured reward and box / boss rewards
   for (const u of arr(r.upcoming)) {
     const e = arr(root.soul && root.soul.hvntrinfo).find(x => x && x.flrid === u.id);
     if (!e) continue;
     if (u.featured && e.rwdid === u.featured.from) e.rwdid = u.featured.to;
+    // matched by position AND gen type so a reward is only swapped in the slot it was rolled for
     arr(e.rwds).forEach((w, i) => { const n = u.rwds[i]; if (n && w && w.rwdid === n.from && w.gentype === n.gentype) w.rwdid = n.to; });
   }
   if (h) {
@@ -389,6 +409,8 @@ function flmPitConvert(root, to, fromRef, toRef) {
   if (cf && typeof cf === 'object') for (const k of Object.keys(cf)) if (k.startsWith(to + '_') && k.endsWith('_' + fromRef)) { cf[k.slice(0, -fromRef.length) + toRef] = cf[k]; delete cf[k]; }
   // spawn points of the enemies on the floor (floor.zako.flrzks, floor.pop.xzk / xzmb, zombie.flrzmbs):
   // only entries for this floor (or with no floor id) are renamed
+  // depth-limited so a malformed save can't send this into endless recursion; rlg and closed_area_flags are skipped
+  // because they were handled above (or hold keys, not spawn points)
   const walk = (n, d) => {
     if (!n || typeof n !== 'object' || d > 8) return;
     if (!Array.isArray(n) && n.flrid && n.flrid !== to) return;
@@ -426,6 +448,7 @@ function flmRewrite(node, from, to, depth) {
     for (const v of node) flmRewrite(v, from, to, depth + 1);
     return;
   }
+  // done before the rename loop below so renamed 'from' keys can't collide with leftovers from an earlier visit to 'to'
   for (const k of Object.keys(node)) if (keyIs(k, to)) delete node[k];
   for (const k of Object.keys(node)) {
     const v = node[k];
@@ -438,6 +461,7 @@ function flmRewrite(node, from, to, depth) {
 // ids under root.floor (the Stamp Rally is held aside because it has no floor ids), sets mid-boss level, applies rerolls, converts pit twin,
 // and renames the floor in the fighters' bloodnium_result. Returns root.
 function applyFloorMove(root) {
+  // nothing to do for a stale request (a different save was loaded since), no target, or a move onto the same floor
   if (FLOOR_MOVE.root !== RAW_SAV_ROOT || !FLOOR_MOVE.target || !root || !root.soul) return root;
   const from = root.soul.flrid, to = FLOOR_MOVE.target;
   const f = hvnFloor(to);
@@ -451,6 +475,7 @@ function applyFloorMove(root) {
     delete root.floor.stamp;           // the Stamp Rally has no floor ids; keep it out of the rewrite
     flmRewrite(root.floor, from, to, 0);
     if (stamp !== undefined) root.floor.stamp = stamp;
+    // the boss waiting on the floor was spawned for the old floor, so give it the new floor's level
     const lvl = Number(f.mbslvlmin) || 0;
     if (lvl && root.floor.mboss && Array.isArray(root.floor.mboss.mbss)) for (const m of root.floor.mboss.mbss) if (m && m.lvl != null) m.lvl = lvl;
   }
@@ -460,6 +485,7 @@ function applyFloorMove(root) {
   // the fighter's run summary names the deepest floor of this run
   const chrs = root.soul.chr && root.soul.chr.chrs;
   for (const list of chrs && typeof chrs === 'object' ? Object.values(chrs) : []) for (const c of arr(list)) {
+    // bloodnium_result is JSON text in a string; matching the id with its quotes renames whole floor ids only, not part of another id
     if (c && typeof c.bloodnium_result === 'string' && c.bloodnium_result.includes('"' + from + '"')) c.bloodnium_result = c.bloodnium_result.split('"' + from + '"').join('"' + to + '"');
   }
   return root;
@@ -550,6 +576,7 @@ function blkKind(refareaid) {
 // blkPick(rows): weighted random pick by freq; first row if all weights are 0; null for empty.
 function blkPick(rows) {
   const total = rows.reduce((n, r) => n + (Number(r.freq) || 0), 0);
+  // all weights 0 would make the roll impossible; take the first row so a table of 0-freq rows still gives an answer
   if (!total) return rows.length ? rows[0] : null;
   let x = Math.random() * total;
   for (const r of rows) if ((x -= Number(r.freq) || 0) < 0) return r;
@@ -639,6 +666,7 @@ function blkPlan() {
     if (!old && !BOSS_LOCK.extend) continue;
     const r = blkPick(want.length ? want : rows);
     // a floor the game hasn't planned yet gets a rare (yellow on the map) Legendary Chest as often as the game gives one
+    // an entry that is replaced keeps its is_rare flag so the Legendary Chest colour on the map doesn't change
     items.push({ floor: f, old, entry: r && blkEntry(f, r.refareaid, old ? Number(old.is_rare) === 1 : Math.random() < HVN_RARE_CHANCE, BOSS_LOCK.rewards), fallback, redrawn: !!keep });
   }
   return { from, mode: BOSS_LOCK.mode, which: BOSS_LOCK.which, extend: BOSS_LOCK.extend, rewards: BOSS_LOCK.rewards, redraw: BOSS_LOCK.redraw, items };
@@ -670,12 +698,14 @@ function applyBossLock(root) {
     return root;
   }
   const p = blkPlanFresh();
+  // a plan made for another floor (e.g. a floor move that did not apply) must not be written onto this one
   if (!p || p.from !== root.soul.flrid) return root;
   flmOwnHvn(root);
   if (!Array.isArray(root.soul.hvntrinfo)) root.soul.hvntrinfo = [];
   const list = root.soul.hvntrinfo;
   for (const it of p.items) {
     if (!it.entry) continue;
+    // cloned so the cached plan is not shared with the download root (the build can run many times from one plan)
     const e = JSON.parse(JSON.stringify(it.entry)), i = list.findIndex(x => x && x.flrid === it.floor.id);
     if (i >= 0) list[i] = e; else if (p.extend) list.push(e);
   }
@@ -819,6 +849,7 @@ function applyRunEnd(root) {
   // blank the run position fields (only those present, so absent keys are not invented)
   for (const k of [ 'pause', 'stgid', 'flrid', 'areaid', 'unitid', 'relief_point' ]) if (k in s) s[k] = '';
   for (const k of [ 'replica_money', 'replica_spirit', 'replica_bloodnium_point' ]) if (k in s) s[k] = -1;
+  // the game's emptied hvntrinfo is an object here, not an array (applyBossLock copes with both)
   if ('hvntrinfo' in s) s.hvntrinfo = {};
   if ('force_shutdown_counts' in root) root.force_shutdown_counts = {};
   const c = info && info.chr;
@@ -969,6 +1000,7 @@ function applyRewind(root) {
   s.flrid = ri.flrid; s.areaid = ri.areaid; s.unitid = 'D0'; s.relief_point = 'D0';
   s.pause = 'HEAVEN_PAUSE';
   s.pause_x = ri.pos.x; s.pause_y = ri.pos.y; s.pause_z = ri.pos.z; s.pause_yaw = ri.pos.yaw;
+  // only reset if present, so keys the save doesn't have are not invented
   if ('pause_pitch' in s) s.pause_pitch = 0;
   if ('pause_roll' in s) s.pause_roll = 0;
   return root;
@@ -1089,6 +1121,7 @@ ${pitNote}
   // wire the move form: select, two-step apply (arm then confirm), reroll toggles and undo
   const tsel = document.getElementById('loc-target');
   let pick = FLOOR_MOVE.target;
+  // Two-step apply (arm, then confirm) so one stray click doesn't stage a move.
   if (tsel) tsel.addEventListener('change', () => { pick = tsel.value; FLOOR_MOVE.armed = false; });
   const ap = document.getElementById('loc-apply');
   if (ap) ap.addEventListener('click', () => {
@@ -1097,6 +1130,7 @@ ${pitNote}
     if (!FLOOR_MOVE.armed) { FLOOR_MOVE.armed = true; renderLocation(); document.getElementById('loc-target').value = pick; return; }
     FLOOR_MOVE.armed = false;
     FLOOR_MOVE.target = pick;
+    // rolled once at confirm and cached, so the table on screen and the file downloaded show the same rewards
     FLOOR_MOVE.rolls = flmRoll(pick);
     FLOOR_MOVE.past = [];
     FLOOR_MOVE.msg = `Set to move to ${hvnFloorLabel(hvnFloor(pick))}. Download the .sav to apply it.`;

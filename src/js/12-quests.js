@@ -21,6 +21,7 @@ function questData() {
   const soul = SAVE && SAVE.soul;
   const q = soul && soul.quest;
   if (!q || typeof q !== 'object' || Array.isArray(q)) return null;
+  // normalised in place so every caller can rely on .find/.length/.push without checking the shape first
   if (!Array.isArray(q.ord)) q.ord = [];
   if (!Array.isArray(q.user)) q.user = [];
   return q;
@@ -35,6 +36,8 @@ function questOrdForSave() {
 }
 // questSyncState(): re-snapshot the original quest data whenever a different save has been loaded.
 function questSyncState() {
+  // keyed on the RAW_SAV_ROOT object so loading another save starts a fresh snapshot, while re-renders of the
+  // same save keep the first one. The snapshot is a deep copy so later in-place edits can't change what 'Undo all' restores.
   if (QUEST_STATE.root !== RAW_SAV_ROOT) {
     const q = questData();
     QUEST_STATE = { root: RAW_SAV_ROOT, original: q ? JSON.parse(JSON.stringify({ ord: q.ord, user: q.user })) : null, lastMsg: '' };
@@ -45,6 +48,7 @@ function questSyncState() {
 let QUEST_META = null;
 // questMeta(): {byId, pText, pDesc, rwd, cats} - quests by qid, name/description parameter arrays (indexed by `no`), rewards by rwdid, category names by catid.
 function questMeta() {
+  // rebuilt only when masters.db (AP) was replaced; the lookups are used for every row on every render
   if (QUEST_META && QUEST_META.ap === AP) return QUEST_META;
   const byId = {}, pText = {}, pDesc = {}, rwd = {}, cats = {};
   for (const m of arr(AP && AP.quests)) byId[m.qid] = m;
@@ -117,6 +121,7 @@ function questLocked(q, qid) {
     const u = questUserEntry(q, m.cond_quest_id);
     if (!u || !(u.clrcnt > 0)) why.push(`clear "${questName(m.cond_quest_id)}" first`);
   }
+  // if the save has no playlog we can't tell how deep the player got, so the floor condition is not enforced
   const maxFlr = SAVE.playlog && SAVE.playlog[0] && SAVE.playlog[0].base && SAVE.playlog[0].base.max_floor;
   if (m.cond_flr > 0 && maxFlr != null && maxFlr < m.cond_flr) why.push(`needs floor ${m.cond_flr} (you've reached ${maxFlr})`);
   return why.join('; ');
@@ -238,6 +243,7 @@ function wireQuestEvents(q) {
   host.querySelectorAll('[data-q-tab]').forEach(t => t.addEventListener('click', () => { QUEST_FORM.open = t.dataset.qTab; QUEST_STATE.lastMsg = ''; renderQuests(); }));
   const undo = document.getElementById('q-undo-all');
   if (undo) undo.addEventListener('click', () => {
+    // copy again so the stored snapshot stays pristine and Undo can be used repeatedly
     const o = JSON.parse(JSON.stringify(QUEST_STATE.original));
     q.ord = o.ord;
     q.user = o.user;
@@ -246,12 +252,14 @@ function wireQuestEvents(q) {
   host.querySelectorAll('[data-q-prg]').forEach(inp => inp.addEventListener('change', () => {
     const o = q.ord[Number(inp.dataset.qPrg)];
     let v = parseInt(inp.value, 10) || 0;
+    // progress can't exceed the goal; if a quest has no goal (prgmax <= 0) there is nothing to cap against
     v = Math.min(Math.max(v, 0), o.prgmax > 0 ? o.prgmax : v);
     o.prgnow = v;
     redo(`${questName(o.qid)}: progress ${v} / ${o.prgmax}`);
   }));
   host.querySelectorAll('[data-q-complete]').forEach(b => b.addEventListener('click', () => {
     const o = q.ord[Number(b.dataset.qComplete)];
+    // a quest with no goal value still needs a nonzero progress to count as done
     o.prgnow = o.prgmax > 0 ? o.prgmax : 1;
     redo(`Completed "${questName(o.qid)}". Collect the reward in game.`);
   }));
@@ -267,7 +275,10 @@ function wireQuestEvents(q) {
     const qid = b.dataset.qTake;
     const m = questMeta().byId[qid];
     const u = questUserEntry(q, qid);
+    // only quests the game already lists in history can be taken, and never the same one twice
     if (!m || !u || q.ord.some(o => o.qid === qid)) return;
+    // the entry mirrors the game's own {qid, prgnow, prgmax, timer, expire, term, rwd, order} shape; the first
+    // clear pays first_rwd (when the quest has one), later clears pay the normal rwd. Timer fields start at 0.
     q.ord.push({
       qid,
       prgnow: 0,
@@ -276,7 +287,7 @@ function wireQuestEvents(q) {
       expire: 0,
       term: 0,
       rwd: u.clrcnt > 0 ? m.rwd : (m.first_rwd || m.rwd),
-      order: Math.floor(Date.now() / 1000)
+      order: Math.floor(Date.now() / 1000) // unix seconds; presumably the game uses it to order taken quests
     });
     u.ordcnt = (u.ordcnt || 0) + 1;
     redo(`Took "${questName(qid)}". It is now in your current quests.`);
@@ -285,7 +296,8 @@ function wireQuestEvents(q) {
   if (hf) hf.addEventListener('change', () => { QUEST_FORM.histFilter = hf.value; renderQuests(); });
   const hs = document.getElementById('q-hist-search');
   if (hs) hs.addEventListener('change', () => { QUEST_FORM.histSearch = hs.value; renderQuests(); });
-  // setClr(u,v): set times-cleared (capped) and keep times-taken >= cleared
+  // setClr(u,v): set times-cleared (capped) and keep times-taken >= cleared, since a quest can't be cleared
+  // more times than it was taken (and the Quests list would look inconsistent)
   const setClr = (u, v) => {
     u.clrcnt = Math.min(Math.max(0, v), 999999);
     if (u.clrcnt > 0 && !((u.ordcnt || 0) >= u.clrcnt)) u.ordcnt = u.clrcnt;
@@ -310,6 +322,7 @@ function wireQuestEvents(q) {
     const s = norm(QUEST_FORM.histSearch), f = QUEST_FORM.histFilter;
     let n = 0;
     for (const u of q.user) {
+      // already-cleared quests are skipped so their existing counts are not overwritten with 1
       if (u.clrcnt > 0) continue;
       const nm = questName(u.qid);
       const pass = (f === 'all' || (f === 'taken' && u.ordcnt > 0) || (f === 'never' && !(u.ordcnt > 0))) && (!s || norm(nm).includes(s) || norm(u.qid).includes(s));

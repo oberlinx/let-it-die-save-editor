@@ -9,13 +9,15 @@ function blockSkillDecals() {
 const DECAL_CAP = 99;
 
 // Which decals the Decals tab and the fighter decal search offer. PlayStation-only decals
-// (platform 1) are hidden unless "Include PS-only" is ticked. Ones the save already has stay
+// (platform 1) are hidden unless "Include PS-only" is ticked, because PS-only content must not show up
+// in PC saves by default. Ones the save already has stay
 // listed (tagged) so they can be seen and cleared. Decals with unlock ____SERVICE_IN are
 // normal: a genuine, unedited PSN save holds 11 of them with counts from 3 to 16.
-// Decal list filter state: includePs shows PlayStation-only decals (platform 1).
+// Decal list filter state: includePs shows PlayStation-only decals (platform 1). Kept at file level so the
+// choice survives the tab being re-rendered.
 const DECAL_FORM = { includePs: false };
-// Decal name, with '(Premium)' when it is the premium version (most names exist in both).
-// Decal name with (Premium) when it is the premium version -- most names exist as both.
+// Decal name, with '(Premium)' when it is the premium version. Most names exist in both versions, so the
+// suffix is what tells the two rows apart in the list.
 function decalNameP(id) {
   const r = SKL_INDEX[id];
   if (!r) return id;
@@ -97,7 +99,8 @@ function blockSkillDecals() {
 }
 
 // Wire the Decals tab: list, filter, per-decal count, Max, bulk apply, PS-only toggle. Edits go straight
-// to SAVE.soul.psskls ({id, lvl, cnt, is_checked}); counts are clamped to 0..DECAL_CAP.
+// to SAVE.soul.psskls ({id, lvl, cnt, is_checked}); counts are clamped to 0..DECAL_CAP so a typo can't
+// write a count above what the game is known to store.
 function wireSkillDecals() {
   const soul = SAVE.soul;
   soul.psskls = arr(soul.psskls);
@@ -105,7 +108,8 @@ function wireSkillDecals() {
   function entryFor(id) {
     return soul.psskls.find(s => s.id === id);
   }
-  // set a decal's count (clamped), creating the entry if missing; returns the clamped value
+  // set a decal's count (clamped), creating the entry if missing; returns the clamped value so the input
+  // box can be rewritten with what was really stored
   function setCnt(id, v) {
     v = Math.min(Math.max(v, 0), DECAL_CAP);
     let e = entryFor(id);
@@ -126,15 +130,18 @@ function wireSkillDecals() {
   // re-render the visible list; keeps decals already owned even if otherwise hidden (PS-only)
   function renderList(filter) {
     currentFilter = filter;
+    // owned ones stay visible even when PS-only is unticked, so they can still be seen and cleared
     const owned = id => { const e = entryFor(id); return !!(e && e.cnt > 0); };
     const all = Object.values(SKL_INDEX).filter(s => decalOffered(s.id) || owned(s.id)).sort((a, b) => a.name.localeCompare(b.name));
     const shown = all.filter(s => !filter || norm(s.name).includes(norm(filter)));
     document.getElementById('decal-count').textContent = `${shown.length} shown / ${all.length} total`;
+    // On a PlayStation save PS-only decals are normal, so only warn for PC saves.
     const odd = isPsSave() ? [] : soul.psskls.filter(e => e.cnt > 0 && !decalOffered(e.id));
     const oddEl = document.getElementById('decal-odd');
     if (oddEl) oddEl.innerHTML = odd.length ? `<div class="warnNote" style="margin:6px 0;">This save holds ${odd.length} PS-only decal${odd.length === 1 ? '' : 's'}, marked below. A normal PC game doesn't have them (fine on PlayStation or a modded PC game). <button class="subtle" id="decal-clear-odd">Set them to 0</button></div>` : '';
     document.getElementById('decal-list').innerHTML = shown.map(s => {
       const e = entryFor(s.id);
+      // clamp the displayed value too, in case the save holds a count above DECAL_CAP
       const cnt = e ? Math.min(Math.max(e.cnt || 0, 0), DECAL_CAP) : 0;
       const tag = decalOddTag(s.id);
       return `<div class="listRow"><a class="diconLink" href="${MODEL_VIEWER_URL}decals.html#${encodeURIComponent(s.id)}" target="_blank" rel="noopener" title="Open in the decal catalogue (needs internet)">${decalIcon(s.id, 32)}</a><div class="name">${escapeHtml(s.name)}${Number(s.premium) ? ' <span class="badge" style="margin-left:4px;" title="Kept when the fighter dies or the decal is taken off">Premium</span>' : ''}${tag ? ` <span class="badge" style="margin-left:4px;">${tag}</span>` : ''}</div><div class="id">${s.id}</div>\n        <input type="number" class="decal-cnt" data-decal="${s.id}" min="0" max="${DECAL_CAP}" value="${cnt}" style="width:55px;">\n        <button class="subtle" data-decal-max="${s.id}">Max</button>\n      </div>`;
@@ -148,6 +155,7 @@ function wireSkillDecals() {
     });
     const clr = document.getElementById('decal-clear-odd');
     if (clr) clr.addEventListener('click', () => {
+      // set to 0 rather than remove the entry, so nothing else on the record is lost
       for (const e of odd) e.cnt = 0;
       renderList(currentFilter);
       toast(`Set ${odd.length} decal${odd.length === 1 ? '' : 's'} to 0`);
@@ -167,6 +175,7 @@ function wireSkillDecals() {
     toast(e.target.checked ? `PS-only decals now listed${isPsSave() ? '' : ' (only for PC games modded to have them)'}` : 'PS-only decals hidden');
   });
   document.getElementById('decal-max-all').addEventListener('click', () => {
+    // only decals currently offered, so Max all never adds hidden PS-only decals to a PC save
     for (const s of Object.values(SKL_INDEX)) if (decalOffered(s.id)) setCnt(s.id, DECAL_CAP);
     renderList(currentFilter);
     toast(`All decals set to ${DECAL_CAP}`);
@@ -177,6 +186,7 @@ function wireSkillDecals() {
       v = DECAL_CAP;
       toast(`Clamped to ${DECAL_CAP}`);
     }
+    // 'filtered' means what the list shows now: offered decals matching the name filter
     const all = Object.values(SKL_INDEX).filter(s => decalOffered(s.id) && (!currentFilter || norm(s.name).includes(norm(currentFilter))));
     for (const s of all) setCnt(s.id, v);
     renderList(currentFilter);

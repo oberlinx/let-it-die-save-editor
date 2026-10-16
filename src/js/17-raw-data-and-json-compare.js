@@ -8,12 +8,14 @@ const RAW_PAGE = 200, RAW_HITS = 300;
 // path, page, search query/hits and the key to highlight.
 let RAW_VIEW = { root: null, src: 'loaded', ed: null, edAt: 0, path: [], page: 0, q: '', hits: null, hitsMore: false, mark: null };
 // Cache of serialized sizes for container nodes (WeakMap so it never keeps data alive).
+// Sizes are computed by stringifying, which is slow on big objects, and the same nodes are redrawn on every page/click, so cache them.
 const RAW_SIZE = new WeakMap();
 // Reset the viewer state for the current root.
 function rawReset() { RAW_VIEW = { root: RAW_SAV_ROOT, src: 'loaded', ed: null, edAt: 0, path: [], page: 0, q: '', hits: null, hitsMore: false, mark: null }; }
 // The data being browsed: the loaded raw root, or a cached deep copy of buildDownloadRoot() ("with your edits").
 function rawData() {
   if (RAW_VIEW.src !== 'edited') return RAW_SAV_ROOT;
+  // Deep copy first, then mask: luckyMaskCopy must never touch the live download root, and the copy is cached so browsing doesn't rebuild the whole save on every click (Refresh rebuilds).
   if (!RAW_VIEW.ed) { RAW_VIEW.ed = luckyMaskCopy(JSON.parse(JSON.stringify(buildDownloadRoot()))); RAW_VIEW.edAt = Date.now(); }
   return RAW_VIEW.ed;
 }
@@ -39,6 +41,7 @@ function rawBytes(n) { return n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : 
 // Kind label: null, list, object, or typeof.
 function rawKind(v) { return v === null ? 'null' : Array.isArray(v) ? 'list' : typeof v === 'object' ? 'object' : typeof v; }
 // If a number looks like a unix time (key name plus plausible range), return an HTML date hint, else ''.
+// Heuristic only: the key-name test keeps ordinary numbers (counts, ids) from being shown as dates; the range is roughly 1998 to 2039.
 function rawDateHint(k, v) {
   return typeof v === 'number' && v > 9e8 && v < 2.2e9 && /time|created|modified|expire|date|login|start|end|_at$|limit/i.test(String(k)) ? ` <span class="id">(${escapeHtml(dtFmt(v))})</span>` : '';
 }
@@ -55,11 +58,13 @@ function rawLeafHtml(k, v) {
 // and stops after RAW_HITS matches.
 function rawSearch(data, q) {
   const needle = q.toLowerCase(), hits = [];
+  // Iterative with an explicit stack because a save is deeply nested and huge; recursion could overflow and be slow.
   const stack = [ [ data, [] ] ];
   let more = false;
   while (stack.length) {
     const [ v, path ] = stack.pop();
     const keys = Array.isArray(v) ? v.map((_, i) => i) : Object.keys(v);
+    // Pushed in reverse so that popping from the stack visits keys in their original order.
     for (let i = keys.length - 1; i >= 0; i--) {
       const k = keys[i], c = v[k], p = path.concat([ k ]);
       const keyHit = typeof k === 'string' && k.toLowerCase().includes(needle);
@@ -83,10 +88,13 @@ function renderRaw() {
   const host = document.getElementById('raw-body');
   if (!host) return;
   if (!RAW_SAV_ROOT) { host.innerHTML = '<div class="capNote" style="margin-top:0;">Load a .sav to see its raw data.</div>'; return; }
+  // A newly loaded save must not inherit the old path, page or cached edited copy.
   if (RAW_VIEW.root !== RAW_SAV_ROOT) rawReset();
   let data;
+  // Building the edited save runs the download transforms, which can throw on a bad edit; show the error instead of a blank tab.
   try { data = rawData(); } catch (err) { host.innerHTML = `<div class="capNote">Couldn't build the save with your edits (${escapeHtml(err.message)}).</div>`; return; }
   let node = rawAt(data, RAW_VIEW.path);
+  // The path may no longer exist (other source selected or save reloaded), so fall back to the root.
   if (node === undefined || node === null || typeof node !== 'object') { RAW_VIEW.path = []; RAW_VIEW.page = 0; node = data; }
   const P = RAW_VIEW.path, isArr = Array.isArray(node);
   const keys = isArr ? node.map((_, i) => i) : Object.keys(node);
@@ -135,6 +143,7 @@ function rawCopy(text, what) {
 // Wire raw viewer navigation (breadcrumbs, drill-down, hits, paging, search, downloads).
 function wireRawUi(data, node, keys) {
   const $ = id => document.getElementById(id);
+  // With a search hit, jump to the page that holds the key and highlight its row.
   const go = (path, mark) => { RAW_VIEW.path = path; RAW_VIEW.mark = mark == null ? null : mark; RAW_VIEW.page = 0; if (mark != null) { const n = rawAt(data, path); const ks = Array.isArray(n) ? n.map((_, i) => i) : Object.keys(n || {}); RAW_VIEW.page = Math.max(0, Math.floor(ks.indexOf(mark) / RAW_PAGE)); } renderRaw(); };
   document.querySelectorAll('[data-raw-go]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); go(RAW_VIEW.path.slice(0, Number(a.dataset.rawGo))); }));
   document.querySelectorAll('[data-raw-into]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); go(RAW_VIEW.path.concat([ JSON.parse(a.dataset.rawInto) ])); }));
@@ -142,16 +151,19 @@ function wireRawUi(data, node, keys) {
   document.querySelectorAll('[data-raw-hit]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); const p = RAW_VIEW.hits[Number(a.dataset.rawHit)]; go(p.slice(0, -1), p[p.length - 1]); }));
   $('raw-copy-path').addEventListener('click', () => rawCopy(rawPathText(RAW_VIEW.path), 'the path'));
   $('raw-dl').addEventListener('click', () => {
+    // Path is turned into a safe, short file name.
     const name = 'raw_' + (RAW_VIEW.path.length ? RAW_VIEW.path.map(String).join('_').replace(/[^\w.-]+/g, '-').slice(0, 80) : 'save') + '.json';
     triggerDownload(JSON.stringify(node, null, 2), name, 'application/json');
   });
   if ($('raw-prev')) $('raw-prev').addEventListener('click', () => { RAW_VIEW.page--; RAW_VIEW.mark = null; renderRaw(); });
   if ($('raw-next')) $('raw-next').addEventListener('click', () => { RAW_VIEW.page++; RAW_VIEW.mark = null; renderRaw(); });
+  // Drop the cached edited copy and hits: they belong to the previous source.
   $('raw-src').addEventListener('change', e => { RAW_VIEW.src = e.target.value; RAW_VIEW.ed = null; RAW_VIEW.hits = null; RAW_VIEW.mark = null; renderRaw(); });
   if ($('raw-refresh')) $('raw-refresh').addEventListener('click', () => { RAW_VIEW.ed = null; RAW_VIEW.hits = null; renderRaw(); });
   const find = () => {
     const q = $('raw-q').value.trim();
     RAW_VIEW.q = q;
+    // One character matches nearly everything and would just hit the cap.
     if (q.length < 2) { RAW_VIEW.hits = null; toast('Type at least 2 characters to search', true); renderRaw(); return; }
     const r = rawSearch(data, q); RAW_VIEW.hits = r.hits; RAW_VIEW.hitsMore = r.more; renderRaw();
   };
@@ -168,8 +180,10 @@ function wireRaw() { if (activeTab === 'raw') renderRaw(); }
 // isn't reported as changed. Changes are grouped by the object they're in and shown side by side, a line per field,
 // changed lines highlighted and unchanged ones folded. Search runs over both saves. Nothing here changes the save.
 // Field names used to match records between two lists, in priority order (needs a unique non-empty value in both).
+// Order matters: the first field that is unique in both lists wins, so the most specific record ids come before generic ones like 'id' and 'slot'.
 const JD_IDS = [ 'eid', 'cid', 'eptid', 'emsrid', 'ebstid', 'eitemid', 'pid', 'qid', 'sklid', 'cstmid', 'id', 'flrid', 'ptid', 'itemId', 'slot' ];
 // Max differences recorded, and page sizes for the differences list and the side-by-side object view.
+// Caps keep the tab responsive and the page small on saves that differ everywhere.
 const JD_MAX = 20000, JD_PAGE = 60, JD_VIEW_PAGE = 200;
 // State of the JSON compare tab (sources, loaded file, diff result, filters, current view and search hits).
 let JD = { root: null, aSrc: 'loaded', bSrc: 'file', fileRoot: null, fileName: '', edA: null, res: null, busy: false, msg: '', sec: '', kind: 'all', filter: '', page: 0, view: null, q: '', hits: null };
@@ -177,6 +191,7 @@ let JD = { root: null, aSrc: 'loaded', bSrc: 'file', fileRoot: null, fileName: '
 function jdSync() { if (JD.root !== RAW_SAV_ROOT) Object.assign(JD, { root: RAW_SAV_ROOT, edA: null, res: null, view: null, hits: null, page: 0, msg: '' }); }
 // "with your edits" is the save exactly as Download would write it now (built once per Compare)
 // Cached deep copy of the save as Download would write it.
+// Cached so left/right both set to 'edited' don't build the download root twice; cleared when sources change or Compare is pressed.
 function jdEdited() { if (!JD.edA) JD.edA = luckyMaskCopy(JSON.parse(JSON.stringify(buildDownloadRoot()))); return JD.edA; }
 // Resolve compare side 'A' or 'B' to a root object (edited, loaded, Compare-tab save or loaded file).
 function jdSide(which) {
@@ -199,6 +214,7 @@ async function jdLoadFile(file) {
 const jdIsObj = v => v !== null && typeof v === 'object' && !Array.isArray(v);
 // the field that identifies each record of two lists, when every record has a unique one
 // Pick the id field that uniquely identifies every record in both lists, or null (then lists compare by position).
+// Matching by id keeps a list the game merely reordered from showing as all changed; duplicates or missing ids make an id unusable, so those lists fall back to position.
 function jdIdKey(a, b) {
   if (!a.length && !b.length) return null;
   if (!a.every(jdIsObj) || !b.every(jdIsObj)) return null;
@@ -227,10 +243,12 @@ function jdDiff(A, B) {
   // record one difference, respecting the cap
   const note = (g, ka, kb, kind) => { if (out.n >= JD_MAX) { out.more = true; return; } out.n++; out.counts[kind]++; g.rows.push({ ka, kb, kind }); };
   // recursive walk: differences are recorded on the parent container's group
+  // pathA and pathB are tracked separately because a record can sit at a different index on each side when matched by id.
   const walk = (a, b, pathA, pathB) => {
     if (out.more) return;
     if (Array.isArray(a) && Array.isArray(b)) {
       const idKey = jdIdKey(a, b);
+      // Group is created lazily so containers with no differences add nothing to the result.
       let g = null; const G = () => g || (g = group(pathA, pathB, a, b, idKey));
       if (idKey) {
         const ib = new Map(b.map((x, i) => [ x[idKey], i ])), ia = new Map(a.map((x, i) => [ x[idKey], i ]));
@@ -241,6 +259,7 @@ function jdDiff(A, B) {
         for (let i = 0; i < n && !out.more; i++) {
           if (i >= b.length) note(G(), i, null, 'removed');
           else if (i >= a.length) note(G(), null, i, 'added');
+          // Positional lists: report the line itself when its type or value differs, otherwise look inside.
           else if (jdLeafDiff(a[i], b[i])) note(G(), i, i, 'changed');
           else walk(a[i], b[i], pathA.concat([ i ]), pathB.concat([ i ]));
         }
@@ -264,6 +283,7 @@ function jdDiff(A, B) {
 // a difference to report on this line itself (rather than inside it): different primitives, or different kinds
 // A difference to report on this line itself (rather than inside it): different primitives or kinds.
 function jdLeafDiff(x, y) {
+  // NaN is treated as equal to NaN, since NaN !== NaN would flag the same value as a change.
   const ox = x !== null && typeof x === 'object', oy = y !== null && typeof y === 'object';
   if (ox && oy) return Array.isArray(x) !== Array.isArray(y);
   if (ox !== oy) return true;
@@ -303,10 +323,12 @@ function jdGroupHtml(g) {
   if (!rows.length) return '';
   let body = '';
   if (g.arr) {
+    // Lists can have thousands of changes; show 200 and say how many are left.
     body = rows.slice(0, 200).map(r => jdLineHtml(kindCls[r.kind], r.ka, r.kb, g.pa, g.pb, g.idKey, false, nested)).join('');
     if (rows.length > 200) body += `<tr class="jdGap"><td colspan="2">… ${rows.length - 200} more in this list</td></tr>`;
   } else {
     const keys = [ ...new Set(Object.keys(g.pa || {}).concat(Object.keys(g.pb || {}))) ];
+    // Show two unchanged lines around each change for context and fold the rest, since objects can have thousands of fields.
     const hit = new Map(rows.map(r => [ r.ka != null ? r.ka : r.kb, r ]));
     const show = new Set();
     keys.forEach((k, i) => { if (hit.has(k)) for (let d = -2; d <= 2; d++) if (keys[i + d] != null) show.add(i + d); });
@@ -334,6 +356,7 @@ function jdGroupsShown() {
 // Side-by-side browser of the whole object at JD.view.path (paged).
 function jdViewHtml() {
   const v = JD.view, A = jdSide('A'), B = jdSide('B');
+  // B may be missing (no second save yet), so only A is guaranteed.
   const pa = rawAt(A, v.path), pb = B ? rawAt(B, v.path) : undefined;
   const isC = x => x !== null && typeof x === 'object';
   const crumbs = [ `<span class="jdLink" data-jd-go="[]">save</span>` ].concat(v.path.map((k, i) => `<span class="jdLink" data-jd-go="${escapeHtml(JSON.stringify(v.path.slice(0, i + 1)))}">${escapeHtml(typeof k === 'number' ? `[${k}]` : k)}</span>`)).join(' › ');
@@ -342,6 +365,7 @@ function jdViewHtml() {
   const arrMode = Array.isArray(pa) || Array.isArray(pb);
   const keys = arrMode ? Array.from({ length: Math.max(isC(pa) ? pa.length : 0, isC(pb) ? pb.length : 0) }, (_, i) => i) : [ ...new Set(Object.keys(isC(pa) ? pa : {}).concat(Object.keys(isC(pb) ? pb : {}))) ];
   const pages = Math.max(1, Math.ceil(keys.length / JD_VIEW_PAGE));
+  // Jump to the page holding the marked line.
   if (v.mark != null) { const at = keys.indexOf(v.mark); if (at >= 0) v.page = Math.floor(at / JD_VIEW_PAGE); }
   v.page = Math.min(Math.max(0, v.page || 0), pages - 1);
   const nested = { pathA: v.path, pathB: v.path };
@@ -428,12 +452,15 @@ function wireJdUi() {
     const B = jdSide('B');
     if (!B) { JD.msg = 'Load a second save first, or pick one of this save\'s versions on the right.'; renderJd(); return; }
     JD.busy = true; JD.msg = ''; renderJd();
+    // Short delay lets the browser paint 'Comparing...' before the heavy diff blocks the page.
     setTimeout(() => {
+      // Rebuild the edited copy so the comparison reflects edits made since the last run.
       try { JD.edA = null; const t = Date.now(); JD.res = jdDiff(jdSide('A'), jdSide('B')); JD.msg = `Compared in ${((Date.now() - t) / 1000).toFixed(1)} s.`; }
       catch (err) { JD.res = null; JD.msg = 'The comparison failed: ' + err.message; }
       JD.busy = false; JD.view = null; JD.page = 0; renderJd();
     }, 30);
   });
+  // Searches both sides with the same rules as the Raw data tab.
   const doSearch = () => {
     const q = ($('jd-q').value || '').trim();
     JD.q = q;
@@ -475,6 +502,7 @@ function blockStats() {
   </section>`;
 }
 // Render read-only playlog sections as tables (nested/JSON-string values are skipped) plus the top 15 decals.
+// Nested objects and JSON-in-a-string values are skipped as they don't fit a simple two-column table.
 function renderStats() {
   const host = document.getElementById('stats-body');
   if (!host || !RAW_SAV_ROOT) return;

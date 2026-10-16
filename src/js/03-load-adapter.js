@@ -18,14 +18,17 @@ function adaptFullDumpToLegacyShape(rawRoot) {
   // Without this, edits to SAVE (mastery, research, defense, quests...) also changed RAW_SAV_ROOT,
   // which is meant to stay exactly as loaded (Raw data view, JSON compare, change detection).
   const root = JSON.parse(JSON.stringify(rawRoot));
+  // The game writes empty collections as either {} or []; JSON.stringify would not remember which, so it is recorded now to put them back on download (keeps the diff small).
   // Shapes are recorded against the raw root itself: restoreEmptyShapes only runs when RAW_EMPTY_SHAPES.root
   // is the RAW_SAV_ROOT being downloaded.
   RAW_EMPTY_SHAPES = captureEmptyShapes(rawRoot);
+  // The save can hold data for more than one uid; only the main account's rows are shown and edited.
   // main account uid: items are keyed by it throughout the save
   const mainUid = String(root.soul && root.soul.uid || root.user && root.user.uid || '');
   const chrTable = root.soul && root.soul.chr || {};
   const chrs = arr(chrTable.chrs && chrTable.chrs[mainUid]);
   const chrslots = arr(chrTable.slots && chrTable.slots[mainUid]);
+  // Maps by id/eid turn the joins below into O(1) lookups instead of a scan per fighter slot.
   // index auxiliary tables by their keys so fighters can be joined cheaply
   const bodyuserByCid = {};
   for (const b of arr(root.bodyuser && root.bodyuser[mainUid])) bodyuserByCid[b.cid] = b;
@@ -50,9 +53,11 @@ function adaptFullDumpToLegacyShape(rawRoot) {
     const pspts = [], eqpts = [], psmsrs = [], psbsts = [], psitems = [];
     const armslots = {};
     for (const s of slots) {
+      // Requires the part instance to exist so a dangling eid in a slot cannot create a quick slot pointing at nothing.
       if (s.type === 0 && s.eid && s.arm_slot != null && s.arm_slot >= 0 && s.arm_slot <= 5 && ptInstByEid[s.eid]) armslots[s.arm_slot] = s.eid;
       if (s.type === 0 && s.eid) {
         const inst = ptInstByEid[s.eid];
+        // Slots whose instance row is missing are skipped rather than invented; the raw row is still preserved by the merge on download.
         if (inst) pspts.push({
           eptid: inst.eid,
           ptid: inst.ptid,
@@ -73,6 +78,7 @@ function adaptFullDumpToLegacyShape(rawRoot) {
         if (inst) psmsrs.push({
           emsrid: inst.eid,
           msrid: inst.msrid,
+          // Number() because state may be stored as a string; the UI only needs raw vs grilled, so a boolean is easier to bind to a checkbox.
           cooked: Number(inst.state) === 1,
           gettime: inst.gettime
         });
@@ -103,6 +109,7 @@ function adaptFullDumpToLegacyShape(rawRoot) {
       armslots: armslots
     };
   }
+  // Level and stats live in the separate bodyuser table in the real save; copying them onto the fighter lets the UI edit one object. Falls back to any legacy fields on the chr row when there is no bodyuser row.
   // merge each fighter record with its bodyuser row (levels/stats/bonuses) and inventory
   const mergedChrs = chrs.map(c => {
     const bu = bodyuserByCid[c.cid];
@@ -111,6 +118,7 @@ function adaptFullDumpToLegacyShape(rawRoot) {
       sklid: e.sklid,
       slot: e.slot
     }));
+    // Object.assign into a new object so the fighter row from the copied root is not mutated in place.
     return Object.assign({}, c, {
       lvl: bu ? bu.lvl : c.lvl,
       rage: bu ? bu.rage || 0 : c.rage || 0,
@@ -160,6 +168,7 @@ function adaptFullDumpToLegacyShape(rawRoot) {
     eitemid: r.type === 3 ? r.eid : '-1'
   }));
   // Storage Box contents are the same instance tables, distinguished by owner === 'COIN_LOCKER'
+  // (so one filter per table is needed; the save has no separate list for them)
   const clPts = arr(root.part && root.part.pts && root.part.pts[mainUid]).filter(p => p.owner === 'COIN_LOCKER').map(p => ({
     eptid: p.eid,
     ptid: p.ptid,
@@ -194,6 +203,7 @@ function adaptFullDumpToLegacyShape(rawRoot) {
   for (const a of Array.isArray(root.abduct) ? root.abduct : []) abductByAbid[a.abid] = a;
   const prison = prisonRaw.map(p => {
     const abduct = p.abid ? abductByAbid[p.abid] : null;
+    // Defaults come first in Object.assign so any real fields on the prison row override them.
     return Object.assign({
       state: abduct ? abduct.state || 'CONCILIATE' : 'EMPTY',
       abduct: abduct || null
@@ -210,6 +220,7 @@ function adaptFullDumpToLegacyShape(rawRoot) {
     automatic_renewal: vipSrc.automatic_renewal || 0,
     friendship: vipSrc.friendship || 0
   };
+  // Dropped containers are exposed under friendlier top-level names (chrs, presents, cl, ...). On download the raw root is cloned and these are merged back, so dropping them here does not lose data from the file.
   // build the editor-side soul: drop game-only containers that were re-homed above
   const soul = Object.assign({}, root.soul, {
     chrs: mergedChrs,

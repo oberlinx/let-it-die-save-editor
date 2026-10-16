@@ -43,6 +43,7 @@ function buildObtainableSet() {
   for (const p of AP.pts || []) {
     const hasBlueprint = blueprintIds.has('ITMP_' + p.id.slice(3));
     const reachableByUpgrade = nextptidTargets.has(p.id);
+    // a part with no resolvable display name is treated as a placeholder row, so it is never offered
     const hasName = !!resolveName(p.name);
     if ((hasBlueprint || reachableByUpgrade) && hasName) obtainable.add(p.id);
   }
@@ -56,6 +57,7 @@ function isPartObtainable(ptid) {
 }
 
 // Part ids that must never be bulk-researched (known-bad / unreleased data in masters.db).
+// Kept as an explicit list because nothing in the part record itself marks these as unusable.
 const RESEARCH_BLOCKLIST = new Set([ 'PT_ARM_WP023_001' ]);
 
 // Memoized set for isResearchAllowed (built lazily).
@@ -133,6 +135,7 @@ function prevPtid(ptid) {
 
 // blueprintableParts(): every part (from PT_INDEX) that appears in master_part_research, as shallow copies
 // with an extra flag obtainable = !hasNoBlueprint(id). The Research tab lists exactly these.
+// Shallow copies are returned so adding the obtainable flag does not modify the shared master records in PT_INDEX.
 function blueprintableParts() {
   const researchable = new Set((AP.partresearch || []).map(p => p.ptid));
   return Object.values(PT_INDEX).filter(p => researchable.has(p.id)).map(p => Object.assign({}, p, {
@@ -143,6 +146,8 @@ function blueprintableParts() {
 // sortByChainOrder(list): orders part records so each upgrade chain stays together, in chain order
 // (via chainOf), with chains sorted alphabetically by their root part's name. Only ids present in list are kept.
 function sortByChainOrder(list) {
+  // chains are built from the full chain (chainOf) but trimmed to ids in list, so a filtered list keeps
+  // chain order without pulling in parts the filter hid; `seen` makes sure each chain is emitted once
   const listIds = new Set(list.map(p => p.id));
   const chainGroups = new Map;
   const seen = new Set;
@@ -183,7 +188,9 @@ let RESEARCH_GAME_SKIP = new Map();
 // returns the Map(ptid -> level) of PS-only (platform 1) parts it would have had to add a marker for.
 // Non-PC saves return an empty Map. No side effects on the real save.
 function researchGameSkips(research) {
+  // only PC saves can legitimately lack PS-only markers; on other platforms a missing marker is a real problem
   if (savePlatform(RAW_SAV_ROOT) !== 'PC') return new Map();
+  // deep copy because normalizeResearchMarkers mutates its input and this is only a dry run
   const found = [];
   normalizeResearchMarkers(JSON.parse(JSON.stringify(arr(research))), found, new Map());
   return new Map(found.filter(([ ptid ]) => PT_INDEX[ptid] && Number(PT_INDEX[ptid].platform) === 1));
@@ -234,6 +241,7 @@ const RESEARCH_KNOWN_TYPES = new Set([ 'MAP', '' ]);
 // researchKnownSnapshot(research): Map(ptid -> deep-copied MAP/'' entries) from the given research array.
 function researchKnownSnapshot(research) {
   const out = new Map();
+  // deep copies so later edits to SAVE.user_research can't change the snapshot used to restore entries
   for (const r of arr(research)) if (r && RESEARCH_KNOWN_TYPES.has(r.research_type)) (out.get(r.ptid) || out.set(r.ptid, []).get(r.ptid)).push(JSON.parse(JSON.stringify(r)));
   return out;
 }
@@ -289,6 +297,7 @@ function normalizeResearchMarkers(research, found, skip) {
       const starter = top === 1 && (ptid === 'PT_ARM_WP005_001' || ptid === 'PT_ARM_WP006_001');
       want.set(ptid, { ptid, lvl: top + 1, research_type: 'LEVELUP', receive_type: 'UNKNOWN', is_announced: 0, is_checked: 1, before_ptid: starter ? '' : ptid, before_lvl: starter ? 0 : top });
     } else if (top === 0) {
+      // not researched at all: it only gets a REMODEL marker once the previous part in its chain is maxed
       const prev = prevPtid(ptid);
       if (prev && researchable.has(prev) && PT_INDEX[prev]) {
         const pmax = maxPartLevel(PT_INDEX[prev]) || 1;
@@ -297,6 +306,7 @@ function normalizeResearchMarkers(research, found, skip) {
       }
       // chain roots with nothing researched: leave whatever the game wrote
     } else {
+      // maxed (top >= max): the game keeps no marker on a finished ladder
       want.set(ptid, null);
     }
   }
@@ -308,6 +318,7 @@ function normalizeResearchMarkers(research, found, skip) {
     const same = w ? cur.length === 1 && cur[0].research_type === w.research_type && cur[0].lvl === w.lvl : cur.length === 0;
     if (same) continue;
     if (w && w.research_type === 'LEVELUP' && !cur.length) {
+      // expected-missing marker for a PS-only part on a PC save: don't invent it and don't report it
       if (skip.get(ptid) === w.lvl - 1) continue;
       if (found) found.push([ ptid, w.lvl - 1 ]);
     }
@@ -348,7 +359,8 @@ function wireBlueprints() {
   // blueprints every new game starts with (master_part_research.is_initial)
   const INITIAL_PTIDS = new Set((AP.partresearch || []).filter(r => Number(r.is_initial) === 1).map(r => r.ptid));
   if (!INITIAL_PTIDS.size) for (const id of STARTER_PTIDS) INITIAL_PTIDS.add(id);
-  // removeEntry(ptid): delete every research entry (any type) for the part
+  // removeEntry(ptid): delete every research entry (any type) for the part. Also marks markers as stale so
+  // the next render rebuilds them (the LEVELUP/REMODEL entries depend on the FINISHED ladders).
   function removeEntry(ptid) {
     researchDirty = true;
     for (let i = research.length - 1; i >= 0; i--) {
@@ -438,6 +450,7 @@ function wireBlueprints() {
     }
     let parts = blueprintableParts().filter(p => !filter || norm(p.name).includes(norm(filter)));
     document.getElementById('bp-count').textContent = `${parts.length} shown / ${blueprintableParts().length} total`;
+    // computed from the unfiltered list so the warning stays visible no matter what the name filter is
     const allSuspicious = blueprintableParts().filter(p => p.obtainable === false && isUnlocked(p.id));
     document.getElementById('bp-suspicious-summary').textContent = allSuspicious.length ? `⚠ ${allSuspicious.length} researched part${allSuspicious.length === 1 ? '' : 's'} with no blueprint: ${allSuspicious.map(p => p.name).join(', ')}` : '';
     const bySlot = {};
@@ -470,6 +483,7 @@ function wireBlueprints() {
     });
     document.querySelectorAll('[data-bp]').forEach(cb => {
       cb.addEventListener('change', () => {
+        // research feeds the Stamp Rally totals, so snapshot them first and let adjustStampFromResearch apply the difference
         const before = stampTotalsNow();
         setUnlocked(cb.dataset.bp, cb.checked);
         adjustStampFromResearch(before);
@@ -516,6 +530,7 @@ function wireBlueprints() {
           writeLadder(id, maxPartLevel(PT_INDEX[id]));
           done.add(id);
         }
+        // stop at the part itself: later parts in the chain are not researched by this click
         if (id === p.id) break;
       }
     }
@@ -555,6 +570,7 @@ function wireBlueprints() {
   // Remove all: wipe research, then restore the starting blueprints at level 1
   document.getElementById('bp-remove-all').addEventListener('click', () => {
     const before = stampTotalsNow();
+    // emptied in place (not reassigned) because `research` is the SAVE.user_research array itself
     research.length = 0;
     // every new game starts with these researched; keep them at their first level
     for (const id of INITIAL_PTIDS) if (PT_INDEX[id]) writeLadder(id, 1);

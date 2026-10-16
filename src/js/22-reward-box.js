@@ -32,7 +32,8 @@ const PRESENT_TYPES = [ {
 // Currently selected reward type in the Reward Box add form.
 let rbType = 'MONEY';
 
-// HTML for the Reward Box tab. The game blocks leaving the Waiting Room once the box reaches PRESENT_BOX_LIMIT (default 50) items.
+// HTML for the Reward Box tab. The game blocks leaving the Waiting Room once the box reaches PRESENT_BOX_LIMIT (default 50) items,
+// so the limit is read from masters.db and a warning is shown instead of letting users silently lock themselves in.
 function blockRewardBox() {
   const presents = SAVE.presents;
   const n = presents.length;
@@ -43,6 +44,7 @@ function blockRewardBox() {
 }
 
 // One Reward Box row (HTML). Resolves a readable description per type; weapon/armor rewards get a level dropdown (val1 = raw level).
+// Saves may use either the generic type (ITEM, PT) or the item's own type (ITTP_*, PTTP_*), so both are accepted.
 function rewardRow(p, i) {
   let detail = `${p.num != null ? p.num.toLocaleString() : ''}`;
   let levelInput = '';
@@ -56,7 +58,8 @@ function rewardRow(p, i) {
     const rec = SKL_INDEX[p.val0];
     detail = `${rec ? rec.name : p.val0} x${p.num || 1}`;
   } else if ((p.type === 'PT' || [ 'PTTP_ARM', 'PTTP_HEAD', 'PTTP_BODY', 'PTTP_LEGS' ].includes(p.type)) && p.val0) {
-    // a weapon / armor reward: val1 = the part's level in save units ('0' = base), shown as in-game +n
+    // a weapon / armor reward: val1 = the part's level in save units ('0' = base), shown as in-game +n.
+    // The level is clamped to the part's real range so the dropdown always has a valid selected option.
     const rec = PT_INDEX[p.val0];
     detail = `${rec ? rec.name : p.val0}${rec ? ' (' + (rec.type === 'PTTP_ARM' ? 'weapon' : 'armor') + ')' : ''} x${p.num || 1}`;
     if (rec) {
@@ -66,6 +69,7 @@ function rewardRow(p, i) {
       levelInput = `<select class="rb-pt-level" data-rb-idx="${i}" title="Level (in-game +n)" style="width:80px; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:4px 6px; font-family:var(--mono);">${opts}</select>`;
     }
   }
+  // Lost Bags hold their contents as the reward itself, so a bag is labelled by rarity plus what is inside
   const bagLbl = lostBagPresentLabel(p);
   if (bagLbl) detail = `${cmpPresentLabel(p)}`;
   return `<div class="listRow"><div class="name">${bagLbl ? `${bagChip(String(p.kind).replace('MYSTERYBAG_', ''))} Lost Bag → ` : escapeHtml(presentTypeLabel(p)) + ': '}${bagLbl ? '' : p.val0 ? anyIcon(p.val0, 26).replace('class="dicon"', 'class="dicon lead"') : currencyIcon(p.type, '', 26)}${escapeHtml(detail)}</div><div class="id">${escapeHtml(p.from || '?')}${p.kind ? ' · ' + p.kind : ''}</div>${levelInput}<button class="subtle" data-rb-remove="${i}">✕</button></div>`;
@@ -75,6 +79,7 @@ function rewardRow(p, i) {
 function rbAddFormHtml() {
   if (rbType === 'LOSTBAG') {
     const pool = bagPool(RB_FORM.bagRarity);
+    // drop a remembered pick that doesn't exist in the newly chosen rarity's pool
     if (RB_FORM.bagContent && !pool.some(r => r.id === RB_FORM.bagContent)) RB_FORM.bagContent = '';
     return `<div class="grid">
       <div class="field"><label>Rarity</label><select id="rb-bag-rarity" style="width:100%; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);">${BAG_RARITIES.map(r => `<option value="${r}" ${r === RB_FORM.bagRarity ? 'selected' : ''}>${bagTitle(r)}</option>`).join('')}</select></div>
@@ -113,6 +118,7 @@ function wireRewardBox() {
     inp.addEventListener('change', () => {
       const p = SAVE.presents[parseInt(inp.dataset.rbIdx, 10)];
       const raw = parseInt(inp.value, 10) || 1;
+      // the save writes the base level as '0', not '1'; and changing level changes max durability, so refill the part
       p.val1 = String(raw > 1 ? raw : 0);
       presentPartFull(p);
       const rec = PT_INDEX[p.val0];
@@ -124,7 +130,8 @@ function wireRewardBox() {
 
 // A Lost Bag in the Reward Box, as the game writes it when a bag is earned in Tokyo Death Metro:
 // from TDM_REWARD, kind MYSTERYBAG_<RARITY>, and the bag's contents as the reward itself
-// (type = the item's own itemtype for items, e.g. ITTP_MATERIAL; val0 = the id).
+// (type = the item's own itemtype for items, e.g. ITTP_MATERIAL; val0 = the id). Copying this shape means the
+// game treats the bag like one it handed out itself.
 // Push a Lost Bag reward for the given rarity and bag-content generator id. Returns the new present, or null.
 function addLostBagPresent(rarity, genId) {
   const g = bagGenIndex()[genId], rw = g && rwdRow(g.rwdid);
@@ -135,7 +142,7 @@ function addLostBagPresent(rarity, genId) {
     val0: rw.val0 || '', val1: String(rw.val1 || 0), val2: String(rw.val2 || 0), val3: '0', val4: '0'
   };
   SAVE.presents.push(p);
-  presentPartFull(p);   // a weapon/armor inside arrives full
+  presentPartFull(p);   // a weapon/armor inside arrives full (the game's '0' would mean empty, see presentPartFull)
   return p;
 }
 // Label like 'Rare Lost Bag' if the present is a MYSTERYBAG_* kind, else ''.
@@ -175,12 +182,14 @@ function renderRbForm() {
       if (rbType === 'BP') {
         const unrevealed = !!(document.getElementById('rb-add-unrevealed') || {}).checked;
         // the game gives items (blueprints included) their own itemtype, e.g. ITTP_RMAP -- not 'ITEM'
+        // (a plain 'ITEM' type is flagged by presentProblems)
         const id = rec.id + (unrevealed ? 'U' : '');
         addPresent(boxGameType('ITEM', id), num, id);
       } else if (rbType === 'ITEM') {
         addPresent(boxGameType('ITEM', rec.id), num, rec.id);
       } else if (rbType === 'PT') {
         const raw = rawFromDisplay(rec, (document.getElementById('rb-add-lvl') || {}).value);
+        // type is the part's own slot type (see the note above); 0 stands for the base level
         addPresent(rec.type || 'PTTP_ARM', num, rec.id, raw > 1 ? raw : 0);
         presentPartFull(SAVE.presents[SAVE.presents.length - 1]);
         renderAll();
@@ -199,7 +208,8 @@ function renderRbForm() {
 // Reward Box entries exactly as the game writes them (from a real save):
 // {pid: lowercase UUID, from, type, created, num, fromval, kind, val0,
 //  val1..val4 as STRINGS}. Older editor versions added a "uid" field, a
-// non-UUID pid and numeric val1..val4; normalizePresents() repairs those.
+// non-UUID pid and numeric val1..val4; normalizePresents() repairs those, so the box never holds entries
+// in a shape the game didn't write.
 // Matches the lowercase UUID format of present ids.
 const PRESENT_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 // Generate a UUID for new presents/instances (crypto.randomUUID, with a manual v4 fallback).
@@ -207,6 +217,7 @@ function presentUuid() {
   if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
   const b = new Uint8Array(16);
   (window.crypto || {}).getRandomValues ? crypto.getRandomValues(b) : b.forEach((_, i) => { b[i] = Math.floor(Math.random() * 256); });
+  // set the version (4) and variant bits so the result is a valid v4 UUID
   b[6] = b[6] & 15 | 64; b[8] = b[8] & 63 | 128;
   const x = [ ...b ].map(v => v.toString(16).padStart(2, '0')).join('');
   return `${x.slice(0, 8)}-${x.slice(8, 12)}-${x.slice(12, 16)}-${x.slice(16, 20)}-${x.slice(20)}`;
@@ -225,6 +236,7 @@ function presentProblems(p) {
   return bad;
 }
 // Repair malformed presents in place (adds pid, stringifies val fields, uses the item's own itemtype); returns how many were fixed.
+// Rebuilt as a fresh object so stray fields like the old 'uid' are dropped; 'LOGIN' is the source the editor uses for its own rewards.
 function normalizePresents(list) {
   let n = 0;
   for (let i = 0; i < list.length; i++) {
@@ -264,7 +276,7 @@ function presentPartFull(p) {
   p.val2 = want[0]; p.val3 = want[1]; p.val4 = want[2];
   return changed;
 }
-// True when a part reward has no durability (the game's '0' means empty).
+// True when a part reward has no durability (the game's '0' means empty), i.e. it would arrive unusable.
 function presentPartEmpty(p) { return isPartPresent(p) && !(Number(p.val2) > 0); }
 
 // What the Reward Box offers: only things the PC game can hand over.
@@ -272,7 +284,8 @@ function presentPartEmpty(p) { return isPartPresent(p) && !(Number(p.val2) > 0);
 // with no in-game name, PlayStation-only parts, blueprints and decals (unless "Include PS-only"
 // is ticked, for modded PC games), and the unnamed ITTP_WOOD item. Returns why, or '' when it's fine.
 // Why a pick is not offered ('' when fine). kind: 'pt' | 'bp' | 'skl' | 'item'. ignorePs skips the PS-only check.
-// Excludes placeholders, unnamed entries and (unless Include PS-only is ticked) PlayStation-only content.
+// Excludes placeholders, unnamed entries and (unless Include PS-only is ticked) PlayStation-only content,
+// so the box only offers things a normal PC game can actually show and use.
 function rewardUnfit(kind, id, ignorePs) {
   const psOk = ignorePs || RB_FORM.includePs;
   if (kind === 'pt') {
@@ -288,6 +301,7 @@ function rewardUnfit(kind, id, ignorePs) {
     if (!it || it.itemtype !== 'ITTP_RMAP') return 'not a blueprint';
     const pt = PT_INDEX['PT_' + String(id).replace(/^ITMP_/, '').replace(/U$/, '')];
     if (!pt) return 'blueprint for an unknown part';
+    // blueprints on the blocklist exist in masters.db but the game doesn't use them
     if (BLUEPRINT_BLOCKLIST.has(pt.id)) return 'blueprint the game doesn\'t use';
     if (Number(pt.platform) === 1 && !psOk) return 'PlayStation-only';
     return '';
@@ -330,7 +344,7 @@ function presentTypeLabel(p) {
 
 // Read the quantity input (min 1, capped at RB_NUM_MAX with a toast) and write the clamped value back.
 function rbNumValue() { const el = document.getElementById('rb-num'); let v = parseInt(el && el.value, 10); if (!(v > 0)) v = 1; if (v > RB_NUM_MAX) { v = RB_NUM_MAX; toast(`Quantity limited to ${RB_NUM_MAX.toLocaleString()}`); } if (el) el.value = v; return v; }
-// Upper bound for a reward quantity.
+// Upper bound for a reward quantity. Keeps typos from producing absurd counts.
 const RB_NUM_MAX = 999999;
 // Append a present in the game's format (lowercase UUID pid, from 'LOGIN', string val1..val4) and re-render.
 function addPresent(type, num, val0, val1) {
@@ -371,13 +385,15 @@ function mstLevelFromAbp(ptarmtp, abp) {
   for (let l = 2; l <= 20; l++) { const t = mstThreshold(ptarmtp, l); if (t != null && abp >= t) L = l; }
   return L;
 }
-// Set a mastery level and keep points consistent (abp -1 = never used is preserved at level 1).
 // Highest mastery level the game has for a weapon type (master_expert_lvl_reward; 20 for every type today).
+// Falls back to 20 when the table has no usable rows.
 function mstMaxLevel(ptarmtp) {
   let top = 1;
   for (const r of arr(AP && AP.expertLvl)) if (r.ptarmtp === ptarmtp && Number(r.lvl) > top) top = Number(r.lvl);
   return top > 1 ? top : 20;
 }
+// Set a mastery level and keep points consistent (abp -1 = never used is preserved at level 1).
+// Points are set to exactly the level's threshold (the minimum), since the game derives the level from the points.
 function mstSetLevel(e, lvl) {
   if (mstHasTable(e.ptarmtp)) lvl = Math.min(lvl, mstMaxLevel(e.ptarmtp));   // the game has no level above its table
   e.lvl = lvl;
@@ -401,14 +417,15 @@ function mstZombieOverMax(root) {
   });
   return out;
 }
-// Download step: when the Save check fix was used, cap the Haters' copies too (they are not part of SAVE).
+// Download step: when the Save check fix was used, cap the Haters' copies too (they are not part of SAVE, so the
+// normal SAVE merge would never reach them). Tied to RAW_SAV_ROOT so the flag doesn't carry over to another save.
 const MASTERY_CAP = { root: null, on: false };
 function applyMasteryCap(root) {
   if (MASTERY_CAP.root !== RAW_SAV_ROOT || !MASTERY_CAP.on || !root) return root;
   for (const { list, i } of mstZombieOverMax(root)) list[i].lvl = mstMaxLevel(list[i].ptarmtp);
   return root;
 }
-// Mastery entries whose level disagrees with their points.
+// Mastery entries whose level disagrees with their points (the game would show the points' level, not the stored one).
 function mstMismatches() {
   return arr(SAVE && SAVE.soul && SAVE.soul.mstlvl).filter(e => e && mstHasTable(e.ptarmtp) && mstLevelFromAbp(e.ptarmtp, Number(e.abp)) !== Number(e.lvl || 1));
 }
@@ -436,7 +453,7 @@ function wireMastery() {
     }
     return e;
   }
-  // render the list, skipping weapon types without an in-game name
+  // render the list, skipping weapon types without an in-game name (internal/placeholder categories)
   function renderMst(filter) {
     const all = (AP.ptarmtps || []).map(p => ({
       ptarmtp: p.id,

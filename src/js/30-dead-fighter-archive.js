@@ -2,6 +2,7 @@
 // UI state for the archive list: who = 'mine' | 'others' | 'all', text search, page index, open row (record did).
 const GRAVE_FORM = { who: 'mine', search: '', page: 0, open: null };
 // Rows per page.
+// kept small because the archive can hold thousands of records and each row is HTML
 const GRAVE_PAGE = 100;
 // Memoizes graveRows() for the current raw root (the archive can be large).
 let GRAVE_CACHE = { root: null, rows: null };
@@ -24,10 +25,12 @@ function graveRows() {
   const dc = graveRoot();
   if (!dc) return [];
   if (GRAVE_CACHE.root === dc && GRAVE_CACHE.rows) return GRAVE_CACHE.rows;
+  // object keys in dchrarcs are strings, so the uid is compared as a string
   const me = String(RAW_SAV_MAIN_UID);
   const myNames = {};
   for (const c of arr(SAVE && SAVE.soul && SAVE.soul.chrs)) myNames[c.cid] = c.name;
   const rawChrs = RAW_SAV_ROOT.soul && RAW_SAV_ROOT.soul.chr && RAW_SAV_ROOT.soul.chr.chrs && RAW_SAV_ROOT.soul.chr.chrs[me];
+  // SAVE may have lost fighters the user removed in this session; the raw copy still names them, so their old records keep a name
   for (const c of arr(rawChrs)) if (!myNames[c.cid]) myNames[c.cid] = c.name;
   const players = {};
   for (const u of arr(RAW_SAV_ROOT.dummy && RAW_SAV_ROOT.dummy.user)) players[String(u.uid)] = u.name;
@@ -46,6 +49,7 @@ function graveRows() {
       });
     }
   }
+  // newest first, like a graveyard log; records with no date sort last
   rows.sort((a, b) => (b.e.created || 0) - (a.e.created || 0));
   GRAVE_CACHE = { root: dc, rows };
   return rows;
@@ -55,11 +59,13 @@ function graveRows() {
 // The game only keeps these for some fighters; otherwise a 'summary only' message is shown.
 function graveDetails(r) {
   const dc = graveRoot(), uid = r.uid, did = r.e.did;
+  // detail tables are keyed by uid and then did, and exist only for fighters the game kept full details for
   const stats = arr(dc.bodylvls && dc.bodylvls[uid]).find(b => b.did === did);
   const pts = arr(dc.pspts && dc.pspts[uid] && dc.pspts[uid][did]);
   const eq = arr(dc.eqpts && dc.eqpts[uid] && dc.eqpts[uid][did]);
   const skl = arr(dc.eqskls && dc.eqskls[uid] && dc.eqskls[uid][did]);
   const siteOf = {};
+  // eqpts only says which equipment site an item sits in; link it to the item by eid, and drop the EQSITE_ prefix for display
   for (const x of eq) siteOf[x.eid] = String(x.site || '').replace(/^EQSITE_/, '');
   let h = '<div class="graveDetail">';
   h += `<div class="dtRel">Record ${escapeHtml(did || '')} · fighter ${escapeHtml(r.e.cid || '')}</div>`;
@@ -92,11 +98,13 @@ function renderGraves() {
   const mine = all.filter(r => r.mine);
   const playersN = new Set(all.filter(r => !r.mine).map(r => r.uid)).size;
   let size = 0;
+  // only a rough size for display, so a failure here must not stop the tab from drawing
   try { size = JSON.stringify(dc).length; } catch (e) {}
   const s = norm(GRAVE_FORM.search);
   const list = all.filter(r => GRAVE_FORM.who === 'all' || (GRAVE_FORM.who === 'mine') === r.mine)
     .filter(r => !s || norm(`${r.fighter} ${r.player} ${r.cls} ${r.where} ${r.team}`).includes(s));
   const pages = Math.max(1, Math.ceil(list.length / GRAVE_PAGE));
+  // a filter can shrink the list below the page we were on
   GRAVE_FORM.page = Math.min(GRAVE_FORM.page, pages - 1);
   const pageRows = list.slice(GRAVE_FORM.page * GRAVE_PAGE, (GRAVE_FORM.page + 1) * GRAVE_PAGE);
   const byStage = {};
@@ -117,6 +125,7 @@ function renderGraves() {
   h += '<table class="stewTable graveTable"><thead><tr><th>Died</th><th>Fighter</th><th>Class</th><th>Where</th><th>Kill Coins</th><th>Status</th></tr></thead><tbody>';
   h += pageRows.map(r => {
     const e = r.e, open = GRAVE_FORM.open === e.did;
+    // the raw state name is kept in the cell tooltip; ENEMY is just how the save marks a dead fighter, so show it as 'Died'
     const status = e.state === 'ENEMY' ? 'Died' : e.state === 'CLEAR_ARCHIVE' ? 'Cleared' : (e.state || '');
     return `<tr class="graveRow" data-grave="${escapeHtml(e.did || '')}" style="cursor:pointer;">
       <td>${dtIsDateValue(e.created) ? escapeHtml(dtFmt(e.created)) : '?'}</td>
@@ -133,6 +142,7 @@ function renderGraves() {
   host.innerHTML = h;
 
   document.getElementById('grave-who').addEventListener('change', e => { GRAVE_FORM.who = e.target.value; GRAVE_FORM.page = 0; renderGraves(); });
+  // 'change' (on blur or Enter) instead of 'input', because a re-render on each keystroke would rebuild the box and lose focus
   document.getElementById('grave-search').addEventListener('change', e => { GRAVE_FORM.search = e.target.value; GRAVE_FORM.page = 0; renderGraves(); });
   const prev = document.getElementById('grave-prev'), next = document.getElementById('grave-next');
   if (prev) prev.addEventListener('click', () => { GRAVE_FORM.page--; renderGraves(); });

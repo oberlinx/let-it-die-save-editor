@@ -25,9 +25,11 @@ function uiDirtyTabs() {
   const set = new Set();
   for (const s of UI.changes || []) {
     if (!s.lines.length) continue;
+    // The Account review section covers two tabs: VIP lines are told apart by their wording and get the VIP tab.
     if (s.title === 'Account') { for (const l of s.lines) set.add(/^(Express|VIP|30-Day|1-Day)/.test(l) ? 'vip' : 'account'); continue; }
     const t = UI_SECTION_TAB[s.title]; if (t) set.add(t);
   }
+  // Pending operations are not in the review sections' tab mapping above (they are applied at download), so they mark their tab here.
   try {
     const r = RAW_SAV_ROOT;
     if (r) {
@@ -54,11 +56,13 @@ function uiJumpProblem() {
   const it = (HEALTH && HEALTH.items) || [];
   const idx = []; it.forEach((x, i) => { if (x.level === 'problem' || x.level === 'warning') idx.push(i); });
   if (!idx.length) { toast('Save check: nothing to fix'); return; }
+  // Each click moves on to the next problem or warning, wrapping round, so repeated clicks walk through the whole list.
   UI.jumpAt = ((UI.jumpAt == null ? -1 : UI.jumpAt) + 1) % idx.length;
   const i = idx[UI.jumpAt], item = it[i];
   HEALTH.open = true;
   const panel = document.getElementById('health-panel'); if (panel) panel.open = true;
   if (item.tab) { const b = document.querySelector(`[data-tab-btn="${item.tab}"]`); if (b && activeTab !== item.tab) b.click(); }
+  // Short delay so the panel and tab have finished opening before the row is looked up and scrolled to.
   setTimeout(() => {
     const row = document.querySelectorAll('#health-panel .healthRow')[i]; if (!row) return;
     window.scrollTo({ top: 0 });
@@ -69,6 +73,7 @@ function uiJumpProblem() {
 // ==== Recent saves (IndexedDB) ====
 // ---- recent saves (kept only in this browser) ----
 // Recent-saves store: separate DB, at most 4 files, each at most 40 MB, with an opt-out preference key.
+// The caps keep browser storage use bounded, since whole save files are stored.
 const REC_IDB = { db: 'lid-editor-recent', store: 'files' }, REC_MAX = 4, REC_MAX_BYTES = 40 * 1048576, REC_PREF = 'lid.recent.on';
 // recOn()/recOpenDb()/recTx(): preference and the same promise-wrapped IndexedDB transaction pattern as the history store.
 function recOn() { return uiLsGet(REC_PREF) !== '0'; }
@@ -99,11 +104,13 @@ const recClear = () => recTx('readwrite', st => { st.clear(); });
 async function recRecord() {
   if (!recOn() || !ORIG_SAVE.file || !RAW_SAV_ROOT) return;
   const f = ORIG_SAVE.file;
+  // Files opened from history/recent are already stored, so recording them again would only duplicate them.
   if (f.size > REC_MAX_BYTES || /^(history|recent):/.test(f.__src || '')) return;
   try {
     const account = (RAW_SAV_ROOT.user && RAW_SAV_ROOT.user.nm) || '';
     const base = { name: f.name, size: f.size, mtime: f.lastModified || 0, account, fighters: histFighters(), platform: isPsSave() ? 'PS' : 'PC', when: Date.now() };
     const all = await recList();
+    // Same name, size, modified time and account counts as the same file: refresh its time instead of storing another copy.
     const same = all.find(e => e.name === f.name && e.size === f.size && e.mtime === base.mtime && e.account === account);
     if (same) { await recTx('readwrite', st => { st.put(Object.assign({}, same, { when: base.when })); }); return; }
     const data = new Blob([ await f.arrayBuffer() ]);
@@ -136,10 +143,12 @@ async function uiOpenRecent() {
   ov.querySelectorAll('[data-rec-open]').forEach(b => b.addEventListener('click', async () => {
     const e = list.find(x => x.id === Number(b.dataset.recOpen)); if (!e) return;
     if (!AP) { toast('Load masters.db first', true); return; }
+    // Only asks when there is something to lose.
     if (uiDirty() && !confirm('Open this save? It replaces the save you are editing; edits you have not downloaded are lost.')) return;
     const full = await recGet(e.id); if (!full || !full.data) { toast('That copy is gone', true); return; }
     uiCloseOverlay();
     const file = new File([ await full.data.arrayBuffer() ], e.name, { type: 'application/octet-stream', lastModified: e.mtime || Date.now() });
+    // Marks the file so recRecord does not store it again.
     file.__src = 'recent:' + e.id;
     await loadSaveFiles([ file ]);
   }));
@@ -150,10 +159,12 @@ async function uiOpenRecent() {
 // uiMastersMismatch() -> { n, total, miss }: counts parts, decals and beasts used by the save that the loaded masters.db does not know.
 function uiMastersMismatch() {
   const soul = (SAVE && SAVE.soul) || {}, miss = { parts: new Set(), decals: new Set(), beasts: new Set() }, seen = new Set();
+  // `seen` counts distinct ids used, so the mismatch can be judged as a share of what the save actually uses.
   const part = id => { if (!id) return; seen.add('p' + id); if (!PT_INDEX[id]) miss.parts.add(id); };
   const decal = id => { if (!id) return; seen.add('d' + id); if (!SKL_INDEX[id]) miss.decals.add(id); };
   const beast = id => { if (!id) return; seen.add('b' + id); if (!BST_INDEX[id]) miss.beasts.add(id); };
   for (const c of arr(soul.chrs)) {
+    // Dead fighters (ENEMY) and dummies are skipped: they may carry other players' gear that says nothing about this masters.db.
     if (!c || c.state === 'ENEMY' || c.state === 'DUMMY') continue;
     for (const p of arr(c.pspts)) part(p && p.ptid);
     for (const e of arr(c.eqskls)) decal(e && e.sklid);
@@ -167,6 +178,7 @@ function uiMastersMismatch() {
 // uiMastersCheckItem() -> Save check message (HTML string) or null. Only reports when at least 5 ids and 2% of those used are unknown.
 function uiMastersCheckItem() {
   const m = uiMastersMismatch();
+  // Both thresholds must be passed, so a couple of odd ids in a big save do not raise a false alarm.
   if (m.n < 5 || m.n / Math.max(1, m.total) < 0.02) return null;
   const sample = [ ...m.miss.parts, ...m.miss.decals, ...m.miss.beasts ].slice(0, 4).map(x => escapeHtml(x)).join(', ');
   return `The loaded masters.db doesn't know ${m.n} of the ${m.total} parts, decals and beasts this save uses (for example ${sample}). It is probably an older or different masters.db than the one this save was made with. Names, limits and Funshots may be wrong, and edits could write values the game doesn't accept. Load the masters.db from your game's current Content folder (a PlayStation save needs a PC masters.db from a matching game version).`;
@@ -214,15 +226,18 @@ const UI_TIPS = {
   jdiff: { 'JSON compare': 'Read-only, field by field comparison of two saves the way the game stores them. For advanced users.' }
 };
 // uiAddTips(): append a "?" tip bubble to matching labels once.
+// Matching is by the start of the label text (not exact) because labels often carry extra text such as units or counts.
 function uiAddTips() {
   for (const tab in UI_TIPS) {
     const panel = document.querySelector(`[data-tab-panel="${tab}"]`); if (!panel) continue;
     const keys = Object.keys(UI_TIPS[tab]);
     panel.querySelectorAll('label, h2, .eyebrow, summary').forEach(el => {
+      // tipDone makes this safe to call after every render without adding a second bubble.
       if (el.dataset.tipDone || el.closest('table')) return;
       const tx = (el.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
       const k = keys.find(x => tx.startsWith(x.toLowerCase())); if (!k) return;
       el.dataset.tipDone = '1';
+      // A failing lazy tip (masters.db not ready) is skipped, not fatal.
       let t = UI_TIPS[tab][k]; try { if (typeof t === 'function') t = t(); } catch (e) { return; }
       if (!t) return;
       const s = document.createElement('span'); s.className = 'tip'; s.tabIndex = 0; s.setAttribute('role', 'note'); s.setAttribute('data-tip', t); s.setAttribute('aria-label', t); s.textContent = '?';
@@ -256,11 +271,13 @@ function uiTourShow() {
   let root = document.getElementById('ui-tour');
   if (!root) { root = document.createElement('div'); root.id = 'ui-tour'; root.setAttribute('role', 'dialog'); root.setAttribute('aria-label', 'Quick tour'); document.body.appendChild(root); }
   const el = step.sel ? document.querySelector(step.sel) : null, vis = uiTourVisible(el);
+  // Only scroll if needed, so the page does not jump around during the tour.
   if (vis) el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   const last = TOUR.i === TOUR_STEPS.length - 1, n = TOUR_STEPS.length;
   const text = UI_ESC(step.text) + (!vis && step.fallback ? ' <i>(' + UI_ESC(step.fallback) + ')</i>' : '');
   root.innerHTML = '<div class="tourShade"></div><div class="tourHole"></div><div class="tourCard" tabindex="-1"><div class="tourStep">' + (TOUR.i + 1) + ' of ' + n + '</div><h3>' + UI_ESC(step.title) + '</h3><p>' + text + '</p><div class="tourBtns"><button class="subtle" id="tour-skip">' + (last ? 'Close' : 'Skip') + '</button><span style="flex:1"></span>' + (TOUR.i ? '<button class="subtle" id="tour-back">Back</button>' : '') + '<button class="action" id="tour-next">' + (last ? 'Done' : 'Next') + '</button></div></div>';
   const hole = root.querySelector('.tourHole'), card = root.querySelector('.tourCard');
+  // When there is no visible target (e.g. no save loaded yet), the dark shade covers the page and the step shows its fallback text instead.
   if (vis) { const r = el.getBoundingClientRect(); hole.style.cssText = 'display:block; left:' + (r.left - 6) + 'px; top:' + (r.top - 6) + 'px; width:' + (r.width + 12) + 'px; height:' + (r.height + 12) + 'px;'; root.querySelector('.tourShade').style.display = 'none'; }
   else { hole.style.display = 'none'; }
   // place the card below the target (or above if no room), kept on screen; centered when there is no target
@@ -278,7 +295,7 @@ function uiTourShow() {
 // uiTourStart()/uiTourEnd(markDone): begin or close the tour; closing optionally records that it was seen.
 function uiTourStart() { uiCloseOverlay(); TOUR.i = 0; TOUR.on = true; uiTourShow(); }
 function uiTourEnd(markDone) { TOUR.on = false; const r = document.getElementById('ui-tour'); if (r) r.remove(); if (markDone) uiLsSet(TOUR_KEY, 'done'); }
-// Reposition the tour on resize.
+// Reposition the tour on resize (the highlighted element and the card both depend on the window size).
 window.addEventListener('resize', () => { if (TOUR.on) uiTourShow(); });
 // Tour keyboard handling (capture phase): Esc closes, arrows step, Tab stays inside the card, other single keys are swallowed.
 document.addEventListener('keydown', e => {
@@ -292,8 +309,10 @@ document.addEventListener('keydown', e => {
 // uiTourAuto(): start the tour once for first-time desktop visitors only (not on touch devices, not automated browsers, not when a save is already loaded).
 function uiTourAuto() {
   if (uiLsGet(TOUR_KEY) === 'done') return;
+  // (touch devices are skipped because the highlight/card layout is made for desktop)
   if (navigator.webdriver) return; // automated browsers (tests) are not first-time visitors
   if (!window.matchMedia || window.matchMedia('(max-width: 640px), (pointer: coarse)').matches) return;
+  // Short delay so the page has settled; the conditions are re-checked then in case the user already opened something.
   setTimeout(() => { if (uiLsGet(TOUR_KEY) !== 'done' && !document.getElementById('ui-overlay') && !document.getElementById('review-overlay') && !SAVE) uiTourStart(); }, 700);
 }
 

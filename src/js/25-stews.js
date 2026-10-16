@@ -10,11 +10,14 @@
 
 // Gacha id of the offline Mushroom Stew pool in masters.db.
 const STEW_GACHA_ID = 'SKLGACH_NORMAL_OFFLINE';
-// Upper bound for queue length the editor will generate.
+// Upper bound for queue length the editor will generate. It is only a sanity cap that keeps the page
+// and the save a sensible size; the game does not need such a long queue.
 const STEW_MAX_LEN = 5000;
 // Per-save bookkeeping: original queue (for Undo), whether the save had one, last log message.
+// Keyed by root so loading a different save starts clean instead of undoing into the wrong file.
 let STEW_STATE = { root: null, original: null, hadQueue: false, lastMsg: '' };
 // Persistent UI form state for the Stews tab (selected rarity, length, RNG seed, listing options, highlights).
+// Kept outside the DOM because the tab is re-rendered often and the choices would otherwise reset.
 const STEW_FORM = { rarity: null, count: '', seed: '', ahead: 10, showAll: false, showOdds: false, hl: [], hlOnly: false, zeroOwned: true };
 
 // The stew queue as stored in a save root (soul.skl.gacha.normal.sklids), or null if absent. Read-only.
@@ -32,23 +35,27 @@ function stewQueue() {
   return STEW_WORK.q;
 }
 // Replaces the editable queue (null = no queue, as in a save that never had one).
+// Calls stewQueue() first so the working copy is tied to the current save before it is overwritten.
 function setStewQueue(q) { stewQueue(); STEW_WORK.q = q; }
 // Download-pipeline step: write the edited queue into root (creating soul/skl/gacha/normal if needed).
 // Does nothing when the queue was not touched for this save or still equals the loaded one. Returns root.
 function applyStews(root) {
   if (STEW_WORK.root !== RAW_SAV_ROOT || !root) return root;
   const q = STEW_WORK.q, loaded = rawStewQueue(root);
+  // unchanged queue: leave the root alone so the downloaded file stays as close to the original as possible
   if (JSON.stringify(q) === JSON.stringify(loaded)) return root;
+  // null means the save had no queue (or Undo restored that): remove ours so the game builds a fresh one
   if (q === null) { if (loaded) delete root.soul.skl.gacha.normal.sklids; return root; }
   const soul = root.soul = root.soul || {};
   soul.skl = soul.skl || {};
   soul.skl.gacha = soul.skl.gacha || {};
   soul.skl.gacha.normal = soul.skl.gacha.normal || {};
-  soul.skl.gacha.normal.sklids = q.slice();
+  soul.skl.gacha.normal.sklids = q.slice(); // copy, so later edits to the working queue can't change the built root
   return root;
 }
 
 // Snapshots the original queue the first time a given save is seen (so "Undo all stew changes" works).
+// A copy is stored because the working queue gets edited in place by later actions.
 function stewSyncState() {
   if (STEW_STATE.root !== RAW_SAV_ROOT) {
     const q = stewQueue();
@@ -72,7 +79,6 @@ function stewName(id) {
 // Returns a Set of decal ids the player already owns (used to flag NEW / own / dupe).
 // Excludes the queue itself and other players' fighters stored in the save; uses the live SAVE state
 // for decals (psskls, per-character eqskls) so unsaved edits count.
-// Every decal id the player already has (so duplicates can be flagged).
 // Same rule as the script: any string value starting "SKL_" under soul,
 // except the queue itself and other players' fighters. psskl/eqskl come from the editor's live state so
 // edits made on the Decals / Fighters tabs are reflected.
@@ -93,11 +99,13 @@ function stewOwnedDecals() {
   for (const k in soul) if (k !== 'skl') walk(soul[k]);
   const skl = soul.skl || {};
   for (const k in skl) if (k !== 'psskl' && k !== 'eqskl' && k !== 'gacha') walk(skl[k]);
-  // Only YOUR fighters' decals count. The other groups in eqskl (negative ids) are other players' fighters stored in the save;
+  // Only YOUR fighters' decals count (the live state is used so unsaved edits count). The other groups in eqskl (negative ids) are other players' fighters stored in the save;
   // they are not in your inventory, so they must not make a decal look owned. Your own group (the main uid) comes from the live state below.
   const hadEntry = new Set(arr(skl.psskl).map(e => e && e.sklid));
   for (const e of arr(SAVE && SAVE.soul && SAVE.soul.psskls)) {
     if (!e || !e.id) continue;
+    // zero-count entries are kept as owned only if the original save had an entry for them (sold/used decals),
+    // matching the Python script; a decal added in the editor with 0 copies is not owned
     if (e.cnt == null || e.cnt > 0 || (STEW_FORM.zeroOwned && hadEntry.has(e.id))) got.add(e.id);
   }
   for (const c of arr(SAVE && SAVE.soul && SAVE.soul.chrs)) for (const e of arr(c.eqskls)) {
@@ -108,9 +116,10 @@ function stewOwnedDecals() {
 }
 
 // Returns a random function: Math.random if no valid seed, else a seeded deterministic mulberry32 PRNG.
+// A seed makes a roll repeatable, so the same seed and settings give the same queue (handy for comparing).
 function stewRng(seed) {
   if (seed === '' || seed == null || isNaN(Number(seed))) return Math.random;
-  let a = (Number(seed) >>> 0) || 1;
+  let a = (Number(seed) >>> 0) || 1; // seed 0 becomes 1 so it still gives a valid sequence
   return function() { // mulberry32
     a = (a + 0x6D2B79F5) >>> 0;
     let t = a;
@@ -143,20 +152,22 @@ function stewMakeQueue(rows, length, onlyRarity, rng) {
   const out = [];
   for (let n = 0; n < length; n++) {
     const x = rng() * tot;
-    let lo = 0, hi = cum.length; // bisect_right
+    let lo = 0, hi = cum.length; // bisect_right: first bucket whose cumulative odds exceed x (odds are weights, not equal chances)
     while (lo < hi) { const mid = (lo + hi) >> 1; if (x < cum[mid]) hi = mid; else lo = mid + 1; }
-    out.push(ids[Math.min(lo, ids.length - 1)]);
+    out.push(ids[Math.min(lo, ids.length - 1)]); // clamp guards a rounding edge at the very top of the range
   }
   return out;
 }
 
-// Picks one entry from the Map(sklid -> odds) by weight and removes it so it cannot be picked twice.
+// Picks one entry from the Map(sklid -> odds) by weight and removes it so it cannot be picked twice
+// (a dedupe swap must not hand out the same new decal again).
 function stewWeightedTake(fresh, rng) {
   const items = [...fresh.entries()];
   const tot = items.reduce((a, [, o]) => a + o, 0);
   const r = rng() * tot;
   let acc = 0;
   for (const [s, o] of items) { acc += o; if (r <= acc) { fresh.delete(s); return s; } }
+  // floating-point fallback: if rounding left r just above the total, take the last entry
   const s = items[items.length - 1][0];
   fresh.delete(s);
   return s;
@@ -166,6 +177,7 @@ function stewWeightedTake(fresh, rng) {
 // that repeat an owned decal, or one already granted earlier in this queue, with a not-yet-owned
 // decal drawn by odds. Returns {newq, swapped:[[old,new]], ranOut, startedEmpty}; does not mutate queue.
 function stewDedupe(queue, owned, rows, target, rng) {
+  // only decals of the target rarity are swapped in, so the rarity mix of the queue does not change
   const pool = rows.filter(r => stewRarity(r.sklid) === target);
   if (!pool.length) throw new Error(`No rarity-${target} decals in the stew odds table`);
   const fresh = new Map(pool.filter(r => !owned.has(r.sklid)).map(r => [r.sklid, r.odds]));
@@ -178,6 +190,7 @@ function stewDedupe(queue, owned, rows, target, rng) {
   for (let i = newq.length - 1; i >= 0; i--) { // imminent pull first
     const s = newq[i];
     if (stewRarity(s) !== target) continue;
+    // first time this decal would be granted: keep it, and stop offering it as a swap-in (it is no longer new)
     if (!seen.has(s)) { seen.add(s); fresh.delete(s); continue; }
     if (fresh.size) {
       const pick = stewWeightedTake(fresh, rng);
@@ -190,6 +203,7 @@ function stewDedupe(queue, owned, rows, target, rng) {
 }
 
 // Sorted (high to low) list of rarities present in the odds table or queue; defaults to 5..1.
+// Read from the data rather than hard-coded so the dropdown matches whatever masters.db / the save contains.
 function stewRarities() {
   const set = new Set();
   for (const r of arr(AP && AP.stewOdds)) { const x = stewRarity(r.sklid); if (x != null) set.add(x); }
@@ -244,7 +258,7 @@ function renderStewReport() {
   const q = stewQueue();
   const changed = JSON.stringify(q || null) !== JSON.stringify(STEW_STATE.original);
   let w = '';
-  // build top warnings
+  // build top warnings (actions that need odds from masters.db are disabled below when there are none)
   if (!RAW_SAV_ROOT) w += '<div class="warnNote">Stew editing needs a .sav (or the full .json dump). Load one to use this tab.</div>';
   else if (!rows.length) w += `<div class="warnNote">No stew odds for ${STEW_GACHA_ID} in this masters.db. Dedupe, stack and reroll are off. Move to front and clear still work.</div>`;
   if (changed) w += '<div class="warnNote" style="border-color:var(--good); color:var(--good-bright);">Stew queue changed. Download the .sav to keep it.</div>';
@@ -263,7 +277,7 @@ function renderStewReport() {
   if (!q || !q.length) {
     html += `<div class="stewStat"><b>No stew queue in this save.</b> The game builds one on your next stew, from the odds below.</div>`;
   } else {
-    const order = q.slice().reverse(); // imminent first
+    const order = q.slice().reverse(); // imminent first: the game pops from the END, so the last element is pull 1
     const hist = stewHistogram(q);
     const keys = Object.keys(hist).sort((a, b) => (b === '?') - (a === '?') || Number(b) - Number(a));
     const firstSeen = new Set(), isNew = order.map(s => { const n = !owned.has(s) && !firstSeen.has(s); firstSeen.add(s); return n; });
@@ -312,6 +326,7 @@ function renderStewReport() {
     html += '</tbody></table></div></details>';
   }
   host.innerHTML = html;
+  // the report was just rebuilt, so every listener below is attached fresh to the new elements
   host.querySelectorAll('[data-stew-hl]').forEach(b => b.addEventListener('click', () => {
     const k = b.dataset.stewHl;
     const set = new Set(STEW_FORM.hl.map(String));
@@ -339,7 +354,7 @@ function renderStewReport() {
 // for every decal in the pool. New / own / dupe match the list on the tab.
 // Quotes a CSV cell when it contains a quote, comma or newline (doubling quotes).
 const csvCell = v => { const s = String(v == null ? '' : v); return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-// Builds the CSV text (UTF-8 BOM + CRLF so spreadsheets open it correctly).
+// Builds the CSV text (UTF-8 BOM + CRLF so spreadsheets open it correctly: the BOM makes Excel read UTF-8 names properly).
 function stewCsv() {
   const q = stewQueue() || [], order = q.slice().reverse(), owned = stewOwnedDecals();
   const rows = arr(AP && AP.stewOdds), total = rows.reduce((a, r) => a + r.odds, 0) || 0;
@@ -375,7 +390,7 @@ function runStewAction(mode) {
   const lines = [];
   let length = parseInt(STEW_FORM.count, 10);
   if (!(length > 0)) length = cur && cur.length ? cur.length : 200;
-  length = Math.min(length, STEW_MAX_LEN);
+  length = Math.min(length, STEW_MAX_LEN); // blank length keeps the current size (200 if there is no queue)
   if (mode === 'revert') {
     if (STEW_STATE.hadQueue) setStewQueue(STEW_STATE.original.slice());
     else setStewQueue(null);
@@ -383,7 +398,7 @@ function runStewAction(mode) {
   } else if (mode === 'front') {
     const pick = cur.filter(s => stewRarity(s) === rarity);
     const rest = cur.filter(s => stewRarity(s) !== rarity);
-    setStewQueue(rest.concat(pick)); // game pulls from the END
+    setStewQueue(rest.concat(pick)); // game pulls from the END, so the wanted pulls go last to be pulled first
     if (!pick.length) lines.push(`No rarity-${rarity} pulls in the queue. Nothing moved.`);
     else {
       lines.push(`Moved ${pick.length} rarity-${rarity} pull(s) to the front of the queue (${cur.length} total).`);
@@ -402,7 +417,7 @@ function runStewAction(mode) {
       if (res.ranOut) lines.push(`Ran out of rarity-${rarity} decals you don't own partway through. Left ${res.ranOut} repeat pull(s) unchanged.`);
     }
   } else if (mode === 'clear') {
-    setStewQueue([]);
+    setStewQueue([]); // empty array, not null: an empty queue is what makes the game rebuild from the current odds
     lines.push('Cleared the queue. The game rebuilds it from the current odds on your next stew.');
   } else { // regen / stack
     const newq = stewMakeQueue(rows, length, mode === 'stack' ? rarity : null, rng);
@@ -422,6 +437,7 @@ function wireStews() {
   stewSyncState();
   const sel = document.getElementById('stew-rarity');
   const rs = stewRarities();
+  // keep the earlier choice if it is still a valid rarity, otherwise fall back to the highest
   if (STEW_FORM.rarity == null || !rs.includes(STEW_FORM.rarity)) STEW_FORM.rarity = rs[0];
   sel.innerHTML = rs.map(r => `<option value="${r}" ${r === STEW_FORM.rarity ? 'selected' : ''}>Rarity ${r}</option>`).join('');
   sel.addEventListener('change', () => { STEW_FORM.rarity = Number(sel.value); });
@@ -436,6 +452,7 @@ function wireStews() {
     STEW_FORM.count = cnt.value === '' ? '' : String(v);
     cnt.value = STEW_FORM.count;
   });
+  // 4294967295 is the largest 32-bit value, which is all the seeded PRNG uses
   seed.addEventListener('change', () => { const n = parseInt(seed.value, 10); STEW_FORM.seed = seed.value === '' || !(n >= 0) ? '' : String(Math.min(n, 4294967295)); seed.value = STEW_FORM.seed; });
   ahead.addEventListener('change', () => { STEW_FORM.ahead = ahead.value; renderStewReport(); });
   const zeroOwned = document.getElementById('stew-zero-owned');

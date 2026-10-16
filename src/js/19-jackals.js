@@ -10,24 +10,26 @@
 // or its items drop_item_id_1 / _2.
 // Edits are kept here and written at download: the old loot instance is removed and the new one added.
 // ---------------------------------------------------------------------------
-// Pending Jackal edits. root = the RAW_SAV_ROOT the edits belong to (reset when a different save loads),
+// Pending Jackal edits. They live here, not in SAVE, because the loot is written into several places of the
+// raw JSON at download time (see applyJackals). root = the RAW_SAV_ROOT the edits belong to (reset when a different save loads),
 // edits = { JACKAL_TYPE: loot }, msg = status text shown above the table.
 // loot shapes: {kind:'money',money}, {kind:'part',ptid}, {kind:'item',itemid}.
 let JKL = { root: null, edits: {}, msg: '' };
-// Drop pending edits if a different save has been loaded since.
+// Drop pending edits if a different save has been loaded since, so loot picked for one save can't leak into another.
 function jklSync() { if (JKL.root !== RAW_SAV_ROOT) JKL = { root: RAW_SAV_ROOT, edits: {}, msg: '' }; }
 // Master record (master_jackal row) for a Jackal type, or null.
 function jklRec(type) { return arr(AP && AP.jackals).find(j => j.type === type) || null; }
 // Parse a Jackal's rwd JSON string; null if absent or invalid.
 function jklParse(j) { try { return j && j.rwd ? JSON.parse(j.rwd) : null; } catch (e) { return null; } }
-// All weapon/armor instances in root.part.pts, whether pts is an array or an object keyed by uid.
+// All weapon/armor instances in root.part.pts, whether pts is an array or an object keyed by uid
+// (both shapes are handled so we don't assume how a given save lays it out).
 function jklPartsOf(root) {
   const p = root && root.part && root.part.pts;
   return Array.isArray(p) ? p : p && typeof p === 'object' ? [].concat(...Object.values(p).filter(Array.isArray)) : [];
 }
 // The loot a Jackal carries now, read from the save: first item, else first part (resolved by eid to
-// its ptid), else money; {kind:'none'} if empty.
-// the loot a Jackal carries now (from the save)
+// its ptid), else money; {kind:'none'} if empty. A part is stored only as an instance id (eptid), so it
+// has to be looked up in the raw part list to learn which part it really is.
 function jklCurrent(j) {
   const r = jklParse(j);
   if (!r) return { kind: 'none' };
@@ -38,11 +40,13 @@ function jklCurrent(j) {
   return { kind: 'none' };
 }
 // Blueprint item id for a part id (PT_X -> ITMP_X), or null when no such item exists.
+// (Blueprints follow the ITMP_<partid> naming; some parts have none, hence the null.)
 function jklBpOf(ptid) { const id = 'ITMP_' + String(ptid || '').replace(/^PT_/, ''); return ITEM_INDEX[id] ? id : null; }
-// everything this Jackal type can drop, with the game's weight (per 1000)
 // Build the list of drop options for a Jackal type from master_jackal rates (weights are per 1000).
 // Each option: { key, w, label, loot() -> loot object }; armor rates are split evenly across the armor pieces.
 // Unrevealed blueprint variants (ITMP_*U) are added with w 0: selectable but a reroll never picks them.
+// Armor rates are split because master_jackal gives one rate for the whole armor group, and the game picks
+// uniformly inside a group.
 function jklOptions(type) {
   const r = jklRec(type);
   if (!r) return [];
@@ -56,7 +60,8 @@ function jklOptions(type) {
   if (Number(r.drop_rmap_armor_rate)) { const bps = armor.map(jklBpOf).filter(Boolean); for (const b of bps) out.push({ key: 'it:' + b, w: Number(r.drop_rmap_armor_rate) / bps.length, label: itemDisplayName(b), loot: () => ({ kind: 'item', itemid: b }) }); }
   for (const [ id, rate ] of [ [ r.drop_item_id_1, r.drop_item_1_rate ], [ r.drop_item_id_2, r.drop_item_2_rate ] ]) if (id && Number(rate) && ITEM_INDEX[id]) out.push({ key: 'it:' + id, w: Number(rate), label: itemDisplayName(id), loot: () => ({ kind: 'item', itemid: id }) });
   // the game also hands out these blueprints unrevealed (seen in real saves); how often isn't in the
-  // game data, so they're offered to pick but a reroll never chooses them (w 0)
+  // game data, so they're offered to pick but a reroll never chooses them (w 0). Iterating a copy
+  // (out.slice()) lets us push to out while looping without visiting the new entries.
   for (const o of out.slice()) {
     const m = /^it:(ITMP_.+)$/.exec(o.key);
     if (!m || /U$/.test(m[1]) || !ITEM_INDEX[m[1] + 'U']) continue;
@@ -69,6 +74,7 @@ function jklOptions(type) {
 function jklRoll(type) {
   const opts = jklOptions(type), tot = opts.reduce((n, o) => n + o.w, 0);
   if (!tot) return null;
+  // Walk the cumulative weights; the fallback after the loop only guards against float rounding.
   let x = Math.random() * tot;
   for (const o of opts) if ((x -= o.w) < 0) return o.loot();
   return opts[opts.length - 1].loot();
@@ -80,15 +86,19 @@ function jklLootLabel(l) {
   if (l.kind === 'part') return (PT_INDEX[l.ptid] || {}).name || l.ptid;
   return itemDisplayName(l.itemid);
 }
-// Stable key for a loot object, matching jklOptions keys (used to preselect the dropdown).
+// Stable key for a loot object, matching jklOptions keys (used to preselect the dropdown). Money collapses to
+// one key because the amount is random within a range, so the exact value can't be part of the key.
 function jklLootKey(l) { return !l ? '' : l.kind === 'money' ? 'money' : l.kind === 'part' ? 'pt:' + l.ptid : l.kind === 'item' ? 'it:' + l.itemid : ''; }
 // Write pending Jackal edits into a clone of the raw JSON at download time (called from the merge step).
 // For each edited Jackal: remove the old loot instance(s) from root.item.items / root.part.pts, create a
 // new instance owned by the Jackal type (new UUID eid), and rewrite floor.jkls[].rwd as JSON text.
 // Parts get full durability and ammo at +0 (lvl 1 raw); part lists may be arrays or objects keyed by uid.
+// The old instance is removed (not left orphaned) so the save doesn't keep stray items/parts the Jackal no
+// longer points to. Instances are only touched on the clone, never the loaded file.
 // Edits only hold until the game generates a new floor, which re-rolls every Jackal.
 function applyJackals(root) {
   if (JKL.root !== RAW_SAV_ROOT || !Object.keys(JKL.edits).length || !root || !root.floor || !Array.isArray(root.floor.jkls)) return root;
+  // Bail out if the edits belong to a different save, or this save has no Jackal list to write into.
   // timestamp for the new instances and the account uid used as the part owner key
   const now = Math.floor(Date.now() / 1e3), uid = Number(root.soul && root.soul.uid) || Number(RAW_SAV_MAIN_UID) || 0;
   const items = root.item && root.item.items;
@@ -103,11 +113,12 @@ function applyJackals(root) {
     const loot = j && JKL.edits[j.type];
     if (!loot) continue;
     const old = jklParse(j) || {};
-    // remove the old loot instance(s)
+    // remove the old loot instance(s); walk backwards so splice doesn't shift indexes still to visit
     const oldItems = new Set(arr(old.items).map(x => x.eitemid)), oldPts = new Set(arr(old.pts).map(x => x.eptid));
     if (Array.isArray(items)) for (let i = items.length - 1; i >= 0; i--) if (oldItems.has(items[i].eid)) items.splice(i, 1);
     const pl = partList();
     if (pl) for (let i = pl.length - 1; i >= 0; i--) if (oldPts.has(pl[i].eid)) pl.splice(i, 1);
+    // rebuild rwd from scratch with the game's empty shape; only the chosen kind is filled in below
     const rwd = { money: 0, spirit: 0, tbtp: '', pts: {}, msrs: {}, items: {} };
     if (loot.kind === 'money') rwd.money = Number(loot.money) || 0;
     else if (loot.kind === 'item' && Array.isArray(items)) {
@@ -116,6 +127,7 @@ function applyJackals(root) {
       rwd.items = [ { eitemid: eid, itemId: loot.itemid, gettime: 0 } ];
     } else if (loot.kind === 'part' && pl) {
       const rec = PT_INDEX[loot.ptid] || {}, eid = presentUuid();
+      // dur/rest/spare mirror the master record so the part is full (max durability, full ammo) at +0
       pl.push({ uid, eid, gettime: 0, owner: j.type, created: now, modified: now, ptid: loot.ptid, rest: Number(rec.capacity) || 0, spare: Number(rec.spare) || 0, grade: 0, dur: partMaxDur(rec, 1) || Number(rec.dur) || 0, lvl: 1 });
       rwd.pts = [ { eptid: eid } ];
     }
@@ -124,6 +136,7 @@ function applyJackals(root) {
   return root;
 }
 // Section shell for the Jackals tab; renderJackals fills #jkl-body.
+// (Loot is per floor, so the tab is labelled as current-floor only.)
 function blockJackals() {
   return `<section class="block">
     <div class="block-head"><div><div class="eyebrow">Works on the current floor only</div><h2>Jackals</h2></div></div>
@@ -141,6 +154,7 @@ function renderJackals() {
     <div class="capNote" style="margin-top:0;">Each Jackal carries one reward. It stays until you defeat the Jackal or the game generates a new floor, which re-rolls them all. Pick what it drops from what that Jackal can carry, or reroll it with the game's own odds. Weapons and armor drop at +0 with full durability and ammo. Blueprints can also be set to drop unrevealed ("pick only": the game does hand them out unrevealed, but how often isn't in its data, so a reroll never picks them).</div>`;
   if (!list.length) { host.innerHTML = h + '<div class="capNote">This save has no Jackals yet.</div>'; return; }
   if (JKL.msg) h += `<pre class="stewLog">${escapeHtml(JKL.msg)}</pre>`;
+  // inline style shared by every dropdown, so they match the other dark form controls
   const sel = 'background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:6px 8px; font-family:var(--mono); width:100%;';
   h += `<div class="toolbar"><button class="subtle" id="jkl-reroll-all">Reroll all</button>${Object.keys(JKL.edits).length ? '<button class="subtle" id="jkl-undo-all">Undo all</button>' : ''}<span class="count">${Object.keys(JKL.edits).length} changed</span></div>`;
   h += `<table class="stewTable"><thead><tr><th>Jackal</th><th>Carries now</th><th>Drops after download</th><th></th></tr></thead><tbody>`;
@@ -156,6 +170,7 @@ function renderJackals() {
   h += '</tbody></table>';
   host.innerHTML = h;
   // common handler: store a status message, re-render, and toast it
+  // (re-rendering rather than patching the DOM keeps the 'changed' markers and counts in sync)
   const done = msg => { JKL.msg = msg || ''; renderJackals(); if (msg) toast(msg); };
   host.querySelectorAll('[data-jkl]').forEach(el => el.addEventListener('change', () => {
     const o = jklOptions(el.dataset.jkl).find(x => x.key === el.value);

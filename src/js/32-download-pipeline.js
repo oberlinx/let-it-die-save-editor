@@ -69,6 +69,8 @@ function reviewSnapshot(file) {
 // (adaptFullDumpToLegacyShape) so the "before" and "after" raw roots are compared in the friendly shape.
 // The adapter overwrites RAW_EMPTY_SHAPES as a side effect, so it is saved and restored around the call.
 function reviewAdapt(raw) {
+  // The snapshot belongs to the real loaded save; adapting a throwaway copy must not replace it, or the download would
+  // restore empty shapes against the wrong data.
   const keep = RAW_EMPTY_SHAPES;
   try { return adaptFullDumpToLegacyShape(raw); } finally { RAW_EMPTY_SHAPES = keep; }
 }
@@ -117,7 +119,8 @@ function buildDownloadRoot() {
   // Pre-pass steps that mutate the editor's SAVE object (not the raw clone).
   normalizePresents(SAVE.presents);
   questOrdForSave();
-  // Build the clone from SAVE, then apply each opt-in transform; innermost call runs first.
+  // Build the clone from SAVE, then apply each opt-in transform; innermost call runs first. Each transform takes the
+  // root and returns it, so they chain without any of them needing to know about the others.
   // buildRawSavRootFromSave shares some objects with SAVE (e.g. soul.present IS SAVE.presents), so the result is
   // deep-copied before the transforms run: otherwise a transform (Dates rules, ...) would edit SAVE itself, and the
   // edit would stick even after "Undo" and show up in every later build.
@@ -221,6 +224,7 @@ function reviewDiff(A, B, rawA, rawB) {
   if (uA !== uB) acc.lines.push(`Attached to account: ${(rawA.user || {}).nm || uA} → ${(rawB.user || {}).nm || uB}`);
   const chrName = cid => { const c = arr(bS.chrs).concat(arr(aS.chrs)).find(x => x.cid === cid); return c ? c.name || cid : cid || '—'; };
   // Keys with their own sections below (or ignored) are skipped in the generic scalar loop.
+  // (also used again by "Other parts" so a key is never reported twice)
   const done = new Set([ 'chrs', 'chrslots', 'psskls', 'hubcustom', 'mstlvl', 'vip', 'modified', 'uid' ]);
   for (const k of new Set(Object.keys(aS).concat(Object.keys(bS)))) {
     if (done.has(k)) continue;
@@ -339,6 +343,7 @@ function reviewDiff(A, B, rawA, rawB) {
   const bfA = rallyFlagEntry(rawA), bfB = rallyFlagEntry(rawB), bA = bfA ? Number(bfA.value) || 0 : 0, bB = bfB ? Number(bfB.value) || 0 : 0;
   if (bA !== bB) for (const b of arr(AP && AP.stampBonus)) { const f = Number(b.flg); if ((bA & f) !== (bB & f)) sr.lines.push(`Bonus ${Number(b.stidx) + 1}F-${Number(b.edidx) + 1}F${Number(b.perfect) ? ' perfect' : ''}: ${(bA & f) ? 'given' : 'not given'} → ${(bB & f) ? 'given' : 'not given'}`); }
   // Weapon/armor levels: compare the stored (raw) lvl of the same part instance (same eid and ptid), e.g. clamped to its cap by the save check.
+  // Many at once collapse to one count line below, so a bulk fix does not bury the rest of the review.
   // part instances whose stored level changed (e.g. set back to their cap by the save check)
   { const pl = new Map(jklPartsOf(rawA).map(p => [ p.eid, p ])), lv = sec('Weapon and armor levels');
     for (const p of jklPartsOf(rawB)) { const o = pl.get(p.eid); if (o && o.ptid === p.ptid && Number(o.lvl) !== Number(p.lvl)) lv.lines.push(`${(PT_INDEX[p.ptid] || {}).name || p.ptid}: stored level ${o.lvl} → ${p.lvl} (the part goes up to +${maxDisplayLevel(PT_INDEX[p.ptid])})`); }
@@ -349,6 +354,7 @@ function reviewDiff(A, B, rawA, rawB) {
   for (const [ t, lbl ] of SKIN_SLOTS) { const x = skinOf(aS, t), y = skinOf(bS, t); if (x !== y) cl.lines.push(`${lbl} skin: ${x ? (PT_INDEX[x] || {}).name || x : 'none'} → ${y ? (PT_INDEX[y] || {}).name || y : 'none'}`); }
   { const ma = String((aS.magazine || {}).status_list || '').split(','), mb = String((bS.magazine || {}).status_list || '').split(',');
     const txt = v => Number(v) === 2 ? 'read' : Number(v) === 1 ? 'new' : 'not found';
+    // 0, missing and empty all mean "not found", so they are normalised to -1 before comparing (no false changes).
     const ch = arr(AP && AP.magazines).filter(p => (Number(ma[p.idx]) > 0 ? ma[p.idx] : '-1') !== (Number(mb[p.idx]) > 0 ? mb[p.idx] : '-1'));
     if (ch.length > 8) cl.lines.push(`Magazines: ${ch.length} pages changed`);
     else for (const p of ch) cl.lines.push(`${p.type === 'BOSS' ? 'Tales From The Barbs Vol. ' + p.volume : 'YB Catalogue'} page ${p.page}: ${txt(ma[p.idx])} → ${txt(mb[p.idx])}`); }
@@ -466,7 +472,7 @@ function reviewDiff(A, B, rawA, rawB) {
   if (REWIND.root === RAW_SAV_ROOT && REWIND.on && !(RUN_END.root === RAW_SAV_ROOT && RUN_END.on)) { const rw = rewindInfo(RAW_SAV_ROOT); if (rw) ot.lines.push(`Run put back on its last boss floor (${rw.floor.no}F, boss beaten; ${rw.dropped} floor${rw.dropped === 1 ? '' : 's'} after it dropped)`); }
   if (RUN_END.root === RAW_SAV_ROOT && RUN_END.on) { const ri = runEndInfo(RAW_SAV_ROOT); if (ri) ot.lines.push(`Run ended: the run's floor data (${ri.floors} floors), its force-close count and ${ri.made.toLocaleString()} items it left on floors, in chests and on Jackals cleared`); }
   if (!stampFlagIn(rawA) && stampFlagIn(rawB)) ot.lines.push("Game's one-time Funshot setup marked as done (so it won't re-count research)");
-  // Hide empty sections.
+  // Hide empty sections so the review only lists what actually changed.
   return S.filter(s => s.lines.length);
 }
 
@@ -475,6 +481,7 @@ function reviewClose() { const o = document.getElementById('review-overlay'); if
 function reviewKey(e) { if (e.key === 'Escape') reviewClose(); }
 
 // reviewDownloadOriginal(stamp): download a "brggame_backup_<stamp>.sav" of the save exactly as loaded.
+// The original bytes are used when possible so the backup is identical to the user's file, not a re-compressed copy.
 // Prefers the original File bytes when it was a .sav; otherwise (e.g. a .json load) rebuilds a .sav from the saved JSON text.
 async function reviewDownloadOriginal(stamp) {
   const nm = `brggame_backup_${stamp}.sav`;
@@ -499,8 +506,10 @@ async function reviewAndDownload(kind) {
   try { root = buildDownloadRoot(); } catch (err) { toast(`Failed to build .${kind}: ` + err.message, true); return; }
   let sections = null, why = '';
   try {
-    // Compare against the pristine loaded text when it is still for this save, else the current raw root.
+    // Compare against the pristine loaded text when it is still for this save, else the current raw root. The text is
+    // used because other code may have changed the loaded objects in place, so only the text is a trustworthy "before".
     const rawA = JSON.parse(ORIG_SAVE.root === RAW_SAV_ROOT && ORIG_SAVE.text ? ORIG_SAVE.text : JSON.stringify(RAW_SAV_ROOT));
+    // reviewAdapt gets its own copies so the raw-format rawA/rawB stay untouched for the raw reads inside reviewDiff.
     const rawB = JSON.parse(JSON.stringify(root));
     sections = reviewDiff(reviewAdapt(JSON.parse(JSON.stringify(rawA))), reviewAdapt(rawB), rawA, rawB);
   } catch (err) { why = err.message; console.warn('review failed', err); }
@@ -572,6 +581,7 @@ function reportPendingChanges() {
     return reviewDiff(reviewAdapt(JSON.parse(JSON.stringify(rawA))), reviewAdapt(rawB), rawA, rawB).reduce((n, s) => n + s.lines.length, 0);
   } catch (err) { return null; }
 }
+// The report is for pasting into public help threads, which is why ids are left out and names can be hidden.
 // saveReportText(opts) -> CRLF-joined text summary of the loaded save: platform, masters.db sanity, account, fighters, current run,
 // Funshots and every Save check result. Contains no account/Steam/PSN ids; opts.hideNames also redacts fighter and account names.
 function saveReportText(opts) {
@@ -631,6 +641,7 @@ function saveReportText(opts) {
   head('Save check');
   const items = arr(HEALTH.items), cnt = k => items.filter(x => x.level === k).length;
   L.push(items.length ? `${cnt('problem')} problem(s), ${cnt('warning')} warning(s), ${cnt('note')} note(s)` : 'Nothing found.');
+  // Longest names first, so a short name that sits inside a longer one cannot be replaced first and leave half of the long one showing.
   let names = hide ? chrs.map(c => c.name).filter(Boolean).sort((a, b) => b.length - a.length) : [];
   for (const it of items) {
     let t = reportPlain(it.text);

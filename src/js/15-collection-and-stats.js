@@ -26,6 +26,7 @@ function bookRows(kind) {
   const idx = kind === 'msr' ? MSR_INDEX : BST_INDEX;
   const book = kind === 'msr' ? SAVE.soul.msrbook : SAVE.soul.bstbook;
   const byId = new Map(arr(book).map(e => [ e.id, e ]));
+  // ordered by the master idx so the tables follow the game's own book order
   return Object.values(idx).sort((a, b) => (Number(a.idx) || 0) - (Number(b.idx) || 0)).map(r => {
     const e = byId.get(r.id);
     const grill = kind === 'bst' || Number(r.enable_roast) !== 0;
@@ -37,15 +38,19 @@ function bookRows(kind) {
 // bits: 1 = eaten raw, 2 = eaten grilled (bit 4, the older online record, is never touched). Mutates SAVE.
 function bookSet(kind, id, bits, on) {
   const key = kind === 'msr' ? 'msrbook' : 'bstbook';
+  // arr() turns a missing or {} book into an array, so the push below always works
   SAVE.soul[key] = arr(SAVE.soul[key]);
   let e = SAVE.soul[key].find(x => x.id === id);
+  // a new entry starts at flag 0 and only the requested bits are added to it
   if (!e) SAVE.soul[key].push(e = { id, flag: 0 });
+  // bitwise on purpose: setting or clearing bit 1/2 must leave bit 4 (the older online record) as it was
   e.flag = on ? (Number(e.flag) | bits) : (Number(e.flag) & ~bits);
 }
 // Mark every entry of a book as eaten raw (and grilled where possible). Returns how many entries changed.
 function bookComplete(kind) {
   let n = 0;
   for (const r of bookRows(kind)) {
+    // mushrooms that can't be grilled only need bit 1, otherwise they could never count as complete
     const want = 1 | (r.grill ? 2 : 0);
     if (r.flag == null || (r.flag & want) !== want) { bookSet(kind, r.id, want, true); n++; }
   }
@@ -74,6 +79,7 @@ function renderSkins() {
   for (const [ type, label ] of SKIN_SLOTS) {
     const cur = (inUse.find(x => x && x.type === type) || {}).ptid || '';
     const opts = unlocked.filter(id => PT_INDEX[id] && PT_INDEX[id].type === type).map(id => [ id, PT_INDEX[id].name ]).sort((a, b) => a[1].localeCompare(b[1]));
+    // a skin the save already uses but that isn't unlocked stays in the list (labelled), so opening this tab can't silently drop it
     h += `<div class="field"><label>${label}</label><select data-skin="${type}" style="${sel}"><option value="">None (show the armor you wear)</option>${opts.map(([ id, nm ]) => `<option value="${id}" ${id === cur ? 'selected' : ''}>${escapeHtml(nm)}</option>`).join('')}${cur && !opts.some(o => o[0] === cur) ? `<option value="${cur}" selected>${escapeHtml((PT_INDEX[cur] || {}).name || cur)} (not unlocked)</option>` : ''}</select></div>`;
   }
   h += '</div>';
@@ -106,12 +112,14 @@ function magList() {
   const m = SAVE.soul.magazine;
   const raw = m && typeof m === 'object' ? String(m.status_list || '') : '';
   const out = raw ? raw.split(',').map(x => Number(x)) : [];
+  // at least 36 (the 32 pages plus the 4 unused idx) and every known idx, so any page can be indexed directly
   const n = Math.max(out.length, ...arr(AP && AP.magazines).map(r => Number(r.idx) + 1), 36);
   while (out.length < n) out.push(-1);
   return out;
 }
 // Store the status list back as a comma string, coercing soul.magazine to an object if it was {} / [] / missing.
 function magWrite(list) {
+  // the game can save an empty magazine as {} or []; a property on an array would not be written to the JSON, so force a plain object
   if (!SAVE.soul.magazine || typeof SAVE.soul.magazine !== 'object' || Array.isArray(SAVE.soul.magazine)) SAVE.soul.magazine = {};
   SAVE.soul.magazine.status_list = list.map(v => String(v)).join(',');
 }
@@ -125,6 +133,7 @@ let MAG_SENT = { root: null, keys: new Set(), orig: [] };
 function magOrigList() {
   if (MAG_SENT.root !== RAW_SAV_ROOT) {
     let orig = [];
+    // parse the untouched text, not the live objects; if that fails, orig stays empty and nothing counts as already complete
     try { const r = ORIG_SAVE.root === RAW_SAV_ROOT && ORIG_SAVE.text ? JSON.parse(ORIG_SAVE.text) : null; orig = String((((r || {}).soul || {}).magazine || {}).status_list || '').split(',').map(Number); } catch (e) {}
     MAG_SENT = { root: RAW_SAV_ROOT, keys: new Set(), orig };
   }
@@ -174,6 +183,7 @@ function magHtml() {
 // Wire magazine controls inside `host`; `rerender` is called after each change. "Send reward" queues the
 // volume's bonus into the Reward Box via addPresent and remembers it in MAG_SENT so it is offered once.
 function magWire(host, rerender) {
+  // pages already found are left alone, so a page marked Read is not downgraded to New
   const setPages = (pages, v) => { const l = magList(); for (const p of pages) if (!(l[p.idx] > 0)) l[p.idx] = v; magWrite(l); };
   host.querySelectorAll('[data-mag-idx]').forEach(el => el.addEventListener('change', () => { const l = magList(); l[Number(el.dataset.magIdx)] = Number(el.value); magWrite(l); rerender(); }));
   host.querySelectorAll('[data-mag-vol]').forEach(el => el.addEventListener('click', () => { const v = magVolumes().find(x => x.key === el.dataset.magVol); if (v) { setPages(v.pages, 2); rerender(); toast(`${magVolTitle(v)}: every page found`); } }));
@@ -184,7 +194,9 @@ function magWire(host, rerender) {
     const b = v && arr(AP.magazineBonus).find(x => Number(x.stidx) === Number(v.pages[0].idx));
     const rw = b && arr(AP.rewards).find(r => r.rwdid === b.rwdid);
     if (!rw) return;
+    // goes to the Reward Box because the game only pays this bonus when you pick up the last page yourself
     addPresent(rw.type, Number(rw.num) || 0, rw.val0 || '');
+    // remembered so the button is offered only once per volume
     MAG_SENT.keys.add(v.key);
     renderCollection();
     toast(`${magVolTitle(v)}: ${Number(rw.num).toLocaleString()} Kill Coins sent to the Reward Box`);
@@ -250,7 +262,9 @@ function statsLabel(k) {
 }
 // Format a playlog value: durations over an hour as "h m" (keys ending _time), numbers with separators, else raw text.
 function statsValue(k, v) {
+  // shorter times fall through to the plain number formatting below
   if (k === 'total_play_time' || /_time$/.test(k)) { const n = Number(v) || 0; if (n > 3600) return `${Math.floor(n / 3600).toLocaleString()} h ${Math.floor(n % 3600 / 60)} m`; }
+  // the '' check matters because Number('') is 0, which would show blank values as 0; objects are excluded for the same reason (Number([]) is 0)
   if (v !== '' && !isNaN(Number(v)) && typeof v !== 'object') return Number(v).toLocaleString();
   return String(v);
 }

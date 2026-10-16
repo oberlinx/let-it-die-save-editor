@@ -6,10 +6,12 @@
 // from bankCapacityForLevel(); amounts above it are flagged "OVER CAP" (the game would clamp).
 // `kind` is unused here. Returns an HTML string.
 function bankRow(soul, kind, label, levelField, valueField) {
+  // missing fields fall back to level 1 / amount 0 so a fresh or partial save still draws a valid row
   const level = soul[levelField] != null ? soul[levelField] : 1;
   const maxLvl = bankMaxLevel(levelField);
   const cap = bankCapacityForLevel(level, levelField);
   const val = soul[valueField] != null ? soul[valueField] : 0;
+  // over-cap is shown as a warning rather than silently fixed, so the user decides whether to keep the value
   const over = val > cap;
   return `<div class="bankRow">\n    <div class="bankLabel">${accountIcon(label, 28)}${label}</div>\n    <div class="field"><label>Bank Level</label><select data-bank-level="${levelField}" data-bank-cap-target="${valueField}" style="width:100%; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono);">${fighterOpts(1, maxLvl, Number(level), v => 'Level ' + v)}</select></div>\n    <div class="field"><label>Held Amount</label><input type="text" inputmode="numeric" data-currency="${valueField}" value="${val.toLocaleString()}"></div>\n    <div class="bankCap ${over ? 'over' : ''}" data-bank-cap-display="${valueField}">cap: ${cap.toLocaleString()}${over ? ' -- OVER CAP' : ''}</div>\n    <div style="display:flex; gap:6px; white-space:nowrap;"><button class="subtle" data-bank-fill="${valueField}" data-bank-fill-level="${levelField}" title="Fill to this bank level's cap without changing the level">Fill to cap</button>\n    <button class="subtle" data-bank-max="${levelField}" data-bank-max-value="${valueField}" title="Max the bank level and fill it">Max level + fill</button></div>\n  </div>`;
 }
@@ -50,6 +52,7 @@ function accountIcon(label, h) {
 // Returns an HTML string.
 function blockCurrency() {
   const soul = SAVE.soul;
+  // rank comes from masters.db thresholds, so it is shown read-only: editing points is the only way to change it
   const rank = tdmRankForPoints(soul.tdm_point || 0, AP);
   return `<section class="block">\n    <div class="block-head"><div><div class="eyebrow">Account</div><h2>Account Details</h2></div></div>\n    <div class="block-body">\n      <div class="grid" style="margin-bottom:14px;">\n        <div class="field"><label>Account ID <span class="id">(${accountPlatform().idLabel})</span></label><div id="acc-psnacid" style="padding:8px 0; font-size:14px; word-break:break-all;">${escapeHtml(SAVE.user.psnacid != null && SAVE.user.psnacid !== '' ? String(SAVE.user.psnacid) : '—')}${accountPlatform().badge}</div></div>\n        <div class="field"><label>Account Name <span class="id">(read only)</span></label><div id="acc-name" style="padding:8px 0; font-size:14px; word-break:break-all;"><b>${escapeHtml(SAVE.user.nm != null && SAVE.user.nm !== '' ? String(SAVE.user.nm) : '—')}</b></div></div>\n        <div class="field"><label>TDM Points</label><input type="number" id="tdm-point" min="0" max="${tdmPointMax()}" step="1" value="${soul.tdm_point || 0}"></div>\n        <div class="field"><label>TDM Rank <span class="id">(from the points)</span></label><div style="padding:4px 0; font-size:14px; word-break:break-all;">${tdmRankIcon(rank, 32)}${escapeHtml(rank ? formatTdmRank(resolveName(rank.name)) || rank.id : soul.tdm_rank || '?')}</div></div>\n      </div>\n      <div class="eyebrow" style="margin-bottom:8px;">Bank-limited currencies</div>\n      <div class="bankTable">\n        ${bankRow(soul, 'money', 'Kill Coins', 'safe_level', 'free_money')}\n        ${bankRow(soul, 'spirit', 'SPLithium', 'spirit_tank_level', 'spirit')}\n      </div>\n      <div class="grid">\n        ${currencyFields().map(([f, label, cap]) => `\n          <div class="field">\n            <label style="white-space:nowrap;">${accountIcon(label, 22)}${label}${cap ? ` (max ${cap.toLocaleString()})` : ''}</label>\n            <input type="text" inputmode="numeric" data-currency="${f}" ${cap ? `data-max="${cap}"` : ''} value="${(soul[f] != null ? soul[f] : 0).toLocaleString()}">${f === 'recycle_point' ? `<div class="capNote" style="margin:4px 0 0;">In game, anything earned over the max is lost.</div>` : ''}\n          </div>`).join('')}\n      </div>\n      ${masteryBlockHtml()}\n    </div>\n  </section>`;
 }
@@ -62,6 +65,7 @@ function blockCurrency() {
 function wireCurrency() {
   // TDM points are the source of truth; the rank id is re-derived from them
   document.getElementById('tdm-point').addEventListener('change', e => {
+    // clamp to the top rank's points so a typo cannot push the value past anything the game's rank table covers
     { const mx = tdmPointMax(); let v = parseInt(e.target.value, 10); if (isNaN(v) || v < 0) v = 0; if (v > mx) { v = mx; toast(`Clamped to the top rank (${mx.toLocaleString()})`); } SAVE.soul.tdm_point = v; }
     const rank = tdmRankForPoints(SAVE.soul.tdm_point, AP);
     if (rank) SAVE.soul.tdm_rank = rank.id;
@@ -69,9 +73,12 @@ function wireCurrency() {
   });
   document.querySelectorAll('[data-currency]').forEach(inp => {
     inp.addEventListener('change', () => {
+      // the field shows thousands separators (toLocaleString), so strip them before validating
       const txt = inp.value.replace(/[,\s]/g, '');
       let v = /^\d+$/.test(txt) ? parseInt(txt, 10) : NaN;
+      // on bad input restore the stored value instead of writing NaN or a negative into the save
       if (isNaN(v)) { v = Number(SAVE.soul[inp.dataset.currency]) || 0; inp.value = v.toLocaleString(); toast('Numbers only (0 or more). Value unchanged.'); return; }
+      // data-max is the hard cap for this currency; the game loses anything above it, so do not store more
       const capAttr = inp.getAttribute('data-max');
       if (capAttr && v > parseInt(capAttr, 10)) {
         v = parseInt(capAttr, 10);
@@ -79,6 +86,7 @@ function wireCurrency() {
       }
       SAVE.soul[inp.dataset.currency] = v;
       inp.value = v.toLocaleString();
+      // only the cap label is refreshed (no renderAll) so the user keeps focus while typing in other fields
       updateBankCapDisplay(inp.dataset.currency);
     });
   });
@@ -89,6 +97,7 @@ function wireCurrency() {
   });
   document.querySelectorAll('[data-bank-level]').forEach(inp => {
     inp.addEventListener('change', () => {
+      // clamp to the levels the game knows, so a level with no capacity entry is never written
       const maxLvl = bankMaxLevel(inp.dataset.bankLevel);
       let lvl = parseInt(inp.value, 10) || 1;
       if (lvl < 1) lvl = 1;
@@ -102,6 +111,7 @@ function wireCurrency() {
   });
   document.querySelectorAll('[data-bank-fill]').forEach(btn => {
     btn.addEventListener('click', () => {
+      // fills to the cap of the CURRENT level, never above it, so the value stays inside what the game allows
       const cap = bankCapacityForLevel(SAVE.soul[btn.dataset.bankFillLevel] || 1, btn.dataset.bankFillLevel);
       SAVE.soul[btn.dataset.bankFill] = cap;
       renderAll();
@@ -110,6 +120,7 @@ function wireCurrency() {
   });
   document.querySelectorAll('[data-bank-max]').forEach(btn => {
     btn.addEventListener('click', () => {
+      // level, optional *_limit and held amount are all set together so they stay consistent with each other
       const maxLvl = bankMaxLevel(btn.dataset.bankMax);
       SAVE.soul[btn.dataset.bankMax] = maxLvl;
       { const lk = btn.dataset.bankMax.replace('_level', '_limit'); if (lk in SAVE.soul) SAVE.soul[lk] = bankCapacityForLevel(maxLvl, btn.dataset.bankMax); }
@@ -125,6 +136,7 @@ function wireCurrency() {
 // re-render. valueField is 'free_money' (Kill Coins, level in safe_level) or 'spirit' (SPLithium,
 // level in spirit_tank_level).
 function updateBankCapDisplay(valueField) {
+  // the label only knows its value field, so map back to the level field that sets its capacity
   const levelField = valueField === 'free_money' ? 'safe_level' : 'spirit_tank_level';
   const level = SAVE.soul[levelField] || 1;
   const cap = bankCapacityForLevel(level, levelField);

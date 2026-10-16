@@ -26,7 +26,7 @@
 let LUCKY = { root: null, seed: 0, masks: false };
 // True when the last applyLucky() call actually changed the download (read by the review / masking helpers).
 let LUCKY_LAST = false;
-// luckySync(): forget the seed when a different save is loaded.
+// luckySync(): forget the seed when a different save is loaded, so a pending press can never leak onto another save.
 function luckySync() { if (LUCKY.root !== RAW_SAV_ROOT) LUCKY = { root: RAW_SAV_ROOT, seed: 0, masks: false }; }
 // luckyPending(): a press is waiting to be applied at download time.
 function luckyPending() { return LUCKY.root === RAW_SAV_ROOT && !!LUCKY.seed; }
@@ -41,6 +41,7 @@ const LUCKY_SHORT_DRAW = 0.12;
 const LUCKY_RARE_BOOST = 1.5;
 
 // luckyRng(seed): small seeded generator (mulberry32) returning floats in [0, 1).
+// Math.random cannot be seeded, and the same seed must give the same plan on every build of the download root.
 function luckyRng(seed) {
   let a = seed >>> 0;
   return function () {
@@ -54,12 +55,14 @@ function luckyRng(seed) {
 // luckyNewSeed(): a fresh non-zero 32-bit seed from the browser's secure random source.
 function luckyNewSeed() {
   let v = 0;
+  // Prefer the browser's secure random source; plain Math.random is only the fallback if it is missing.
   try { const a = new Uint32Array(1); crypto.getRandomValues(a); v = a[0]; } catch (err) { v = Math.floor(Math.random() * 4294967295); }
-  return v || 1;
+  return v || 1;   // 0 means "nothing pending" (see LUCKY.seed), so a real seed must never be 0
 }
 
 // ---- drop tables ----
 // master_floor_drop_gen rows indexed by floor|area|type (rebuilt when masters.db is reloaded).
+// Cached because luckyAvailable() runs on every render and the drop tables are large.
 let LUCKY_IDX = { src: null, map: null, bp: new Map() };
 function luckyIdx() {
   const src = AP && AP.hvnBossDrops;
@@ -87,16 +90,21 @@ function luckyBpMap(flr, area, ref, type, isPs) {
   const total = groups.reduce((n, g) => n + g.w, 0);
   if (total) for (const g of groups) for (const it of g.items) {
     const id = it.itemId || it.itemid;
+    // Skip the "U" variants (the base id is what counts as the blueprint), anything that is not a blueprint, and ones the game would not accept here.
     if (!id || /U$/.test(id) || !rwdIsBlueprint(id) || !isRealBlueprint(id) || rewardUnfit('bp', id, isPs)) continue;
     const base = String(id), cur = out.get(base);
+    // The same blueprint can appear in several rows, so the chances add up.
     out.set(base, { id, w: (cur ? cur.w : 0) + g.w / (total * g.items.length) });
   }
+  // Cached per key; the key includes the PS flag because PS-only blueprints are filtered by rewardUnfit.
   idx.bp.set(key, out);
   return out;
 }
 // luckyGen(kind): the reward type whose slots can hold a blueprint on that arena kind.
+// Large boxes and treasure enemies are the only slots with blueprints (the Legendary Chest table has none; see the header).
 function luckyGen(kind) { return kind === 'pit' ? 'PTGENTP_TRZAKO' : 'PTGENTP_TRBOX_L'; }
 // luckyArenaRows(f): the arenas the game (or an active Boss floor lock) could give a boss floor that has no plan yet.
+// With a lock active the choice is narrowed the same way the lock will narrow it, so the pool and the plan agree with what gets written.
 function luckyArenaRows(f) {
   const rows = arr(AP && AP.hvnBossAreas).filter(r => r.flrid === f.id);
   if (!rows.length || !BOSS_LOCK.mode || BOSS_LOCK.root !== RAW_SAV_ROOT) return rows;
@@ -118,11 +126,14 @@ function luckyArenaRows(f) {
 // ---- what the player already has ----
 // luckyScan(node, skipKey, out): adds every ITMP_ blueprint id string found in node (U variants folded into the base id).
 function luckyScan(node, skipKey, out, depth) {
+  // (charCodeAt 73 is "I": a cheap first test, since this walks the whole save and most strings are not blueprint ids)
   if (typeof node === 'string') { if (node.charCodeAt(0) === 73 && node.startsWith('ITMP_')) out.add(node.replace(/U$/, '')); return; }
+  // depth limit is only a guard against runaway nesting
   if (!node || typeof node !== 'object' || depth > 40) return;
   if (Array.isArray(node)) { for (const v of node) luckyScan(v, skipKey, out, depth + 1); return; }
   for (const k in node) { if (k !== skipKey) luckyScan(node[k], skipKey, out, depth + 1); }
 }
+// hvntrinfo is skipped when scanning (skipKey) because planned rewards are not "owned"; they are counted separately against the ceiling.
 // luckyHave(scanRoot, research): {owned: Set of blueprint base ids found anywhere outside the planned rewards, known: Set of part ids with any research entry}.
 function luckyHave(scanRoot, research) {
   const owned = new Set();
@@ -130,6 +141,7 @@ function luckyHave(scanRoot, research) {
   return { owned, known: new Set(arr(research).map(r => r && r.ptid).filter(Boolean)) };
 }
 // luckyUnknown(base, have): the blueprint is neither owned nor researched in any way.
+// Both checks are needed: a blueprint can be in an inventory or reward without research, or researched without being held.
 function luckyUnknown(base, have) { return !have.owned.has(base) && !have.known.has('PT_' + base.slice(5)); }
 
 // ---- the pool and the ceiling ----
@@ -150,10 +162,12 @@ function luckyAnalyze(o) {
       }
     }
   }
+  // total = everything the remaining boss floors could drop; the unknown share of it decides the ceiling below.
   const unknownAll = new Map([ ...total ].filter(([ base ]) => luckyUnknown(base, o.have)));
   const inPlan = new Set();
   luckyScan(luckyPlacedRewards(o.planned), '', inPlan, 0);
   const alreadySet = new Set([ ...inPlan ].filter(b => unknownAll.has(b) || (isRealBlueprint(b) && luckyUnknown(b, o.have))));
+  // Ones already sitting in a planned reward are not offered again; they already use up part of the ceiling.
   const pool = new Map([ ...unknownAll ].filter(([ base ]) => !alreadySet.has(base)));
   const share = total.size ? unknownAll.size / total.size : 0;
   const t = LUCKY_CEIL[o.route] || LUCKY_CEIL.main;
@@ -184,6 +198,7 @@ function luckyMaskPool(have, planned, isPs) {
   }
   return out;
 }
+// (decides which ceiling and count weights apply: NEO is tighter than regular Heaven)
 // luckyRoute(floorId): 'neo' for the four NEO routes, 'main' for regular Heaven.
 function luckyRoute(id) { return hvnRoute(id).key === 'main' ? 'main' : 'neo'; }
 
@@ -191,13 +206,16 @@ function luckyRoute(id) { return hvnRoute(id).key === 'main' ? 'main' : 'neo'; }
 // not a built download. Returns {ok} plus the analysis when ok.
 function luckyAvailable() {
   const r = RAW_SAV_ROOT, s = r && r.soul;
+  // Needs a paused fighter inside Heaven: only then is there a run with boss floors still ahead.
   if (!SAVE || !s || !s.pause || s.stgid !== 'S_HVN') return { ok: false };
+  // Rewind and End the run cannot be combined with floor-plan edits.
   if ((RUN_END.root === r && RUN_END.on) || (REWIND.root === r && REWIND.on)) return { ok: false };
   if (!arr(AP && AP.hvnBossAreas).length || !arr(AP && AP.hvnBossDrops).length) return { ok: false };
   const from = blkFrom(), cur = hvnFloor(from);
   if (!cur) return { ok: false };
   const ahead = flmRouteBoss(from).filter(f => f.no > cur.no);
   if (!ahead.length) return { ok: false };
+  // Reads from SAVE (the editor's live state) because this runs while drawing the UI, before any download root exists.
   const have = luckyHave(SAVE, SAVE.user_research);
   const entries = new Map(blkExisting(from));
   if (BOSS_LOCK.root === r && BOSS_LOCK.mode) { const p = blkPlanFresh(); if (p) for (const it of p.items) if (it.entry) entries.set(it.floor.id, it.entry); }
@@ -208,7 +226,8 @@ function luckyAvailable() {
 }
 
 // ---- the download step ----
-// luckyPick(list, rnd): weighted pick of {w} items; null when empty.
+// luckyPick(list): weighted pick of {w} items; null when empty.
+// Uses Math.random on purpose: inside applyLucky that is the seeded generator, which is what makes the pick repeatable.
 function luckyPick(list) {
   const total = list.reduce((n, x) => n + x.w, 0);
   if (!list.length || !(total > 0)) return null;
@@ -228,9 +247,12 @@ function applyLucky(root) {
   if (!cur) return root;
   const ahead = flmRouteBoss(cur.id).filter(f => f.no > cur.no);
   if (!ahead.length) return root;
+  // Swap in the seeded generator (restored in the finally below) so every build of the download root gives the same plan.
+  // blkPick/blkEntry also call Math.random, so they become repeatable too.
   const realRandom = Math.random;
   Math.random = luckyRng(LUCKY.seed);
   try {
+    // Work on a copy of the plan and only assign it back at the end, so a press that places nothing leaves the root untouched.
     const list = JSON.parse(JSON.stringify(arr(s.hvntrinfo)));
     const byId = () => new Map(list.filter(e => e && e.flrid).map(e => [ e.flrid, e ]));
     // 1. write the whole run: plan every missing boss floor, and give the empty reward lists of lock-written floors their boxes
@@ -246,12 +268,14 @@ function applyLucky(root) {
         if (tmp) e.rwds = tmp.rwds;
       }
     }
+    // Keep the plan in floor order, as the game's own list would be.
     list.sort((a, b) => ((hvnFloor(a && a.flrid) || { no: 1e9 }).no) - ((hvnFloor(b && b.flrid) || { no: 1e9 }).no));
     map = byId();
     // 2. what can be placed
     const have = luckyHave(root, s.partresearch && s.partresearch.user);
     const a = luckyAnalyze({ ahead, entryOf: f => map.get(f.id) || null, have, isPs: savePlatform(root) === 'PS', route: luckyRoute(cur.id), planned: list });
     if (!(a.pool.size > 0 && a.room > 0)) return root;
+    // Floors the game already planned are not rewritten (only missing floors and empty reward lists are filled above).
     // slots per floor: placed large boxes / treasure enemies whose table holds a blueprint still in the pool
     const floors = [];
     for (const f of ahead) {
@@ -267,6 +291,7 @@ function applyLucky(root) {
     }
     if (!floors.length) return root;
     // 3. how many (the seeded draw), never above the ceiling room, the pool or the floors that can take one
+    // Short draws (just 1) keep a press from always placing the maximum, so the amount stays unpredictable.
     const maxK = Math.min(a.room, a.pool.size, floors.length);
     const cw = (LUCKY_COUNT_W[luckyRoute(cur.id)] || LUCKY_COUNT_W.main).slice(0, maxK);
     let k = 1;
@@ -275,9 +300,12 @@ function applyLucky(root) {
       k = picked ? picked.n : 1;
     }
     // 4. which floors, then which slot and blueprint on each
+    // (Fisher-Yates shuffle with the seeded generator, so the order is random but repeatable)
     for (let n = floors.length - 1; n > 0; n--) { const j = Math.floor(Math.random() * (n + 1)); [ floors[n], floors[j] ] = [ floors[j], floors[n] ]; }
     const ws = [ ...a.pool.values() ].map(v => v.w).sort((x, y) => x - y);
+    // Rare = the lowest-chance quarter of the pool; they get a small boost because they would otherwise almost never be picked.
     const rareCut = ws.length >= 4 ? ws[Math.floor(0.25 * (ws.length - 1))] : -1;
+    // `used` stops the same blueprint being placed on two floors.
     const used = new Set();
     // "Include masks" (NEO only): one of the k placements is a mask instead of a regular blueprint (it counts toward k and the ceiling)
     const maskIds = LUCKY.masks && luckyRoute(cur.id) === 'neo' ? luckyMaskPool(have, list, savePlatform(root) === 'PS') : [];
@@ -287,6 +315,7 @@ function applyLucky(root) {
       if (placed >= k) break;
       const slotOrder = fl.slots.slice();
       for (let n = slotOrder.length - 1; n > 0; n--) { const j = Math.floor(Math.random() * (n + 1)); [ slotOrder[n], slotOrder[j] ] = [ slotOrder[j], slotOrder[n] ]; }
+      // The mask is written straight into a built slot, outside the floor's loot table (masks have no NEO drop rows).
       if (placed === maskAt) {
         fl.e.rwds[slotOrder[0].i].rwdid = maskIds[Math.floor(Math.random() * maskIds.length)];
         placed++;
@@ -302,16 +331,18 @@ function applyLucky(root) {
         break;
       }
     }
+    // Nothing placed means no change at all (LUCKY_LAST stays false, so the review shows nothing).
     if (!placed) return root;
     s.hvntrinfo = list;
     LUCKY_LAST = true;
-  } finally { Math.random = realRandom; }
+  } finally { Math.random = realRandom; }   // always restore, even on an error, or every other random in the editor would stay seeded
   return root;
 }
 // luckyMaskCopy(root): for the Raw data and JSON compare views of "your edits": hide every reward of the planned floors ahead so
 // the hidden blueprints cannot be read there. Works on the deep copy those views keep; returns the same object.
 function luckyMaskCopy(root) {
   if (!LUCKY_LAST || !luckyPending() || !root || !root.soul || !Array.isArray(root.soul.hvntrinfo)) return root;
+  // The paused floor's own entry is left alone: that one is not part of the hidden plan.
   for (const e of root.soul.hvntrinfo) {
     if (!e || e.flrid === root.soul.flrid) continue;
     if (e.rwdid) e.rwdid = '(hidden)';
@@ -330,6 +361,7 @@ function renderLucky() {
   try { a = luckyAvailable(); } catch (err) { a = { ok: false }; }
   if (!a.ok) {
     host.innerHTML = '';
+    // A pending press that can no longer place anything is dropped, so the "Lucky run planned" marker cannot stay on for nothing.
     if (luckyPending()) { LUCKY.seed = 0; toast('Lucky run dropped: there is nothing left to hide in this run'); }
     return;
   }
@@ -342,6 +374,7 @@ function renderLucky() {
   if (mk) mk.addEventListener('change', () => { luckySync(); LUCKY.masks = mk.checked; renderAll(); });
   document.getElementById('lucky-go').addEventListener('click', () => {
     luckySync();
+    // Only the seed is stored, so the editor itself never knows where blueprints went (spoiler free).
     LUCKY.seed = luckyNewSeed();
     toast('Lucky run planned, download to apply');
     renderAll();

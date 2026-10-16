@@ -14,6 +14,7 @@ function decalsOverSlots() {
   const out = [];
   for (const c of arr(SAVE && SAVE.soul && SAVE.soul.chrs)) {
     if (!safetyFighter(c) || !arr(c.eqskls).length) continue;
+    // sorted by slot so the decals in the lowest slots stay and only the ones past the last real slot are reported
     const slots = decalSlotsOf(c), list = arr(c.eqskls).slice().sort((a, b) => (Number(a.slot) || 0) - (Number(b.slot) || 0));
     const keep = list.filter(e => (Number(e.slot) || 0) < slots).slice(0, slots), extra = list.filter(e => !keep.includes(e));
     if (extra.length) out.push({ c, slots, extra });
@@ -24,6 +25,7 @@ function decalsOverSlots() {
 // like unequipping in game; normal decals are simply lost. Returns the number of decals removed.
 function fixDecalsOverSlots() {
   let n = 0;
+  // make sure the stock is an array first, so a returned premium decal can be pushed into it
   SAVE.soul.psskls = arr(SAVE.soul.psskls);
   for (const o of decalsOverSlots()) {
     o.c.eqskls = arr(o.c.eqskls).filter(e => !o.extra.includes(e));
@@ -48,12 +50,14 @@ function partsOverMax() {
     const rec = inst && PT_INDEX[inst.ptid];
     if (!rec) return;
     const md = partMaxDur(rec, inst.lvl), why = [];
+    // md is 0 when no maximum is known, so such a part is never flagged
     if (md > 0 && Number(inst.dur) > md) why.push('dur');
     // parts with no magazine / no spare store 0 (all 11,852 game-made parts in the test saves)
     if (Number(inst.rest) > (Number(rec.capacity) || 0)) why.push('rest');
     if (Number(inst.spare) > (Number(rec.spare) || 0)) why.push('spare');
     if (why.length) out.push({ inst, rec, md, why, where });
   };
+  // ENEMY records are not the player's fighters and follow other rules, so their bags are skipped
   for (const c of arr(SAVE && SAVE.soul && SAVE.soul.chrs)) if (c && c.state !== 'ENEMY') for (const p of arr(c.pspts)) look(p, `${c.name || 'a fighter'}'s Death Bag`);
   for (const p of arr(SAVE && SAVE.cl && SAVE.cl.pts)) look(p, 'Storage Box');
   return out;
@@ -88,6 +92,7 @@ function fixStatsOverCap() {
   const list = statsOverCap();
   for (const o of list) {
     for (const k of o.over) o.c.bodylvl[k] = o.R.statCap + (Number((o.c.bodybonus || {})[k + '_bonus']) || 0);
+    // the level is derived from the stats, so it has to follow the lowered stats
     recomputeLevel(o.c);
   }
   return list.length;
@@ -113,6 +118,7 @@ function danglingSlots() {
   for (const h of arr(SAVE && SAVE.soul && SAVE.soul.chrslots)) {
     if (!h || !h.cid) continue;
     if (!cids.has(h.cid) || seen.has(h.cid)) out.hangers.push(h);
+    // added after the check so the first hanger for a fighter stays and only later duplicates are reported
     seen.add(h.cid);
   }
   const cl = (SAVE && SAVE.cl) || {};
@@ -123,6 +129,7 @@ function danglingSlots() {
 // Empties dangling hangers (cid '') and storage slots ('-1'). Returns the number emptied.
 function fixDanglingSlots() {
   const d = danglingSlots();
+  // emptied rather than removed so the hanger keeps its place in the freezer
   for (const h of d.hangers) h.cid = '';
   for (const x of d.storage) x.sl[x.k] = '-1';
   return d.hangers.length + d.storage.length;
@@ -137,6 +144,7 @@ function defenseProblems() {
   const seenPos = new Set(), seenCid = new Set();
   for (const e of list) {
     const c = arr(SAVE.soul.chrs).find(x => x && x.cid === e.cid), pos = e.wave + ':' + e.order;
+    // first matching reason wins; entries that pass are the only ones that claim a place, so a duplicate is the one flagged
     const why = !c ? 'not in the save' : c.state !== 'GUARD' ? `not a defender (${c.state})` : !(e.wave >= 0 && e.wave < DEF_WAVES && e.order >= 0 && e.order < DEF_SLOTS) ? 'not a real place' : seenPos.has(pos) ? 'two defenders in one place' : seenCid.has(e.cid) ? 'in two places' : '';
     if (why) out.bad.push({ e, c, why });
     else { seenPos.add(pos); seenCid.add(e.cid); }
@@ -173,6 +181,7 @@ function fixInUse() {
     keep = p.use.find(c => c.pause) || p.use.find(c => c.cid === SAVE.soul.crntcid) || p.use[0];
     for (const c of p.use) if (c !== keep) c.state = 'FREE';
   } else {
+    // prefer the current fighter; !abid skips a fighter that is kidnapped, which can't be taken into a run
     keep = p.chrs.find(c => c && c.cid === SAVE.soul.crntcid && c.state === 'FREE' && !c.abid) || p.chrs.find(c => c && c.state === 'FREE' && !c.abid);
     if (!keep) return 'No fighter in the freezer could be picked.';
     keep.state = 'USE';
@@ -184,6 +193,7 @@ function fixInUse() {
 // the alarm bought (soul.whistle_id) must be one master_fort_whistle knows
 function alarmUnknown() {
   const id = SAVE && SAVE.soul && SAVE.soul.whistle_id;
+  // needs the whistle table loaded, otherwise every id would look unknown when masters.db has no such data
   return id && arr(AP && AP.fortWhistle).length && !defAlarmRow(id) ? id : '';
 }
 // Compares stored safe_limit / spirit_tank_limit (rarely present) with the capacity for the stored level.
@@ -334,6 +344,7 @@ function runSaveCheck() {
   // dates
   safe('dates', () => {
     if (!RAW_SAV_ROOT) return;
+    // the dates are scanned on the root a download would produce, so what is reported matches what would be saved
     const root = dtBuildRoot();
     const ref = Math.floor(Date.now() / 1000);
     const c = { future: 0, post2038: 0, wrapped: 0 };
@@ -351,6 +362,7 @@ function runSaveCheck() {
   safe('research', () => {
     const research = arr(SAVE.user_research);
     if (!research.length) return;
+    // run on a copy: here we only want the count, the save is changed only if the user clicks the fix
     const n = normalizeResearchMarkers(JSON.parse(JSON.stringify(research)));
     if (n) add('warning', `${n} researched part${n === 1 ? ' is' : 's are'} missing the "next level" marker, so the game may not let you upgrade ${n === 1 ? 'it' : 'them'} further.`, 'research', {
       label: 'Fix markers', run: () => { const k = normalizeResearchMarkers(SAVE.user_research); return `Fixed the research markers on ${k} part${k === 1 ? '' : 's'}.`; }
@@ -363,12 +375,14 @@ function runSaveCheck() {
   safe('research-ps', () => {
     if (!RESEARCH_GAME_SKIP.size) return;
     const found = [];
+    // again a copy, with an empty skip map so the PS-only parts show up in found instead of being ignored
     normalizeResearchMarkers(JSON.parse(JSON.stringify(arr(SAVE.user_research))), found, new Map());
     const ids = [ ...new Set(found.map(f => f[0]).filter(id => RESEARCH_GAME_SKIP.has(id))) ];
     if (!ids.length) return;
     const names = [ ...new Set(ids.map(id => (PT_INDEX[id] && PT_INDEX[id].name) || id)) ];
     add('note', `${ids.length} PlayStation-only part${ids.length === 1 ? ' is' : 's are'} missing the "next level" marker (${names.slice(0, 5).map(escapeHtml).join(', ')}${names.length > 5 ? ', …' : ''}). A normal PC game doesn't have these parts, so this only matters if your PC game is modded to have them.`, 'research', {
       label: 'Fix PS-only markers', run: () => {
+        // stop skipping just these ids, so the markers get added for them but other PS-only parts stay untouched
         const keep = new Map([ ...RESEARCH_GAME_SKIP ].filter(([ id ]) => !ids.includes(id)));
         const k = normalizeResearchMarkers(SAVE.user_research, null, keep);
         RESEARCH_GAME_SKIP = keep;
@@ -379,6 +393,7 @@ function runSaveCheck() {
 
   // rewards the PC game can't hand over (placeholders, unnamed, PS-only)
   safe('rewards-unfit', () => {
+    // isPsSave() is passed so PS-only rewards are only unfit in a PC save
     const bad = arr(SAVE.presents).map(p => [ p, presentUnfit(p, isPsSave()) ]).filter(x => x[1]);
     if (!bad.length) return;
     const ps = bad.filter(x => x[1] === 'PlayStation-only').length, other = bad.length - ps;
@@ -400,6 +415,7 @@ function runSaveCheck() {
     if (!RAW_SAV_ROOT || !AP || !AP.pts || !AP.pts.length) return;
     const comp = computeStampTotals(), cur = {};
     for (const e of arr(SAVE.soul.researchstamp)) cur[e.type] = Number(e.rate) || 0;
+    // 0.05 leaves room for rounding in the stored rates so only real differences are reported
     const high = RESEARCH_STAMP_TYPES.filter(t => (cur[t] || 0) > (comp[t] || 0) + 0.05);
     if (!stampInitDone() && !stampMarked() && Object.values(cur).some(v => v > 0)) {
       add('problem', `Funshots are set, but the game hasn't run its one-time Funshot setup on this save. When it does (first Choku-Funsha visit) it counts research made by the editor twice, doubling the Funshots.`, 'research', {
@@ -421,6 +437,7 @@ function runSaveCheck() {
   // weapon mastery above the game's top level (20): written by other tools; the game has no data for those levels
   safe('mastery-max', () => {
     const over = mstOverMax(), zov = mstZombieOverMax(RAW_SAV_ROOT);
+    // this and the other armed rules below (RUN_END, SHUTDOWN_RESET, FIGHTER_DELETES) are tagged with the raw root they were set for, so loading another save never inherits them
     const capped = MASTERY_CAP.root === RAW_SAV_ROOT && MASTERY_CAP.on;
     if (!over.length && (!zov.length || capped)) return;
     const nm = id => { const r = arr(AP && AP.ptarmtps).find(x => x.id === id); return (r && resolveName(r.name)) || id; };
@@ -472,6 +489,7 @@ function runSaveCheck() {
     if (!inUse.length) return;
     const bad = inUse.filter(x => !armorSkinUnlocked(SAVE.user_research, x.ptid));
     if (bad.length) add('warning', `${bad.length} Armor Skin${bad.length === 1 ? ' is' : 's are'} in use but no longer unlocked (research below +4): ${bad.map(x => escapeHtml((PT_INDEX[x.ptid] || {}).name || x.ptid)).join(', ')}.`, 'research', {
+      // the list is rewritten in the shape the save used (array or object), so the structure the game expects is kept
       label: 'Take those skins off', run: () => { const keep = arr(SAVE.soul.armorskin).filter(x => !x || !x.ptid || armorSkinUnlocked(SAVE.user_research, x.ptid)); const k = arr(SAVE.soul.armorskin).length - keep.length; SAVE.soul.armorskin = keep.length ? keep : (Array.isArray(SAVE.soul.armorskin) ? [] : {}); return `Took off ${k} Armor Skin${k === 1 ? '' : 's'}; the fighter shows their real armor.`; }
     });
   });
@@ -487,6 +505,7 @@ function runSaveCheck() {
 
   // fighters closed mid-run (game closed or crashed without pausing) get a Bloodnium penalty
   safe('force-close', () => {
+    // the counts are read from the raw root; a reset only takes effect at download, so it is tracked separately in SHUTDOWN_RESET
     const f = shutdownCounts(RAW_SAV_ROOT), lim = constIntOf('FORCE_SHUTDOWN_BLOODNIUM_PENALTY_COUNT', 3), big = constIntOf('FORCE_SHUTDOWN_BLOODNIUM_LARGE_PENALTY_COUNT', 10);
     if (RUN_END.root === RAW_SAV_ROOT && RUN_END.on) return; // ending the run clears the counts, like the game
     const reset = SHUTDOWN_RESET.root === RAW_SAV_ROOT ? SHUTDOWN_RESET.cids : new Set();
@@ -576,6 +595,7 @@ function runSaveCheck() {
         // Fighters' rows are dropped from the save's item tables too (as when a fighter is deleted); a Storage Box
         // row is dropped at download once no slot points to it.
         if (FIGHTER_DELETES.root !== RAW_SAV_ROOT) FIGHTER_DELETES = { root: RAW_SAV_ROOT, cids: new Set, eids: new Set };
+        // per list: [slot id field, item id field, masters.db index]; pspts also needs equipped-part references cleaned up below
         const unk = { pspts: [ 'eptid', 'ptid', PT_INDEX ], psmsrs: [ 'emsrid', 'msrid', MSR_INDEX ], psbsts: [ 'ebstid', 'bstid', BST_INDEX ], psitems: [ 'eitemid', 'itemId', ITEM_INDEX ] };
         let n = 0;
         for (const c of arr(SAVE.soul.chrs)) {
@@ -617,6 +637,7 @@ function runSaveCheck() {
   // negative or overflowed numbers (another tool set a value past what the game's 32-bit numbers hold, so it wrapped
   // round to a negative); the game can't use them
   safe('negative-values', () => {
+    // largest value the game's 32-bit numbers hold
     const INT_MAX = 2147483647, bad = [];
     // big64 = the game stores it as a 64-bit number (rank points run to 18 billion and more), so only negatives count
     const look = (obj, key, label, where, big64) => { const v = Number(obj && obj[key]); if (obj && key in obj && (v < 0 || (!big64 && v > INT_MAX))) bad.push({ obj, key, label, where, v }); };
@@ -705,6 +726,7 @@ function runSaveCheck() {
   safe('death boxes', () => {
     const boxes = arr(soul.deathbox);
     const now = Math.floor(Date.now() / 1000);
+    // a box with no opentime counts as ready, only a time still in the future means it is locked
     const ready = boxes.filter(x => !(x.opentime > now)).length;
     if (ready) add('note', `${ready} death box${ready === 1 ? ' is' : 'es are'} ready to open.`, 'boxes');
     const bad = boxes.filter(boxBadFormat).length;
@@ -787,6 +809,7 @@ function wireHealth() {
   if (!panel) return;
   panel.addEventListener('toggle', () => { HEALTH.open = panel.open; });
   document.getElementById('health-recheck').addEventListener('click', e => {
+    // the button sits inside <summary>, so without this the click would also fold the panel
     e.preventDefault();
     runSaveCheck();
     HEALTH.open = true;
@@ -807,6 +830,7 @@ function wireHealth() {
   }));
   panel.querySelectorAll('[data-health-fix]').forEach(b => b.addEventListener('click', () => {
     const it = HEALTH.items[Number(b.dataset.healthFix)];
+    // one fix = run it, re-check, then show its message; a throwing fix is reported instead of leaving the UI half-updated
     let msg = '';
     try { msg = it.fix.run() || ''; } catch (err) { toast('Fix failed: ' + err.message, true); return; }
     runSaveCheck();

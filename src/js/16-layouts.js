@@ -5,6 +5,7 @@
 // layout puts on). Each piece comes from stock (the fighter's own Death Bag, then the Storage Box; decals
 // from the decal stock), is created new, or stock first and then created.
 // localStorage key for the layout library (versioned).
+// Versioned so a future change to the stored shape can use a new key instead of misreading old data.
 const LAY_KEY = 'lid.layouts.v1';
 // Weapon quick-slot indexes: 0-2 are right hand, 3-5 left hand.
 const LAY_WEAPON_SLOTS = [ 0, 1, 2, 3, 4, 5 ];
@@ -24,10 +25,12 @@ let LAY_UI = { fighter: '', gearMode: 'both', decalMode: 'both', replaceDecals: 
 let LAY_STATE = { root: null, fromStock: new Set, returned: new Set };
 
 // Random layout id.
+// Date.now() part makes a clash with an existing id very unlikely even if the random part repeats.
 function layRid() { return 'lay-' + Math.random().toString(16).slice(2, 10) + Date.now().toString(16).slice(-4); }
 // Coerce to string and truncate to n characters.
 function layStr(s, n) { return String(s == null ? '' : s).slice(0, n); }
 // Normalize one gear entry to {ptid, lvl} (display level, clamped 0-99), or null if invalid.
+// Layouts come from localStorage or a hand-edited/shared file, so nothing is trusted: bad values become null or 0 rather than throwing.
 function layEntry(e) {
   if (!e || typeof e !== 'object' || typeof e.ptid !== 'string' || !e.ptid) return null;
   const l = Math.round(Number(e.lvl));
@@ -38,10 +41,13 @@ function layNorm(o) {
   if (!o || typeof o !== 'object') return null;
   const w = Array.isArray(o.weapons) ? o.weapons : [];
   const a = o.armor && typeof o.armor === 'object' ? o.armor : {};
+  // held = which of the 3 slots each hand holds; anything outside 0-2 falls back to the first slot.
   const held = Array.isArray(o.held) ? o.held.map(v => { v = Math.round(Number(v)); return v >= 0 && v <= 2 ? v : 0; }) : [ 0, 0 ];
   const seen = new Set;
+  // Drop duplicates (a decal can only be worn once) and cap at 99, the same limit the editor UI enforces.
   const decals = (Array.isArray(o.decals) ? o.decals : []).filter(id => typeof id === 'string' && id && !seen.has(id) && seen.add(id)).map(id => layStr(id, 80)).slice(0, 99);
   const armor = {};
+  // Always fill all three sites so the rest of the code can index armor[site] without checks.
   for (const s of LAY_ARMOR_SITES) armor[s] = layEntry(a[s]);
   return {
     id: typeof o.id === 'string' && o.id ? layStr(o.id, 40) : layRid(),
@@ -54,6 +60,7 @@ function layNorm(o) {
   };
 }
 // Load the library from localStorage (up to 200 layouts), normalizing each; falls back to empty and keeps a valid selection.
+// A corrupt or hand-edited value must never stop the editor from starting, hence the try/catch and the 200 cap.
 function layLoad() {
   try {
     const j = JSON.parse(localStorage.getItem(LAY_KEY) || '[]');
@@ -67,6 +74,7 @@ function laySave() {
   catch (err) { toast("Couldn't save the layout library in this browser. Use Export to keep a copy.", true); return false; }
 }
 // Load the library once at startup.
+// Runs here (not on tab open) so the library is ready before any save is loaded.
 layLoad();
 // The currently selected layout, or null.
 function laySel() { return LAY.list.find(l => l.id === LAY.sel) || null; }
@@ -81,6 +89,7 @@ function layPsOk() {
   return !!LAY_UI.includePs;
 }
 // Pick the display level a part can actually be (min/max depend on the part; uncap parts start above +4).
+// Going raw and back applies the part's own min/max rules, so the shown level is always one the game accepts.
 function layClampLvl(rec, L) { return rec ? displayFromRaw(rec, rawFromDisplay(rec, L)) : (Number(L) || 0); }
 // "Name +lvl" for a layout entry, or the raw ptid for unknown parts.
 function layPartName(e) {
@@ -94,10 +103,12 @@ function laySummary(l) {
 }
 
 // A fighter's current weapons / armor / decals as a layout.
+// Stores display levels (what the player sees) rather than raw ones, so a layout still reads sensibly if raw encoding differs.
 function layCapture(chr, name) {
   const l = layNorm({ name: name || `${chr.name || 'Fighter'} loadout` });
   const byEid = {};
   for (const p of arr(chr.pspts)) byEid[p.eptid] = p;
+  // Parts missing from masters.db are stored as empty: a layout entry we cannot name or clamp would be unusable later.
   const mk = p => { const rec = p && PT_INDEX[p.ptid]; return rec ? { ptid: p.ptid, lvl: displayFromRaw(rec, p.lvl) } : null; };
   LAY_WEAPON_SLOTS.forEach(i => { l.weapons[i] = mk(byEid[(chr.armslots || {})[i]]); });
   LAY_ARMOR_SITES.forEach(s => { const e = arr(chr.eqpts).find(x => x.site === s); l.armor[s] = e ? mk(byEid[e.eptid]) : null; });
@@ -107,11 +118,13 @@ function layCapture(chr, name) {
 }
 
 // Number of decal slots the fighter has: class/grade base plus body-level skill bonus, clamped to the class floor and cap.
+// Uses the fighter's class, grade, limit break and body level, so a layout never puts on more decals than the fighter can wear.
 function layDecalSlots(chr) {
   const R = fighterRanges(chr.type || 'BAL', chr.grade != null ? chr.grade : 1, chr.limit_break || 0);
   return Math.min(Math.max(R.skillBase + ((chr.bodylvl || {}).skill || 0), R.skillFloor), R.skillCap);
 }
 // Reason a fighter can't receive a layout (dead Hater, dummy, kidnapped), or null if fine.
+// Equipping onto a dead, dummy or kidnapped fighter makes no sense, so refuse up front instead of half-applying.
 function layFighterBlock(c) {
   if (!c) return 'No fighter selected.';
   if (c.state === 'ENEMY') return 'This fighter is dead (a Hater). Recover them first.';
@@ -136,11 +149,13 @@ function layApply(lay, chr, cl, psskls, o, state, rawEqIds) {
   chr.pspts = arr(chr.pspts); chr.eqpts = arr(chr.eqpts); chr.eqskls = arr(chr.eqskls);
   chr.armslots = chr.armslots || {};
   // ---- decals first: requirement decals change what gear the fighter can wear ----
+  // Counted against finalIds below, so replace mode frees the old decals' slots first.
   const slotsTotal = layDecalSlots(chr);
   const cur = chr.eqskls.map(s => s.id || s.sklid);
   // `want` = layout decals; `finalIds` = what the fighter ends with; `removed` = decals taken off
   const want = lay.decals.slice();
   const stockOf = id => psskls.find(s => s.id === id);
+  // In keep mode the current decals stay and new ones only fill free slots; in replace mode the list is rebuilt from the layout.
   const finalIds = o.replaceDecals ? [] : cur.slice();
   const removed = o.replaceDecals ? cur.filter(id => !want.includes(id)) : [];
   // add each wanted decal: already on, else from decal stock, else created (if allowed)
@@ -152,9 +167,11 @@ function layApply(lay, chr, cl, psskls, o, state, rawEqIds) {
     if (used >= slotsTotal) { add('decal', 'skip', nm, `no free decal slot (${slotsTotal} slots)`); continue; }
     const st = stockOf(id);
     if (o.decalMode !== 'create' && st && (st.cnt || 0) > 0) {
+      // Remember it came from stock so taking it off again returns it instead of leaving a stock item destroyed.
       st.cnt -= 1; state.fromStock.add(`${chr.cid}|${id}`); finalIds.push(id); add('decal', 'new', nm, 'taken from the decal stock'); continue;
     }
     if (o.decalMode !== 'stock') {
+      // Same check the reward/Add tools use, so layouts can't create items that don't belong (e.g. PS-only items in a PC save).
       const why = rewardUnfit('skl', id, ps);
       if (why) { add('decal', 'skip', nm, `can't be created: ${why}`); continue; }
       finalIds.push(id); add('decal', 'new', nm, 'created (not taken from stock)'); continue;
@@ -165,6 +182,7 @@ function layApply(lay, chr, cl, psskls, o, state, rawEqIds) {
   for (const id of removed) {
     const rec = SKL_INDEX[id], nm = rec ? rec.name : id;
     const key = `${chr.cid}|${id}`;
+    // Only premium decals are given back, and only if the editor took them from stock or the original save had them on and they weren't already returned; this avoids handing back a decal the stock never lost or one already returned.
     if (rec && Number(rec.premium) === 1 && (state.fromStock.has(key) || (rawEqIds.has(id) && !state.returned.has(key)))) {
       let st = stockOf(id);
       if (!st) psskls.push(st = { id, lvl: 1, cnt: 0, is_checked: 1 });
@@ -175,6 +193,7 @@ function layApply(lay, chr, cl, psskls, o, state, rawEqIds) {
     else add('decal', 'lost', nm, 'taken off. Normal decals are lost when removed');
   }
   // rebuild eqskls keeping existing objects for kept decals and assigning the first free slot to new ones
+  // Reusing the existing decal objects keeps any unknown fields on them, so the saved diff stays small.
   const keptObjs = finalIds.map(id => chr.eqskls.find(s => (s.id || s.sklid) === id) || null);
   const used = new Set(keptObjs.filter(Boolean).map(e => e.slot));
   chr.eqskls = keptObjs.map((e, i) => {
@@ -185,6 +204,7 @@ function layApply(lay, chr, cl, psskls, o, state, rawEqIds) {
   });
   // ---- gear ----
   // slots 0-2 = right hand (EQSITE_ARMR), 3-5 = left hand (EQSITE_ARML); armor targets use slot -1
+  // Each target is one slot to fill; same loop handles weapons and armor.
   const weaponTargets = LAY_WEAPON_SLOTS.map(i => ({ site: i < 3 ? 'EQSITE_ARMR' : 'EQSITE_ARML', slot: i, e: lay.weapons[i], label: `${i < 3 ? 'Right' : 'Left'} hand slot ${(i % 3) + 1}` }));
   const armorTargets = LAY_ARMOR_SITES.map(s => ({ site: s, slot: -1, e: lay.armor[s], label: LAY_ARMOR_LABEL[s], armor: true }));
   const targets = weaponTargets.concat(armorTargets);
@@ -193,17 +213,22 @@ function layApply(lay, chr, cl, psskls, o, state, rawEqIds) {
     const eid = t.armor ? (chr.eqpts.find(x => x.site === t.site) || {}).eptid : chr.armslots[t.slot];
     return eid ? chr.pspts.find(p => p.eptid === eid) : null;
   };
+  // Taken before any change so held weapons are only switched when the layout really asks for a different one.
   const heldBefore = HAND_SITES.map(h => heldIndex(chr, h));
   const usedEids = new Set;
   // (a bag part worn in a slot the layout doesn't set must not be borrowed)
+  // Without this, a layout could pull a weapon out of a slot the layout doesn't touch and leave that slot silently empty.
   const wornElsewhere = eid => {                 // worn in a slot this layout does not set
     for (const t of targets) if (!t.e && occupant(t) && occupant(t).eptid === eid) return true;
     return false;
   };
   // Storage Box pieces actually placed in a box slot ('-1' means empty)
+  // '-1' is the game's empty marker, so those slots hold no real part and must not count as stock.
   const inBox = new Set(cl.slots.map(s => s.eptid).filter(e => e && e !== '-1'));
+  // Moving or creating a part adds it to the Death Bag, which has a size limit.
   const bagFree = () => deathBagLimit(chr) - fighterItemCount(chr);
   // equip part p in target t, removing it from any other slot first
+  // Remove the part from every other slot first: one part instance can only be equipped in one place.
   const place = (t, p) => {
     for (const k of Object.keys(chr.armslots)) if (chr.armslots[k] === p.eptid) delete chr.armslots[k];
     chr.eqpts = chr.eqpts.filter(x => x.eptid !== p.eptid);
@@ -227,6 +252,7 @@ function layApply(lay, chr, cl, psskls, o, state, rawEqIds) {
     const name = `${rec.name} +${displayFromRaw(rec, raw)}`;
     const label = `${t.label}: ${name}`;
     const occ = occupant(t);
+    // Leave an exact match alone so Preview shows 'already equipped' and no needless churn lands in the save.
     if (occ && occ.ptid === t.e.ptid && Number(occ.lvl) === raw && !gearProblem(chr, occ, t.site)) { usedEids.add(occ.eptid); add(kind, 'same', label, 'already equipped'); continue; }
     let stockNote = '';
     // 1. stock: the fighter's own bag, then the Storage Box
@@ -234,14 +260,17 @@ function layApply(lay, chr, cl, psskls, o, state, rawEqIds) {
       const fit = (p, from) => p.ptid === t.e.ptid && Number(p.lvl) === raw && !usedEids.has(p.eptid) && !(from === 'bag' && wornElsewhere(p.eptid));
       const cands = chr.pspts.filter(p => fit(p, 'bag')).map(p => ({ p, from: 'bag' }))
         .concat(cl.pts.filter(p => inBox.has(p.eptid) && fit(p, 'box')).map(p => ({ p, from: 'box' })))
+        // Bag before box (no move needed), then the most durable piece first.
         .sort((a, b) => (a.from === b.from ? 0 : a.from === 'bag' ? -1 : 1) || (Number(b.p.dur) || 0) - (Number(a.p.dur) || 0));
       let firstWhy = '';
+      // Try candidates in order; remember the first reason one failed so the report can explain a skip.
       for (const c of cands) {
         const why = gearProblem(chr, c.p, t.site);
         if (why) { firstWhy = firstWhy || why; continue; }
         if (c.from === 'box') {
           if (bagFree() < 1) { firstWhy = firstWhy || `Death Bag full (${deathBagLimit(chr)} slots)`; continue; }
           cl.pts = cl.pts.filter(x => x !== c.p);
+          // Blank the box slot rather than removing it, so the Storage Box keeps its slot layout.
           cl.slots = cl.slots.map(s => s.eptid === c.p.eptid ? { slot: s.slot, eptid: '-1', emsrid: '-1', ebstid: '-1', eitemid: '-1' } : s);
           inBox.delete(c.p.eptid);
           chr.pspts.push(c.p);
@@ -257,6 +286,7 @@ function layApply(lay, chr, cl, psskls, o, state, rawEqIds) {
     if (o.gearMode === 'stock') { add(kind, 'skip', label, stockNote); continue; }
     const unfit = rewardUnfit('pt', t.e.ptid, ps);
     if (unfit) { add(kind, 'skip', label, `${stockNote ? stockNote + '; ' : ''}can't be created: ${unfit}`); continue; }
+    // New parts get an 'edit-' id so they can't clash with game ids; full durability/ammo matches what a freshly crafted part would have.
     const fresh = { eptid: 'edit-' + Math.random().toString(16).slice(2) + Date.now().toString(16), ptid: rec.id, gettime: Math.floor(Date.now() / 1e3), rest: Number(rec.capacity) || 0, spare: Number(rec.spare) || 0, grade: 0, dur: partMaxDur(rec, raw) || rec.dur, lvl: raw };
     const why = gearProblem(chr, fresh, t.site);
     if (why) { add(kind, 'skip', label, `${stockNote ? stockNote + '; ' : ''}${why}`); continue; }
@@ -265,6 +295,7 @@ function layApply(lay, chr, cl, psskls, o, state, rawEqIds) {
     add(kind, 'new', label, `created at full durability${stockNote ? ' (' + stockNote + ')' : ''}`);
   }
   // held weapons: the layout's choice per hand, where that slot ends up holding a weapon
+  // Switching to an empty slot would leave the fighter with nothing in hand.
   // held weapons: only switch a hand when the wanted slot holds a weapon
   let held = heldBefore.slice(), heldChanged = false;
   HAND_SITES.forEach((h, hi) => {
@@ -314,6 +345,7 @@ function laySlotRow(key, label, entry, ptType, lead) {
 function renderLayouts() {
   const host = document.getElementById('lay-body');
   if (!host) return;
+  // Decal bookkeeping and Undo belong to one loaded save; a new save must not inherit them.
   if (LAY_STATE.root !== RAW_SAV_ROOT) { LAY_STATE = { root: RAW_SAV_ROOT, fromStock: new Set, returned: new Set }; LAY_UI.undo = null; LAY_UI.report = null; }
   if (!AP || !SAVE) { host.innerHTML = '<div class="capNote">Load a save and masters.db first.</div>'; return; }
   const chrs = arr(SAVE.soul && SAVE.soul.chrs);
@@ -391,11 +423,13 @@ function layRawEqIds(cid) {
   return new Set(arr(raw).filter(e => e.cid === cid).map(e => e.sklid));
 }
 // Dry run: applies the layout to deep copies of the fighter, Storage Box and decal stock and shows the report.
+// Works on deep copies so Preview can never change the real save; Apply is only enabled after a matching Preview.
 function layPreview() {
   const L = laySel(), chr = arr(SAVE.soul.chrs).find(c => c.cid === LAY_UI.fighter);
   if (!L || !chr) return;
   const why = layFighterBlock(chr);
   if (why) { toast(why, true); return; }
+  // JSON round trip is enough because save data is plain JSON.
   const clone = x => JSON.parse(JSON.stringify(x));
   const steps = layApply(L, clone(chr), clone(SAVE.cl || { pts: [], slots: [] }), clone(arr(SAVE.soul.psskls)), layOpts(), { fromStock: new Set(LAY_STATE.fromStock), returned: new Set(LAY_STATE.returned) }, layRawEqIds(chr.cid));
   LAY_UI.report = { layId: L.id, cid: chr.cid, fighter: chr.name || 'the fighter', steps, done: false };
@@ -409,8 +443,10 @@ function layDoApply() {
   if (lost.length && !confirm(`${lost.length} normal decal${lost.length === 1 ? '' : 's'} will be lost (${lost.map(s => s.label).join(', ')}). Continue?`)) return;
   SAVE.cl = SAVE.cl || { pts: [], slots: [] };
   SAVE.soul.psskls = arr(SAVE.soul.psskls);
+  // Stored as JSON strings so later edits to the live objects can't alter the snapshot.
   const snap = { cid: chr.cid, name: L.name, chr: JSON.stringify(chr), cl: JSON.stringify(SAVE.cl), psskls: JSON.stringify(SAVE.soul.psskls), fromStock: [...LAY_STATE.fromStock], returned: [...LAY_STATE.returned] };
   const steps = layApply(L, chr, SAVE.cl, SAVE.soul.psskls, layOpts(), LAY_STATE, layRawEqIds(chr.cid));
+  // The save check runs after the apply (below) because it changes what is equipped and owned.
   LAY_UI.undo = snap;
   LAY_UI.report = { layId: L.id, cid: chr.cid, fighter: chr.name || 'the fighter', steps, done: true };
   runSaveCheck();
@@ -424,6 +460,7 @@ function layUndo() {
   const chr = arr(SAVE.soul.chrs).find(c => c.cid === u.cid);
   if (!chr) { toast('That fighter is gone', true); LAY_UI.undo = null; renderLayouts(); return; }
   if (!confirm(`Undo "${u.name}"? The fighter, the Storage Box and the decal stock go back to how they were before it was applied. Anything you changed on those since is lost.`)) return;
+  // Restores in place (not by replacing) because other code holds references to these same objects/arrays.
   const restore = (target, json) => { const o = JSON.parse(json); if (Array.isArray(target)) { target.length = 0; o.forEach(x => target.push(x)); } else { for (const k of Object.keys(target)) delete target[k]; Object.assign(target, o); } };
   restore(chr, u.chr); restore(SAVE.cl, u.cl); restore(SAVE.soul.psskls, u.psskls);
   LAY_STATE.fromStock = new Set(u.fromStock); LAY_STATE.returned = new Set(u.returned);
@@ -438,6 +475,7 @@ function layDownload(name, text) {
   a.href = URL.createObjectURL(new Blob([ text ], { type: 'application/json' }));
   a.download = name;
   document.body.appendChild(a); a.click(); a.remove();
+  // Delayed so the browser has started the download before the link is released.
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
 // Exported files are laid out for people: one gear piece per line with its in-game name, empty slots
@@ -447,6 +485,7 @@ function layDownload(name, text) {
 // Label such as "Right hand 2" for weapon slot i.
 function layWeaponLabel(i) { return (i < 3 ? 'Right hand ' : 'Left hand ') + (i % 3 + 1); }
 // Build the export document ({format:'lid-layouts', version:1, layouts:[...]}) with human-readable extras.
+// `named` guards the name lookups when no masters.db is loaded; the file then just carries ids.
 function layExportDoc(list) {
   const named = !!(AP && AP.pts && AP.pts.length);
   const piece = (slot, e) => {
@@ -481,6 +520,7 @@ function layExportDoc(list) {
   };
 }
 // JSON with small objects and short lists kept on one line, everything else indented.
+// Plain JSON.stringify indenting would put every short list on many lines; this keeps the file readable and still valid JSON.
 function layPretty(v, ind) {
   ind = ind || '';
   const flat = JSON.stringify(v);
@@ -501,6 +541,7 @@ function layExport(list, file) {
 function layImportText(text) {
   let j;
   try { j = JSON.parse(text); } catch (err) { toast("That file isn't valid JSON", true); return; }
+  // Also accepts a bare array so hand-made files work.
   const src = Array.isArray(j) ? j : (j && j.format === 'lid-layouts' && Array.isArray(j.layouts)) ? j.layouts : null;
   if (!src) { toast("That isn't a layouts file", true); return; }
   const have = new Set(LAY.list.map(l => l.id));
@@ -508,6 +549,7 @@ function layImportText(text) {
   for (const o of src.slice(0, 200)) {
     const l = layNorm(o);
     if (!l) continue;
+    // Importing the same file twice must add copies, not overwrite or duplicate ids.
     if (have.has(l.id)) l.id = layRid();
     have.add(l.id); LAY.list.push(l); n++;
     if (LAY.list.length >= 200) break;
@@ -522,6 +564,7 @@ function layImportText(text) {
 function wireLayoutsUi() {
   const $ = id => document.getElementById(id);
   const L = laySel();
+  // Any edit invalidates the last Preview, so the report is cleared and Apply is disabled until previewed again.
   const redo = () => { LAY_UI.report = null; renderLayouts(); };
   $('lay-new').addEventListener('click', () => { const l = layNew('New layout'); LAY.list.push(l); LAY.sel = l.id; laySave(); redo(); });
   $('lay-dup').addEventListener('click', () => { if (!L) return; const l = layNorm(JSON.parse(JSON.stringify(L))); l.id = layRid(); l.name = layStr(L.name + ' copy', 80); LAY.list.push(l); LAY.sel = l.id; laySave(); redo(); });
@@ -549,6 +592,7 @@ function wireLayoutsUi() {
     const ptType = isW ? 'PTTP_ARM' : LAY_ARMOR_TYPE[key];
     const get = () => isW ? L.weapons[Number(key.slice(1))] : L.armor[key];
     const set = v => { if (isW) L.weapons[Number(key.slice(1))] = v; else L.armor[key] = v; };
+    // Only parts that could legitimately be created (rewardUnfit) are offered; PS items are allowed here since layouts are portable between saves.
     wireAutocomplete($('lay-s-' + key), $('lay-d-' + key), 'pt', rec => {
       const lvl = layClampLvl(rec, ($('lay-l-' + key) || {}).value);
       set({ ptid: rec.id, lvl });

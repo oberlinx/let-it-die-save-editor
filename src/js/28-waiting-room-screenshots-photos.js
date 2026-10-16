@@ -20,24 +20,27 @@ const HUB_SITES = [
 const HUB_SITE_TEXT = { WAL: 'TXT_DECO_WALL', FLR: 'TXT_DECO_FLOOR', PLR: 'TXT_DECO_PILLAR', FNT: 'TXT_DECO_FOUNTAIN', FLG: 'TXT_DECO_FLAG', PST: 'TXT_DECO_POSTER', OBJ: 'TXT_DECO_DECORATION1', ILM: 'TXT_DECO_DECORATION2', PLT: 'TXT_DECO_DECORATION3', ET0: 'TXT_DECO_DECORATION4' };
 // Per-save original snapshot (for Undo) and last log message.
 let HUB_STATE = { root: null, original: null, lastMsg: '' };
-// includePs: show PlayStation-only (World of Tanks) items.
+// includePs: show PlayStation-only (World of Tanks) items. Off by default so PS-only content doesn't
+// appear in a PC save; owned ones stay visible either way (see visible() in renderHub).
 const HUB_FORM = { includePs: false };
 
-// True if the decoration flag has bit 2 or 4 set (owned).
+// True if the decoration flag has bit 2 or 4 set (owned). Mask 6 rather than just 2, because an item in
+// use is stored as 4 (not 6) and would otherwise look unowned.
 const hubOwned = e => !!e && ((Number(e.flg) || 0) & 6) !== 0;
 // Returns SAVE.soul.hubcustom (array of {cstmid, flg}) or null.
 function hubData() {
   const s = SAVE && SAVE.soul;
   return s && Array.isArray(s.hubcustom) ? s.hubcustom : null;
 }
-// Snapshots hub data when a new save is loaded.
+// Snapshots hub data when a new save is loaded (deep copy, since the list is edited in place).
 function hubSync() {
   if (HUB_STATE.root !== RAW_SAV_ROOT) {
     const h = hubData();
     HUB_STATE = { root: RAW_SAV_ROOT, original: h ? JSON.parse(JSON.stringify(h)) : null, lastMsg: '' };
   }
 }
-// Index of master_hubcustomize rows by id.
+// Index of master_hubcustomize rows by id. The save only lists decorations it has an entry for, so this
+// master data is also what tells us about decorations that are missing from the save.
 function hubMeta() {
   const m = {};
   for (const r of arr(AP && AP.hubCustom)) m[r.id] = r;
@@ -75,12 +78,16 @@ function renderHub() {
   // shown as locked; they're only added to the save if you unlock or use one
   const byId = {};
   for (const e of list) byId[e.cstmid] = e;
+  // virtual entries are not in the list yet; ensure() below pushes one in only when the user changes it,
+  // so just viewing the tab never adds fields to the save
   const virtual = Object.keys(meta).filter(id => !byId[id]).map(id => ({ cstmid: id, flg: 0 }));
   for (const e of virtual) byId[e.cstmid] = e;
   const all = list.concat(virtual);
   const ensure = e => { if (!list.includes(e)) list.push(e); return e; };
   const changed = JSON.stringify(list) !== JSON.stringify(HUB_STATE.original);
+  // site comes from master data; the id's third part (e.g. X_Y_SITE_...) is the fallback for unknown ids
   const siteOf = e => (meta[e.cstmid] && meta[e.cstmid].site) || e.cstmid.split('_')[2];
+  // PS-only items are hidden unless the box is ticked, but an already-owned one is always shown
   const visible = e => HUB_FORM.includePs || !(meta[e.cstmid] && meta[e.cstmid].platform === 1) || hubOwned(e);
   const owned = all.filter(hubOwned).length;
   const lockedVisible = all.filter(e => !hubOwned(e) && visible(e)).length;
@@ -90,6 +97,7 @@ function renderHub() {
   h += `<div class="toolbar"><span style="font-size:12px;">${owned} of ${all.length} decorations owned</span>
     <label class="stewHlOnly"><input type="checkbox" id="hub-ps" ${HUB_FORM.includePs ? 'checked' : ''}> Include PlayStation-only (World of Tanks)</label>
     <span style="flex:1;"></span><button class="action" id="hub-unlock-all" ${lockedVisible ? '' : 'disabled'}>Unlock all shown (${lockedVisible})</button></div>`;
+  // known spots first in a fixed order, then any extra spot codes found in the data, so nothing is hidden
   const sites = HUB_SITES.map(s => s[0]).concat([ ...new Set(all.map(siteOf)) ].filter(s => !HUB_SITES.some(x => x[0] === s)));
   for (const site of sites) {
     const items = all.filter(e => siteOf(e) === site && visible(e)).sort((a, b) => ((meta[a.cstmid] || {}).sort || 0) - ((meta[b.cstmid] || {}).sort || 0));
@@ -102,6 +110,7 @@ function renderHub() {
       const m = meta[e.cstmid] || {};
       const nm = resolveName(m.name) || e.cstmid;
       const use = !!(e.flg & 4);
+      // the _NONE default for a spot can't be locked, otherwise the spot could be left with nothing to show
       const isDefault = /_NONE$/.test(e.cstmid);
       return `<div class="listRow"><div class="name">${escapeHtml(nm)} ${m.platform === 1 ? '<span class="badge">PS only</span>' : ''}</div>
         ${use ? '<span class="badge current">IN USE</span>' : hubOwned(e) ? '<span class="badge">owned</span>' : '<span class="badge" style="opacity:0.5;">locked</span>'}
@@ -136,11 +145,14 @@ function renderHub() {
   host.querySelectorAll('[data-hub-use]').forEach(b => b.addEventListener('click', () => {
     const e = ensure(byId[b.dataset.hubUse]);
     const site = siteOf(e);
+    // the item that was shown loses bit 4; if that leaves 0 it becomes 2, because it was in use so it was owned
     for (const o of list) if (o !== e && siteOf(o) === site && (o.flg & 4)) o.flg = (o.flg & ~4) || 2;
+    // using a locked item also unlocks it (flag 2) so the saved state is one the game itself produces
     e.flg = (hubOwned(e) ? (e.flg & 6) : 2) | 4;
     redo(`${hubSiteName(site)} now shows ${name(e.cstmid)}.`);
   }));
   host.querySelectorAll('[data-hub-lock]').forEach(b => b.addEventListener('click', () => {
+    // 0 = not owned (seen), not 1: 1 would mark it "new" in the shop again
     byId[b.dataset.hubLock].flg = 0;
     redo(`Locked ${name(b.dataset.hubLock)}.`);
   }));
@@ -164,7 +176,8 @@ function photoList() {
   const s = SAVE && SAVE.soul;
   return s && Array.isArray(s.screenshot) ? s.screenshot : [];
 }
-// Decodes a base64 string into a Uint8Array.
+// Decodes a base64 string into a Uint8Array. Raw bytes are needed so the export is a real PNG file,
+// not a text download.
 function photoBytes(b64) {
   const bin = atob(b64);
   const out = new Uint8Array(bin.length);
@@ -178,6 +191,7 @@ function photoTitle(p) {
   const o = PHOTO_ORDINAL[p.boss];
   return o ? `Your ${o} large stamp` : `Photo ${p.boss}`;
 }
+// The date is in the name so several photos of the same boss from different saves don't collide.
 // Download file name for a photo: LET_IT_DIE_photo_<boss>_<YYYY-MM-DD>.png ('undated' if p.created is not a sane unix time).
 function photoFileName(p) {
   const d = dtIsDateValue(p.created) ? new Date(p.created * 1000) : null;
@@ -206,6 +220,7 @@ function blockPhotos() {
 function renderPhotos() {
   const host = document.getElementById('photo-body');
   if (!host || !SAVE) return;
+  // entries without image data are skipped, so a broken record can't produce an empty card or throw in atob
   const list = photoList().filter(p => p && typeof p.photo === 'string' && p.photo.length);
   if (!list.length) { host.innerHTML = '<div style="padding:10px; color:var(--text-faint); font-size:12px;">No photos in this save yet.</div>'; return; }
   const total = list.reduce((a, p) => a + Math.floor(p.photo.length * 3 / 4), 0);
@@ -224,6 +239,7 @@ function renderPhotos() {
     toast(`Exported ${photoFileName(p)}`);
   }));
   document.getElementById('photo-export-all').addEventListener('click', () => {
+    // staggered because browsers tend to block several downloads started in the same instant
     list.forEach((p, i) => setTimeout(() => photoExport(p), i * 400));
     toast(`Exporting ${list.length} photo${list.length === 1 ? '' : 's'}...`);
   });
@@ -264,10 +280,12 @@ let HEALTH_LOAD = { repairedChars: 0 };
 function fightersOverCap() {
   const out = [];
   for (const c of arr(SAVE && SAVE.soul && SAVE.soul.chrs)) {
+    // ENEMY / DUMMY fighters are skipped as well (they are not the player's own fighters)
     // CONCILIATE fighters (taken from other players) keep the stats and upgrades of their own limit break while the
     // game stores them at Limit Break 0 (seen in game saves: 30-45 stats, +3 slots / +9 bag), so they're not checked
     if (!c || !c.bodylvl || c.state === 'ENEMY' || c.state === 'DUMMY' || c.state === 'CONCILIATE') continue;
     const R = fighterRanges(c.type || 'BAL', c.grade != null ? c.grade : 1, c.limit_break || 0);
+    // lim = how much can be BOUGHT above the type's base; has = how much the fighter actually has stored
     const lim = { skill: R.skillCap - R.skillBase, bag: R.bagCap - R.bagBase, rage: R.rageCap - R.rageBase };
     const has = { skill: Number(c.bodylvl.skill) || 0, bag: Number(c.bodylvl.bag) || 0, rage: Number(c.rage) || 0 };
     const over = Object.keys(lim).filter(k => has[k] > lim[k]);
@@ -309,11 +327,12 @@ function fixFightersBadGrade() {
 }
 function fixFightersOverCap() {
   const list = fightersOverCap();
+  // only values over the cap are lowered; anything within limits is left as the player set it
   for (const o of list) {
     if (o.has.skill > o.lim.skill) o.c.bodylvl.skill = o.lim.skill;
     if (o.has.bag > o.lim.bag) o.c.bodylvl.bag = o.lim.bag;
     if (o.has.rage > o.lim.rage) o.c.rage = o.lim.rage;
-    recomputeLevel(o.c);
+    recomputeLevel(o.c); // the fighter's level is derived from these upgrades, so it must follow
   }
   return list.length;
 }

@@ -6,9 +6,10 @@
 // ---------------------------------------------------------------------------
 // IndexedDB database/store for kept downloads (separate from the recent-saves DB).
 const HIST_IDB = { db: 'lid-editor-history', store: 'saves' };
-// Maximum entries kept; the oldest are pruned in histPut.
+// Maximum entries kept; the oldest are pruned in histPut. Saves are large, so the cap stops the browser's storage filling up.
 const HIST_MAX = 12;
-// localStorage key for the on/off preference (default on).
+// localStorage key for the on/off preference (default on). Plain localStorage is enough: it is only a convenience
+// setting, and the code copes when storage is blocked.
 const HIST_PREF_KEY = 'lid.history.on';
 // Tracks which loaded save already had its pristine "original" copy stored, so it is stored only once per load.
 let HIST_LOADED = { root: null, kept: false };
@@ -26,6 +27,7 @@ function histOpen() {
   });
 }
 // histTx(mode, fn): run fn(store, setResult) in one transaction and resolve with the value passed to setResult once the transaction completes. Always closes the connection.
+// The promise waits for tx.oncomplete (not just the request) so a write is really committed before callers go on.
 async function histTx(mode, fn) {
   const idb = await histOpen();
   try {
@@ -48,6 +50,7 @@ function histGet(id) { return histTx('readonly', (st, done) => { const r = st.ge
 function histDelete(id) { return histTx('readwrite', st => { st.delete(id); }); }
 function histClear() { return histTx('readwrite', st => { st.clear(); }); }
 // histPut(entry): add an entry, then delete everything beyond the newest HIST_MAX.
+// Pruning is by id (ids rise with every add), so an "original" is only dropped once it is older than all kept entries.
 async function histPut(entry) {
   await histTx('readwrite', st => { st.add(entry); });
   const all = await histList();
@@ -58,18 +61,23 @@ function histFighters() { return arr(SAVE && SAVE.soul && SAVE.soul.chrs).filter
 // histRecord(kind, fname, data, sections): store the downloaded bytes (Blob) plus a short change summary (max 40 lines).
 // The first time a download is made from a given load, the original file is stored too (timestamped 1 ms earlier so it sorts before). Failures only toast; the download itself already happened.
 // called after a download was written; data is exactly what was downloaded
+// The history is a safety net, so it must never get in the way: every failure here is caught and only shown as a toast.
 async function histRecord(kind, fname, data, sections) {
   if (!histOn()) return;
   try {
     const account = (RAW_SAV_ROOT && RAW_SAV_ROOT.user && RAW_SAV_ROOT.user.nm) || '';
     const base = { account, source: ORIG_SAVE.name || '', fighters: histFighters(), platform: isPsSave() ? 'PS' : 'PC' };
     if (!(HIST_LOADED.root === RAW_SAV_ROOT && HIST_LOADED.kept) && ORIG_SAVE.root === RAW_SAV_ROOT) {
+      // The pristine copy is kept once per load so there is always something to go back to, even if the user
+      // later replaces the game's file with an edited one.
       let orig = null, oname = ORIG_SAVE.name || 'original.sav';
       if (ORIG_SAVE.file) orig = await ORIG_SAVE.file.arrayBuffer();
+      // Loaded from a .json: there are no original .sav bytes, so rebuild a .sav from the saved JSON text.
       else if (ORIG_SAVE.text) { orig = await buildBrgSav(JSON.parse(ORIG_SAVE.text)); oname = oname.replace(/\.json$/i, '') + '.sav'; }
       if (orig) await histPut(Object.assign({ when: Date.now() - 1, type: 'original', name: oname, kind: /\.json$/i.test(oname) ? 'json' : 'sav', changes: 0, lines: [], data: new Blob([ orig ]) }, base));
       HIST_LOADED = { root: RAW_SAV_ROOT, kept: true };
     }
+    // Capped at 40 lines so one huge edit (e.g. a bulk change) cannot bloat every history record.
     const lines = [];
     for (const s of sections || []) for (const l of s.lines) if (lines.length < 40) lines.push(`${s.title}: ${l}`);
     await histPut(Object.assign({ when: Date.now(), type: 'download', name: fname, kind, changes: (sections || []).reduce((k, s) => k + s.lines.length, 0), lines, data: new Blob([ data ]) }, base));
@@ -116,6 +124,7 @@ async function openHistory() {
       </div>
     </div>
   </section>`;
+  // Look up in the list already loaded for this overlay; the dataset value is a string, the stored id a number.
   const byId = id => list.find(e => e.id === Number(id));
   document.getElementById('hist-close').addEventListener('click', reviewClose);
   document.getElementById('hist-on').addEventListener('change', e => { histSetOn(e.target.checked); toast(e.target.checked ? 'Downloads will be kept in Download history' : 'Downloads will no longer be kept (the list stays until you clear it)'); });
@@ -141,6 +150,7 @@ async function openHistory() {
   }));
 }
 
+// The delayed revoke gives the browser time to start the download before the URL is freed.
 // triggerDownload(data, filename, mime): save bytes/text via a temporary object URL and hidden <a download> click; the URL is revoked after 1 s.
 function triggerDownload(data, filename, mime) {
   const blob = new Blob([ data ], {

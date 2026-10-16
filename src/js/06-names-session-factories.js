@@ -11,14 +11,18 @@ let REAL_BLUEPRINT_SET = null;
  */
 function buildRealBlueprintSet() {
   const out = new Set;
+  // nextptid targets are collected up front so the loop below can test membership in one lookup
   const nextTargets = new Set((AP.pts || []).map(p => p.nextptid).filter(Boolean));
   const ptById = {};
   for (const p of AP.pts || []) ptById[p.id] = p;
   for (const it of AP.items || []) {
+    // the ...U items are the upgraded variants of a blueprint, not separate blueprints, so only the base item counts
     if (it.itemtype !== 'ITTP_RMAP' || !it.itemId.startsWith('ITMP_') || it.itemId.endsWith('U')) continue;
     const ptid = 'PT_' + it.itemId.slice(5);
     const p = ptById[ptid];
+    // a part with no localized name is unfinished or unused master data, so it would show up as a raw id
     if (!p || !resolveName(p.name)) continue;
+    // a part that is the next step of an upgrade chain is reached by upgrading, not by a blueprint of its own
     if (nextTargets.has(ptid)) continue;
     if (NO_BLUEPRINT_PTIDS.has(ptid) || BLUEPRINT_BLOCKLIST.has(ptid)) continue;
     out.add(it.itemId);
@@ -28,6 +32,7 @@ function buildRealBlueprintSet() {
 
 /** Is this item id (with or without the trailing U variant marker) a real blueprint? Builds the cache lazily. */
 function isRealBlueprint(itemId) {
+  // built lazily because masters.db may not be loaded yet when this module first runs
   if (!REAL_BLUEPRINT_SET) REAL_BLUEPRINT_SET = buildRealBlueprintSet();
   return REAL_BLUEPRINT_SET.has(String(itemId).replace(/U$/, ''));
 }
@@ -52,6 +57,7 @@ function resolveName(nameKey) {
  */
 function tryBuildIndices() {
   if (!AP || !Object.keys(LOCDAT_INDEX).length) return;
+  // everything is rebuilt from scratch so reloading a different masters.db never leaves stale entries behind
   PT_INDEX = {};
   ITEM_INDEX = {};
   SKL_INDEX = {};
@@ -59,6 +65,7 @@ function tryBuildIndices() {
   BST_INDEX = {};
   NAME_INDEX = [];
   for (const p of AP.pts || []) {
+    // records are copies (Object.assign) so adding name/id/category here never alters the master rows in AP
     const rec = Object.assign({}, p);
     rec.name = resolveName(p.name) || p.id;
     rec.id = p.id;
@@ -75,11 +82,13 @@ function tryBuildIndices() {
   for (const it of AP.items || []) {
     const rec = Object.assign({}, it);
     let name = resolveName(it.name) || it.itemId;
+    // blueprint items often have no useful text (or just the placeholder 'RMAP'), so show the id instead
     if (it.itemId.startsWith('ITMP_') && (!name || name === 'RMAP')) name = it.itemId;
     rec.name = name;
     rec.id = it.itemId;
     rec.category = 'item';
     ITEM_INDEX[it.itemId] = rec;
+    // raw ITMP_ items are left out of search; real ones are added below as 'bp' entries named after the part
     if (!it.itemId.startsWith('ITMP_')) NAME_INDEX.push({
       norm: norm(name),
       name: name,
@@ -138,6 +147,7 @@ function tryBuildIndices() {
       category: 'bst'
     });
   }
+  // floor names are only filled when missing so anything already cached is kept
   for (const fa of AP.flrareas || []) {
     if (!FLOOR_NAME_CACHE[fa.flrid]) FLOOR_NAME_CACHE[fa.flrid] = resolveName(fa.name) || fa.flrid;
   }
@@ -161,6 +171,7 @@ function searchNames(query, category, limit, ptType) {
     if (ptTypeArr && !ptTypeArr.includes(e.ptType)) continue;
     if (e.norm.startsWith(q)) starts.push(e); else if (e.norm.includes(q)) contains.push(e);
   }
+  // shorter names first: for a typed prefix the closest (shortest) name is usually the one meant
   starts.sort((a, b) => a.name.length - b.name.length);
   contains.sort((a, b) => a.name.length - b.name.length);
   return starts.concat(contains).slice(0, limit || 30);
@@ -171,6 +182,7 @@ function searchNames(query, category, limit, ptType) {
  * collecting ids (50-step guards against cycles). Returns an ordered array of part ids.
  */
 function chainOf(ptid) {
+  // nextptid only points forward, so finding the start means scanning for whoever points at us
   const allIds = Object.keys(PT_INDEX);
   let root = ptid, guard = 0;
   while (guard++ < 50) {
@@ -201,6 +213,7 @@ function chainOf(ptid) {
  * @param {object} soul adapted soul object (mutated in place)
  */
 function startSave(soul) {
+  // the game writes {} for empty collections, which would break .push/.find/.length, so normalize to arrays
   soul.chrs = arr(soul.chrs);
   soul.dchrs = arr(soul.dchrs);
   soul.psskls = arr(soul.psskls);
@@ -218,6 +231,7 @@ function startSave(soul) {
     automatic_renewal: 0,
     friendship: 0
   };
+  // same normalization for each fighter's own lists, so later code can assume arrays
   for (const c of soul.chrs) {
     c.pspts = arr(c.pspts);
     c.eqpts = arr(c.eqpts);
@@ -270,6 +284,7 @@ function startSave(soul) {
   // game accepts, and an unedited save must download unchanged.
   if (!soul.chrs.length) soul.chrs.push(Object.assign(freshCharacter(), { __placeholder: true }));
   // freezer_level missing: pick the lowest level whose capacity fits the fighters
+  // (a lower level would leave fighters with no freezer slot)
   if (soul.freezer_level == null) {
     let inferred = 1;
     for (let lvl = 1; lvl <= freezerLevels(); lvl++) {
@@ -281,12 +296,13 @@ function startSave(soul) {
     }
     soul.freezer_level = inferred;
   }
+  // the soul lives in SAVE.soul; a copy under SAVE.user would be a second, divergent source of truth
   if (SAVE.user && SAVE.user.soul !== undefined) delete SAVE.user.soul;
   // The game stores no "current fighter" id: the fighter you play is the one with state USE (the starred tab).
   if (!soul.crntcid) soul.crntcid = (soul.chrs.find(c => c && c.state === 'USE') || soul.chrs[0]).cid;
   if (!SAVE.playlog.length) SAVE.playlog.push(freshPlaylog());
   activeCharIdx = Math.max(0, soul.chrs.findIndex(c => c && c.cid === soul.crntcid));
-  // raw root is attached later by loadSaveFiles
+  // raw root is attached later by loadSaveFiles; clearing it now stops a previous file's root being used with a new session
   RAW_SAV_ROOT = null;
   RAW_SAV_MAIN_UID = null;
   // reveal the app, keep downloads disabled until a raw root exists
@@ -327,6 +343,7 @@ function freshPlaylog() {
   };
 }
 
+// Kept only for the on-screen placeholder fighter in startSave().
 // freshCharacter(): a minimal editor-side fighter stub with a random 'char-xxxx' cid.
 // NOTE: this is NOT what the game stores. The real "new fighter" shape (UUID cid, body, gasmask,
 // freezer hanger, etc.) is built by newFighterRecord() further down; this older stub lacks many

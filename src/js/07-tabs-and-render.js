@@ -84,6 +84,7 @@ const TABS = [ {
   label: 'JSON compare (advanced)'
 } ];
 
+// Kept outside renderAll() so the selected tab survives the full rebuild.
 // Currently shown tab id; renderAll() falls back to 'account' if that tab's when() turns false.
 let activeTab = 'account';
 
@@ -102,8 +103,10 @@ function renderAll() {
   app.querySelectorAll('[id]').forEach(el => {
     if (el.scrollTop > 0) scrollStates[el.id] = el.scrollTop;
   });
+  // (a hidden tab must never stay selected, otherwise the user would see an empty page with no active button)
   // if the active tab has a when() that is now false (e.g. run ended), fall back to Account
   if (TABS.some(t => t.id === activeTab && t.when && !t.when())) activeTab = 'account';
+  // All panels are built even when hidden so every tab always reflects the current SAVE. The Fighters tab holds two blocks and VIP also carries Free Cont.
   // one panel per tab; the markup comes from the block*() HTML builders
   app.innerHTML = `\n    ${blockHealth()}\n    ${uiTabbarHtml()}\n    <div class="tabpanel" data-tab-panel="account" style="display:${activeTab === 'account' ? 'block' : 'none'}">${blockCurrency()}</div>\n    <div class="tabpanel" data-tab-panel="fighters" style="display:${activeTab === 'fighters' ? 'block' : 'none'}">${blockCharacters()}${blockSkins()}</div>\n    <div class="tabpanel" data-tab-panel="research" style="display:${activeTab === 'research' ? 'block' : 'none'}">${blockBlueprints()}</div>\n    <div class="tabpanel" data-tab-panel="decals" style="display:${activeTab === 'decals' ? 'block' : 'none'}">${blockSkillDecals()}</div>\n    <div class="tabpanel" data-tab-panel="stews" style="display:${activeTab === 'stews' ? 'block' : 'none'}">${blockStews()}</div>\n    <div class="tabpanel" data-tab-panel="bags" style="display:${activeTab === 'bags' ? 'block' : 'none'}">${blockBags()}</div>\n    <div class="tabpanel" data-tab-panel="boxes" style="display:${activeTab === 'boxes' ? 'block' : 'none'}">${blockBoxes()}</div>\n    <div class="tabpanel" data-tab-panel="hub" style="display:${activeTab === 'hub' ? 'block' : 'none'}">${blockHub()}</div>\n    <div class="tabpanel" data-tab-panel="defense" style="display:${activeTab === 'defense' ? 'block' : 'none'}">${blockDefense()}</div>\n    <div class="tabpanel" data-tab-panel="photos" style="display:${activeTab === 'photos' ? 'block' : 'none'}">${blockPhotos()}</div>\n    <div class="tabpanel" data-tab-panel="graves" style="display:${activeTab === 'graves' ? 'block' : 'none'}">${blockGraves()}</div>\n    <div class="tabpanel" data-tab-panel="dates" style="display:${activeTab === 'dates' ? 'block' : 'none'}">${blockDates()}</div>\n    <div class="tabpanel" data-tab-panel="storage" style="display:${activeTab === 'storage' ? 'block' : 'none'}">${blockStorageBox()}</div>\n    <div class="tabpanel" data-tab-panel="rewards" style="display:${activeTab === 'rewards' ? 'block' : 'none'}">${blockRewardBox()}</div>\n    <div class="tabpanel" data-tab-panel="quests" style="display:${activeTab === 'quests' ? 'block' : 'none'}">${blockQuests()}</div>\n    <div class="tabpanel" data-tab-panel="rally" style="display:${activeTab === 'rally' ? 'block' : 'none'}">${blockRally()}</div>\n    <div class="tabpanel" data-tab-panel="location" style="display:${activeTab === 'location' ? 'block' : 'none'}">${blockLocation()}</div>\n    <div class="tabpanel" data-tab-panel="run" style="display:${activeTab === 'run' ? 'block' : 'none'}">${blockRun()}</div>\n    <div class="tabpanel" data-tab-panel="collection" style="display:${activeTab === 'collection' ? 'block' : 'none'}">${blockCollection()}</div>\n    <div class="tabpanel" data-tab-panel="jackals" style="display:${activeTab === 'jackals' ? 'block' : 'none'}">${blockJackals()}</div>\n    <div class="tabpanel" data-tab-panel="layouts" style="display:${activeTab === 'layouts' ? 'block' : 'none'}">${blockLayouts()}</div>\n    <div class="tabpanel" data-tab-panel="stats" style="display:${activeTab === 'stats' ? 'block' : 'none'}">${blockStats()}</div>\n    <div class="tabpanel" data-tab-panel="vip" style="display:${activeTab === 'vip' ? 'block' : 'none'}">${blockVip()}${blockFreeCont()}</div>\n    <div class="tabpanel" data-tab-panel="compare" style="display:${activeTab === 'compare' ? 'block' : 'none'}">${blockCompare()}</div>\n    <div class="tabpanel" data-tab-panel="raw" style="display:${activeTab === 'raw' ? 'block' : 'none'}">${blockRaw()}</div>\n    <div class="tabpanel" data-tab-panel="jdiff" style="display:${activeTab === 'jdiff' ? 'block' : 'none'}">${blockJd()}</div>\n  `;
   // attach listeners; the order is not significant, each wire* only touches its own tab's DOM
@@ -136,6 +139,9 @@ function renderAll() {
   wireCompare();
   wireRaw();
   wireJd();
+  // Tab buttons only toggle display and re-run the render*() of dynamic tabs, instead of calling renderAll(),
+  // so a tab click does not rebuild the whole page. Those render*() calls refresh content that depends on the
+  // current SAVE (reports, lists) each time the tab is opened.
   // tab buttons: switch the visible panel, then lazily run that tab's render*() for dynamic content
   document.querySelectorAll('[data-tab-btn]').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -164,6 +170,7 @@ function renderAll() {
       if (activeTab === 'raw') renderRaw();
       if (activeTab === 'jdiff') renderJd();
       uiTabChanged();
+      // a new tab starts at the top; renderAll() restores the old position instead because it is a refresh, not a tab change
       window.scrollTo(0, 0);
     });
   });

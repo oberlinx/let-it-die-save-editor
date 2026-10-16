@@ -25,6 +25,7 @@ async function cmpLoadFile(file) {
   const root = isBrgSav(bytes) ? await parseBrgSav(bytes) : parseSaveJsonText(new TextDecoder('utf-8').decode(bytes));
   if (!looksLikeFullDump(root)) throw new Error('not a LET IT DIE save');
   // the adapter records the loaded save's empty shapes; keep A's
+  // (RAW_EMPTY_SHAPES describes A's save and is used when A is downloaded, so B's shapes must not replace it)
   const keepShapes = RAW_EMPTY_SHAPES;
   let ad;
   try { ad = adaptFullDumpToLegacyShape(root); } finally { RAW_EMPTY_SHAPES = keepShapes; }
@@ -38,6 +39,7 @@ async function cmpLoadFile(file) {
 }
 
 // Deep clone via JSON, and A's main uid as a string.
+// clones are used everywhere so nothing from B (or A's raw data) is shared by reference and later edits cannot leak back into B
 const cmpClone = o => JSON.parse(JSON.stringify(o));
 const cmpUidA = () => String(RAW_SAV_MAIN_UID);
 
@@ -49,6 +51,7 @@ function cmpRekeyUid(node, from, to, depth) {
   if (Array.isArray(node)) { for (const v of node) cmpRekeyUid(v, from, to, depth + 1); return; }
   for (const k of Object.keys(node)) {
     let v = node[k];
+    // the uid appears both as field values (xxuid) and as object keys (per-account maps), so both are handled; the type is kept so numbers stay numbers in the JSON
     if (/uid$/i.test(k) && (v === Number(from) || v === from)) node[k] = typeof v === 'number' ? Number(to) : String(to);
     else if (v && typeof v === 'object') cmpRekeyUid(v, from, to, depth + 1);
     if (k === from) { node[to] = node[k]; delete node[k]; }
@@ -59,10 +62,12 @@ function cmpRekeyUid(node, from, to, depth) {
 function applyAccountChoice(root) {
   if (!CMP.rootB || CMP.forRoot !== RAW_SAV_ROOT || CMP.account !== 'B') return root;
   const from = cmpUidA(), to = CMP.uidB;
+  // nothing to move if B has no uid or both saves are the same account
   if (!to || from === to) return root;
   cmpRekeyUid(root, from, to, 0);
   const ub = CMP.rootB.user || {};
   root.user = root.user || {};
+  // only fields B actually has are copied, so A's values are not blanked by a missing field
   for (const f of CMP_IDENTITY_FIELDS) if (f in ub) root.user[f] = ub[f];
   return root;
 }
@@ -74,6 +79,7 @@ function cmpEidsInA(skipCid) {
   const s = new Set;
   for (const c of arr(SAVE.soul.chrs)) {
     if (skipCid && c.cid === skipCid) continue;
+    // every eid is collected so a copied item can be given a fresh id if its own is already taken (two items with one eid would break the save)
     for (const p of arr(c.pspts)) s.add(p.eptid);
     for (const m of arr(c.psmsrs)) s.add(m.emsrid);
     for (const b of arr(c.psbsts)) s.add(b.ebstid);
@@ -97,8 +103,10 @@ function cmpRawInstB(kind, eid) {
 function cmpKeepInst(kind, oldEid, newEid) {
   const inst = cmpRawInstB(kind, oldEid);
   if (!inst) return;
+  // a clone with the new eid, so the build can keep every raw field B had, including ones the editor doesn't know about
   const c = cmpClone(inst);
   c.eid = newEid;
+  // B's instance is owned by B's uid; re-own it to A so the copy belongs to the account being downloaded
   if ('uid' in c && c.uid === Number(CMP.uidB)) c.uid = Number(cmpUidA());
   CMP_EXTRA[kind][newEid] = c;
 }
@@ -117,6 +125,7 @@ function cmpChrSummary(c) {
 // Comparison key for a fighter: its JSON without 'state' and without the owning account's uid (on the fighter and
 // on anything nested under it), so state-only differences and comparing two different accounts are ignored.
 function cmpChrKey(c) {
+  // state is ignored because a fighter is easily FREE in one save and in use in the other, which isn't a real difference
   const strip = x => { const o = cmpClone(x); delete o.state; return o; };
   return JSON.stringify(strip(c), (k, v) => k === 'uid' ? undefined : v);
 }
@@ -151,6 +160,7 @@ function cmpDiff() {
   const d = { account: [], fighters: [], research: [], decals: [], hub: [], rewards: [], storage: [], other: [] };
   for (const [f, label] of CMP_ACCOUNT_FIELDS) {
     const a = A.soul[f], b = B.soul[f];
+    // a field B doesn't have at all is not treated as a difference, so copying can't wipe A's value
     if (b !== undefined && JSON.stringify(a) !== JSON.stringify(b)) d.account.push({ key: f, label, a, b });
   }
   const aByCid = {}, bByCid = {};
@@ -158,6 +168,7 @@ function cmpDiff() {
   for (const c of arr(B.soul.chrs)) bByCid[c.cid] = c;
   for (const cid of new Set(Object.keys(aByCid).concat(Object.keys(bByCid)))) {
     const a = aByCid[cid], b = bByCid[cid];
+    // identical fighters are left out so the list only shows what could change
     if (a && b && cmpChrKey(a) === cmpChrKey(b)) continue;
     d.fighters.push({ key: cid, a, b });
   }
@@ -180,11 +191,13 @@ function cmpDiff() {
   for (const s of arr(B.cl && B.cl.slots)) { const e = cmpSlotEid(s); if (e && !eidsA.has(e)) d.storage.push({ key: e, s }); }
   // everything else: just say which parts differ
   const rA = RAW_SAV_ROOT;
+  // parts the tab compares or deliberately leaves alone (user identity is handled by the account choice); the rest is only listed so the user knows it differs
   const handled = new Set([ 'soul', 'user', 'part', 'mushroom', 'beast', 'item', 'bodyuser', 'playlog' ]);
   for (const k of new Set(Object.keys(rA).concat(Object.keys(rB)))) {
     if (handled.has(k)) continue;
     if (JSON.stringify(rA[k]) !== JSON.stringify(rB[k])) d.other.push(k);
   }
+  // same idea inside soul
   const soulHandled = new Set([ 'chr', 'deathbag', 'skl', 'partresearch', 'hubcustom', 'present', 'cl', 'modified', ...CMP_ACCOUNT_FIELDS.map(x => x[0]) ]);
   for (const k of new Set(Object.keys(rA.soul || {}).concat(Object.keys(rB.soul || {})))) {
     if (soulHandled.has(k)) continue;
@@ -207,7 +220,9 @@ function cmpCopyResearch(ptid) {
   const resB = arr(CMP.adB.user_research);
   const research = SAVE.user_research;
   for (const id of upto) {
+    // earlier parts that B never researched are left alone in A; only the part asked for is always copied
     if (!resB.some(r => r.ptid === id) && id !== ptid) continue;
+    // walk backwards so removing entries doesn't skip the next one; A's records for this part are replaced, not merged, so the chain matches B
     for (let i = research.length - 1; i >= 0; i--) if (research[i].ptid === id) research.splice(i, 1);
     for (const r of resB) if (r.ptid === id) research.push(cmpClone(r));
   }
@@ -218,6 +233,7 @@ function cmpCopyDecal(id) {
   SAVE.soul.psskls = arr(SAVE.soul.psskls);
   let a = SAVE.soul.psskls.find(s => s.id === id);
   if (!a) SAVE.soul.psskls.push(a = { id, lvl: 1, cnt: 0, is_checked: 1 });
+  // a decal B doesn't have becomes 0, so the stock really matches B
   a.cnt = b ? b.cnt : 0;
 }
 // Marks a Waiting Room decoration as owned in A (flg = 2).
@@ -225,6 +241,7 @@ function cmpCopyHub(id) {
   const list = SAVE.soul.hubcustom;
   let e = list.find(x => x.cstmid === id);
   if (!e) list.push(e = { cstmid: id, flg: 0 });
+  // 2 is the 'owned' flag value (see hubOwned)
   e.flg = 2;
 }
 // Adds B's reward-box entry to A unless A already has that pid.
@@ -241,6 +258,7 @@ function cmpCopyStorage(eid) {
   const idx = storageFreeSlotIndex();
   if (idx < 0) return 'the Storage Box is full';
   const taken = cmpEidsInA();
+  // keep B's id when free so the copy stays traceable; only collisions get a new one
   const newEid = taken.has(eid) ? presentUuid() : eid;
   const slot = clA.slots[idx];
   for (const [k, list, kind, idKey] of [ [ 'eptid', 'pts', 'pts', 'eptid' ], [ 'eitemid', 'items', 'items', 'eitemid' ], [ 'emsrid', 'msrs', 'msrs', 'emsrid' ], [ 'ebstid', 'bsts', 'bsts', 'ebstid' ] ]) {
@@ -258,6 +276,7 @@ function cmpFighterBlock(b) {
   if (!b) return 'not in the other save';
   if (b.state === 'ENEMY') return 'dead in the other save (recover it there first)';
   if (b.state === 'DUMMY') return 'not a normal fighter';
+  // a kidnapped fighter isn't in the freezer in the game, so it can't be placed on a hanger
   if (b.abid) return 'kidnapped in the other save';
   return null;
 }
@@ -269,14 +288,18 @@ function cmpCopyFighter(cid) {
   if (why) return why;
   const aIdx = SAVE.soul.chrs.findIndex(c => c.cid === cid);
   const a = aIdx >= 0 ? SAVE.soul.chrs[aIdx] : null;
+  // a new fighter needs a freezer hanger, which only the freezer level can add
   if (!a && !freeHangers().length) return 'no empty hanger in the freezer (raise the freezer level first)';
+  // replacing a fighter the game is using would break the lineup or the current run, so it must be changed in game first
   if (a && (a.state === 'GUARD' || a.state === 'USE')) return `your ${a.name} is ${a.state === 'GUARD' ? 'on defense' : 'the fighter you are playing'}; change that in game first`;
   // work on a clone of B's fighter, re-owned by A's uid
   const c = cmpClone(b);
   c.uid = Number(cmpUidA());
+  // a copy must not arrive on defense or in use, or two fighters would claim the same role in A
   if (c.state !== 'FREE') c.state = 'FREE';
   // item ids: keep B's unless they're already used elsewhere in this save
   const taken = cmpEidsInA(cid);
+  // old eid to new eid, so everything that refers to an item (equipment, arm slots, Death Bag) can be pointed at the renamed copy
   const remap = {};
   const fix = (kind, idKey, list) => {
     for (const x of arr(list)) {
@@ -294,10 +317,12 @@ function cmpCopyFighter(cid) {
   for (const e of arr(c.eqpts)) if (remap[e.eptid]) e.eptid = remap[e.eptid];
   // keep the other save's Death Bag layout (slot positions and length)
   const bagB = arr(CMP.rootB.soul && CMP.rootB.soul.deathbag && CMP.rootB.soul.deathbag[CMP.uidB] && CMP.rootB.soul.deathbag[CMP.uidB][cid]);
+  // the bag is a fixed list of slots; the game sized it for B's fighter, so it is kept as B had it, with eids renamed
   if (bagB.length) CMP_EXTRA.bags[cid] = bagB.map(s => Object.assign({}, s, s && s.eid && remap[s.eid] ? { eid: remap[s.eid] } : {}));
   if (c.armslots) for (const k of Object.keys(c.armslots)) if (remap[c.armslots[k]]) c.armslots[k] = remap[c.armslots[k]];
   if (a) {
     // replacing: the old fighter's items that the copy doesn't carry are removed
+    // eids the copy carries (new names included); anything else of the old fighter is now an orphan
     const keep = new Set(Object.values(remap));
     if (FIGHTER_DELETES.root !== RAW_SAV_ROOT) FIGHTER_DELETES = { root: RAW_SAV_ROOT, cids: new Set, eids: new Set };
     for (const p of arr(a.pspts)) if (!keep.has(p.eptid)) FIGHTER_DELETES.eids.add(p.eptid);
@@ -313,6 +338,7 @@ function cmpCopyFighter(cid) {
     const same = slotB && arr(SAVE.soul.chrslots).find(h => h && h.slot === slotB.slot && h.cid === '');
     (same || freeHangers()[0]).cid = c.cid;
     SAVE.soul.chrs.push(c);
+    // kept in cid order, probably so the list stays in the order the game writes it
     SAVE.soul.chrs.sort((x, y) => String(x.cid).localeCompare(String(y.cid)));
   }
   return null;
@@ -329,6 +355,7 @@ function cmpCopyFighter(cid) {
 // Notice text shown after a clone, tied to the root it describes, plus the cloned file's name and its account name.
 let CLONE_NOTE = { root: null, text: '', from: '', fromName: '' };
 // Two-click confirmation for the clone button: false, or the time (ms) it disarms itself, CLONE_ARM_MS after the first click.
+// a clone replaces unsaved work, so it takes two clicks to avoid an accidental one
 let CLONE_ARMED = false;
 const CLONE_ARM_MS = 8000;
 // Seconds left before the armed clone button disarms itself.
@@ -338,6 +365,7 @@ const cloneArmLeft = () => Math.max(1, Math.ceil((CLONE_ARMED - Date.now()) / 10
 // True when the loaded save is from PlayStation (see savePlatform).
 function isPsSave() { return savePlatform(RAW_SAV_ROOT) === 'PS'; }
 // Platform-specific defaults: PS saves start with the 'Include PS-only' options ticked, PC saves unticked.
+// PS-only content is normal in a PS save, so the options start on there; in a PC save it would add parts the PC game doesn't have
 function applyPlatformDefaults() {
   const ps = isPsSave();
   RESEARCH_FORM.includePs = DECAL_FORM.includePs = RB_FORM.includePs = HUB_FORM.includePs = ps;
@@ -349,6 +377,7 @@ const psLabelNote = () => isPsSave() ? '(PlayStation save)' : '(modded PC games)
 function savePlatform(root) {
   const u = (root && root.user) || {};
   if (/^7656119\d{10}$/.test(String(u.psnacid || ''))) return 'PC';
+  // a Steam id sits in psnacid for PC saves, so psnacid/olid in any other form means PlayStation
   if (u.olid || u.psnacid) return 'PS';
   return '?';
 }
@@ -363,6 +392,7 @@ function psOnlyContent(ad) {
   const ptName = id => (PT_INDEX[id] && PT_INDEX[id].name) || id;
   const add = (where, names) => { if (names.length) out.push({ where, names }); };
   for (const c of arr(ad.soul && ad.soul.chrs)) {
+    // DUMMY records aren't the player's fighters, so their gear isn't reported
     if (c.state === 'DUMMY') continue;
     add(`${c.name || 'fighter'}'s gear and Death Bag`, arr(c.pspts).filter(p => ptPs(p.ptid)).map(p => ptName(p.ptid)));
     add(`${c.name || 'fighter'}'s equipped decals`, arr(c.eqskls).map(x => x.id || x.sklid).filter(sklPs).map(id => SKL_INDEX[id].name));
@@ -377,6 +407,7 @@ function psOnlyContent(ad) {
     const t = String(p.type || ''), v = p.val0;
     if (t === 'SKILL') return sklPs(v);
     if (t === 'PT' || t.startsWith('PTTP_')) return ptPs(v);
+    // a map reward is an item (ITMP_...) whose part is named PT_...; the id is converted to check the part's platform
     if (t === 'ITTP_RMAP') return ptPs('PT_' + String(v).replace(/^ITMP_/, '').replace(/U$/, ''));
     return false;
   }).map(cmpPresentLabel));
@@ -387,6 +418,7 @@ function psOnlyContent(ad) {
 function cmpBuildClone() {
   const A = RAW_SAV_ROOT, uA = cmpUidA(), uB = CMP.uidB;
   const root = cmpClone(CMP.rootB);
+  // remember B's name before the identity fields are swapped, to fix the zombies below
   const nmB = (root.user || {}).nm;
   if (uA && uB && uA !== uB) cmpRekeyUid(root, uB, uA, 0);
   const ua = A.user || {};
@@ -408,7 +440,9 @@ async function cmpCloneWhole() {
   const platA = savePlatform(RAW_SAV_ROOT), platB = savePlatform(CMP.rootB);
   const fileB = CMP.file, nmB = (CMP.rootB.user || {}).nm || 'other save';
   const ps = psOnlyContent(CMP.adB);
+  // built before the load below so psOnlyContent and the leftover-uid count describe exactly what is loaded
   const root = cmpBuildClone();
+  // counts what the re-key could not catch (uid used as a plain value, not a uid field or key)
   const left = JSON.stringify(root).split('"' + CMP.uidB + '"').length - 1;
   const file = new File([ JSON.stringify(root) ], `clone of ${fileB.replace(/\.(sav|json)$/i, '')}.json`, { type: 'application/json' });
   // reuse the normal load path by injecting the clone as a File into the hidden file input
@@ -419,9 +453,11 @@ async function cmpCloneWhole() {
   const before = RAW_SAV_ROOT, origBefore = ORIG_SAVE;
   inp.dispatchEvent(new Event('change'));
   // wait up to ~10 s for the async load to swap RAW_SAV_ROOT
+  // polling because the file input's load handler is async and gives nothing to await
   for (let i = 0; i < 200 && RAW_SAV_ROOT === before; i++) await new Promise(r => setTimeout(r, 50));
   if (RAW_SAV_ROOT === before) { toast('The clone could not be loaded', true); return; }
   // the pre-download review compares against the save you had loaded, so it shows what the clone replaces
+  // only the root is swapped; the rest of ORIG_SAVE (the loaded file's own data) stays the user's real original
   ORIG_SAVE = Object.assign({}, origBefore, { root: RAW_SAV_ROOT });
   let t = `This save is now a full copy of ${fileB} (${nmB}, ${platformName(platB)}) on ${nmA}'s account (uid ${uA}, ${platformName(platA)}). Nothing is written until you download the .sav; both original files are unchanged.`;
   if (left) t += `\nNote: the other account's uid still appears ${left} time${left === 1 ? '' : 's'} as a plain value (not a uid field) -- usually harmless.`;
@@ -487,6 +523,7 @@ function renderCompare() {
     </select></div>
     <div class="capNote">${same ? 'Both saves are the same account.' : CMP.account === 'B' ? `On download, every part of the save tied to uid ${escapeHtml(uA)} is moved to uid ${escapeHtml(CMP.uidB)}, and the account name, Steam ID and login ids are taken from ${escapeHtml(nmB)}'s save. Use this to put this save's progress on that account.` : `The save keeps ${escapeHtml(nmA)}'s account. Pick the other account to move this save's progress onto it.`}</div></div>`;
   const d = cmpDiff();
+  // sections with few rows open by default; a long list stays folded so the tab isn't a wall of rows
   const sect = (id, title, rows, head, rowHtml, note) => {
     h += `<details class="subDetails" style="margin-bottom:10px;" ${rows.length && rows.length <= 40 ? 'open' : ''}><summary>▸ ${title} (${rows.length} difference${rows.length === 1 ? '' : 's'})</summary><div class="subDetailsBody">`;
     if (!rows.length) { h += '<div class="dtRel">Same in both saves.</div></div></details>'; return; }
@@ -498,6 +535,7 @@ function renderCompare() {
   };
   const fmt = v => typeof v === 'number' ? v.toLocaleString() : escapeHtml(v == null ? '—' : String(v));
   sect('account', 'Account values', d.account, [ 'Value', 'This save', nmB ], r => [ escapeHtml(r.label), fmt(r.a), fmt(r.b) ]);
+  // the disabled reason is worked out here, so the table can show why a fighter can't be ticked instead of failing after the click
   for (const r of d.fighters) {
     if (!r.b) r.disabled = 'only in this save';
     else r.disabled = cmpFighterBlock(r.b) || (r.a && (r.a.state === 'GUARD' || r.a.state === 'USE') ? `your copy is ${r.a.state === 'GUARD' ? 'on defense' : 'being played'}` : null) || (!r.a && !freeHangers().length ? 'no empty hanger' : null);
@@ -563,8 +601,10 @@ function cmpWire() {
       else if (sec === 'storage') err = cmpCopyStorage(k);
       if (err) fails.push(`${k}: ${err}`); else n++;
     }
+    // copied research can leave 'next level' markers and Funshots out of step, so both are rebuilt (the save check would flag them otherwise)
     if (sec === 'research') { normalizeResearchMarkers(SAVE.user_research); syncStampFromResearch(); }
     if (sec === 'rewards') normalizePresents(SAVE.presents);
+    // the message survives the re-render, which is why it's stored instead of only toasted
     CMP.msg = `Copied ${n} ${sec} difference${n === 1 ? '' : 's'} from ${CMP.file}. Download the .sav to keep it.${fails.length ? '\nNot copied:\n' + fails.join('\n') : ''}`;
     runSaveCheck();
     renderAll();
@@ -596,18 +636,21 @@ const DEF_WAVES = 2, DEF_SLOTS = 5, DEF_MAX = 9;   // 9 defenders at most: one w
 let DEF_STATE = { root: null, msg: '' };
 
 // Reads an integer constant from master_const_int (AP.constInt) with a fallback.
+// fallback values are used if masters.db lacks the constant
 function defConst(id, fb) { const r = arr(AP && AP.constInt).find(x => x.id === id); return r ? Number(r.value) : fb; }
 // The lineup array (SAVE.fortsetting), coerced to an array ({} when empty in raw saves).
 function defLineup() { SAVE.fortsetting = arr(SAVE.fortsetting); return SAVE.fortsetting; }
 // Fighter by cid, or null.
 function defChr(cid) { return arr(SAVE.soul.chrs).find(c => c.cid === cid) || null; }
 // A fighter can defend when FREE or already GUARD, and not kidnapped (abid).
+// kidnapped fighters aren't in the freezer, so they can't be sent to defend
 function defEligible(c) { return c && (c.state === 'FREE' || c.state === 'GUARD') && !c.abid; }
 // Unlocks (the game's own rules):
 //   Tokyo Death Metro / defense opens once soul.is_fort_ready = 1 (after the mid-boss COEN).
 //   Each alarm is sold once the deepest floor reached (playlog.base.max_floor) is at least
 //   its master_fort_whistle.shop_open_floor.
 // Defense unlocked flag; deepest floor reached; alarm row/unlock helpers.
+// a save without the field is treated as unlocked, so older saves aren't wrongly locked out
 function defUnlocked() { const v = SAVE && SAVE.soul && SAVE.soul.is_fort_ready; return v == null ? true : Number(v) === 1; }
 function defMaxFloor() { const b = SAVE && SAVE.playlog && SAVE.playlog[0] && SAVE.playlog[0].base; return b ? Number(b.max_floor) || 0 : 0; }
 function defAlarmRow(id) { return arr(AP && AP.fortWhistle).find(x => x.id === id) || null; }
@@ -646,6 +689,7 @@ function defPlace(wave, order, cid) {
   const list = defLineup();
   const at = list.findIndex(e => e.wave === wave && e.order === order);
   const old = at >= 0 ? list[at] : null;
+  // picking the same fighter again is a no-op so nothing gets reshuffled
   if (old && old.cid === cid) return null;
   if (cid) {
     const c = defChr(cid);
@@ -656,9 +700,11 @@ function defPlace(wave, order, cid) {
     let carried = 0;
     if (prev >= 0) { carried = list[prev].is_equip_whistle ? 1 : 0; list.splice(prev, 1); }
     const at2 = list.findIndex(e => e.wave === wave && e.order === order);
+    // the place is looked up again because removing the fighter's old entry above may change what is at it
     const replaced = at2 >= 0 ? list.splice(at2, 1)[0] : null;
     if (replaced) { const rc = defChr(replaced.cid); if (rc && rc.state === 'GUARD') rc.state = 'FREE'; }
     const e = defSnapshot(c, wave, order, replaced || null);
+    // the alarm stays with the place or fighter it was on, so moving a defender doesn't silently drop the alarm
     e.is_equip_whistle = carried || (replaced && replaced.is_equip_whistle) ? 1 : 0;
     list.push(e);
     c.state = 'GUARD';
@@ -741,6 +787,7 @@ function renderDefense() {
   document.getElementById('def-holder').addEventListener('change', e => { if (!soul.whistle_id) { renderDefense(); return; } defSetAlarmHolder(e.target.value); redo(e.target.value ? `Alarm set on ${(defChr(e.target.value) || {}).name}.` : 'Alarm not set on any defender.'); });
   document.getElementById('def-alarm-max').addEventListener('click', () => { if (!soul.whistle_id) return; soul.whistle_limit = now + maxAlarm; redo(`Alarm runs until ${dtFmt(soul.whistle_limit)} (the ${Math.round(maxAlarm / 86400)}-day max).`); });
   document.getElementById('def-alarm-day').addEventListener('click', () => { if (!soul.whistle_id) return; soul.whistle_limit = Math.min(Math.max(soul.whistle_limit || 0, now) + dayAlarm, now + maxAlarm); redo(`Alarm runs until ${dtFmt(soul.whistle_limit)}.`); });
+  // the end time is set slightly in the past rather than 0, probably so it reads as 'ended' and not 'never set'
   document.getElementById('def-alarm-off').addEventListener('click', () => { soul.whistle_limit = now - 60; redo('Alarm time ended.'); });
   document.getElementById('def-kid-max').addEventListener('click', () => { soul.abduct_guard_time = now + kidnap; redo(`Kidnap protection until ${dtFmt(soul.abduct_guard_time)}.`); });
   document.getElementById('def-kid-off').addEventListener('click', () => { soul.abduct_guard_time = now - 60; redo('Kidnap protection ended.'); });

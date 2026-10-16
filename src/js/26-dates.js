@@ -15,14 +15,18 @@
 // Largest signed 32-bit value (Jan 2038); later dates overflow in the game.
 const DT_INT32_MAX = 2147483647;
 // Seconds of clock slack before a date counts as "future".
-const DT_TOLERANCE = 300; // seconds of clock slack before "future" is flagged
+// 5 minutes, so a save written a moment ago (or a slightly fast clock) isn't flagged as a problem.
+const DT_TOLERANCE = 300;
 // Key-name regex: which numeric fields might be timestamps.
 const DT_KEY_RE = /(time|date|created|modified|updated|expire|opentime|^order$|whistle_limit)/i;
-// Subset of keys that are deadlines (expiry timers); these are legitimately in the future.
+// Subset of keys that are deadlines (expiry timers); these are legitimately in the future, so they are
+// never flagged as 'future' (only as overflowed), or every active timer would look like damage.
 const DT_DEADLINE_RE = /(expire|opentime|whistle_limit|guard_time)/i;
-// UUID-shaped object keys are collapsed to "*" when building path patterns.
+// UUID-shaped object keys are collapsed to "*" when building path patterns, so all entries of one kind
+// (e.g. every prison list) group together instead of making one group per id.
 const DT_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // Pending fix rules, applied in order to the finished root at download (see applyDateRules).
+// Kept as rules (not edits to SAVE) so they run last and can be undone one by one.
 let DATE_RULES = [];
 // UI state: reference time mode ('pc' or 'custom'), expanded rows, filter.
 const DATE_FORM = { refMode: 'pc', refCustom: null, open: {}, onlyProblems: false };
@@ -83,6 +87,7 @@ const DT_LABELS = {
 };
 
 // True if v looks like a Unix-seconds timestamp (positive 2001..2106 range, or a negative int32 overflow).
+// The range check keeps small counters and ids that happen to sit in a 'time'-named field from being treated as dates.
 function dtIsDateValue(v) {
   return typeof v === 'number' && Number.isFinite(v) && ((v >= 1e9 && v < 4294967296) || (v <= -1e8 && v >= -2147483648));
 }
@@ -100,6 +105,8 @@ function dtScan(root) {
     }
     g.entries.push({ obj, key, v });
   }
+  // parentKey is passed down so numeric/uuid keys (and clear_times floor ids) can borrow the name of the
+  // field that holds them when deciding if a number is a date
   function walk(o, path, parentKey) {
     if (Array.isArray(o)) {
       for (let i = 0; i < o.length; i++) {
@@ -130,6 +137,7 @@ function dtRefTime() {
   return Math.floor(Date.now() / 1000);
 }
 
+// Order matters: a negative value is also 'past the limit' in spirit, so it is reported as 'wrapped' first.
 // Classifies a date: 'wrapped' (negative), 'post2038', 'future' (not for deadline groups), or null.
 function dtProblem(g, v, ref) {
   if (v < 0) return 'wrapped';
@@ -150,6 +158,7 @@ function dtFmt(v) {
 function dtRel(v, ref) {
   if (v < 0) return 'after 2038 (wrapped)';
   const s = v - ref, a = Math.abs(s);
+  // largest unit first, so the first one that fits gives the roughest sensible wording
   const units = [[31557600, 'year'], [2629800, 'month'], [86400, 'day'], [3600, 'hour'], [60, 'minute']];
   let txt = 'now';
   for (const [n, u] of units) if (a >= n) { const k = Math.floor(a / n); txt = `${k} ${u}${k === 1 ? '' : 's'}`; break; }
@@ -157,7 +166,8 @@ function dtRel(v, ref) {
   return s > 0 ? `in ${txt}` : `${txt} ago`;
 }
 
-// Unix seconds -> value for an <input type=datetime-local> (local time).
+// Unix seconds -> value for an <input type=datetime-local> (local time). Overflowed values give '' since
+// they have no real date to show.
 function dtToLocalInput(v) {
   if (v == null || v < 0) return '';
   const d = new Date(v * 1000);
@@ -188,20 +198,20 @@ function dtIdLabel(obj, key) {
 // rule.action 'set' changes the single entry of one pattern (only if still equal to rule.from);
 // 'fix' sets problem dates to the reference time (or its day start for login_date), and for
 // login_bonus removes future days.
-// Apply one fix rule to a finished save root.
 function dtApplyRule(root, rule) {
   const groups = dtScan(root);
   if (rule.action === 'set') {
     const g = groups.find(x => x.pattern === rule.pattern);
     if (!g || g.entries.length !== 1) return 0;
     const e = g.entries[0];
-    if (e.v !== rule.from) return 0; // something else changed it since; that edit wins
+    if (e.v !== rule.from) return 0; // something else changed it since; that edit wins (don't overwrite a newer value)
     e.obj[e.key] = rule.value;
     return 1;
   }
+  // '*' = the "Fix all problems" rule; otherwise one kind of date
   const targets = rule.pattern === '*' ? groups : groups.filter(x => x.pattern === rule.pattern);
   const ref = rule.ref;
-  const refDay = Math.floor(ref / 86400) * 86400;
+  const refDay = Math.floor(ref / 86400) * 86400; // login_date is a day stamp (midnight UTC), so it gets the day start, not the exact time
   let n = 0;
   for (const g of targets) {
     if (g.pattern === 'login_bonus[].login_date') {
@@ -214,6 +224,7 @@ function dtApplyRule(root, rule) {
       }
       continue;
     }
+    // dtProblem() skips deadline groups' 'future' check, so expiry timers only change if they overflowed
     const isDay = /login_date$/.test(g.pattern);
     for (const e of g.entries) {
       if (!dtProblem(g, e.v, ref)) continue;
@@ -225,6 +236,7 @@ function dtApplyRule(root, rule) {
 }
 
 // Applies all pending rules, recording each rule's change count in r.applied.
+// Rules are re-run on every build, so they stay correct if other tabs change the save afterwards.
 function applyDateRules(root) {
   for (const r of DATE_RULES) r.applied = dtApplyRule(root, r);
   return root;
@@ -268,14 +280,18 @@ function renderDates() {
       total++;
       const pr = dtProblem(g, e.v, ref);
       if (pr) { counts[pr]++; g.problems.push(Object.assign({ pr }, e)); }
+      // an overflowed (negative) value is shown as its real post-2038 date, so min/max/latest sort sensibly
       const eff = e.v < 0 ? e.v + 4294967296 : e.v;
       if (eff < g.min) g.min = eff;
       if (eff > g.max) { g.max = eff; }
+      // deadlines are left out of 'latest event' because they point into the future by design
       if (!g.deadline && (!latest || eff > latest.v)) latest = { v: eff, g };
     }
   }
+  // kinds with problems first, then newest first, so damage is at the top of the table
   groups.sort((a, b) => (b.problems.length > 0) - (a.problems.length > 0) || b.max - a.max);
   const probTotal = counts.future + counts.post2038 + counts.wrapped;
+  // prefer user.modified, fall back to soul.modified, to show when the save was last written by the game
   const saved = root.user && dtIsDateValue(root.user.modified) ? root.user.modified : root.soul && dtIsDateValue(root.soul.modified) ? root.soul.modified : null;
 
   let h = `<div class="stewStats">
@@ -332,6 +348,7 @@ function renderDates() {
 
   host.querySelectorAll('input[name="dt-ref"]').forEach(r => r.addEventListener('change', () => {
     DATE_FORM.refMode = r.value;
+    // first switch to custom: start from whatever the picker shows (PC time) so there is always a value
     if (r.value === 'custom' && DATE_FORM.refCustom == null) DATE_FORM.refCustom = dtFromLocalInput(document.getElementById('dt-ref-custom').value);
     renderDates();
   }));
@@ -346,10 +363,11 @@ function renderDates() {
     DATE_FORM.open[k] = !DATE_FORM.open[k];
     renderDates();
   }));
+  // The reference time is captured in the rule when clicked, so the fix doesn't drift as the PC clock moves on.
   const addRule = (rule, msg) => {
     DATE_RULES.push(rule);
     renderDates();
-    const r = DATE_RULES[DATE_RULES.length - 1];
+    const r = DATE_RULES[DATE_RULES.length - 1]; // re-read after renderDates(), which just ran the rule and set r.applied
     toast(`${msg}: ${r.applied || 0} date${r.applied === 1 ? '' : 's'} changed`);
   };
   const fixAll = document.getElementById('dt-fix-all');

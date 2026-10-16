@@ -18,6 +18,7 @@ const BAG_COLORS = { RAINBOW: '#e6b422', PLATINUM: '#b07cf0', GOLD: '#d9a520', S
 // Rarities available for Death Boxes.
 const BOX_RARITIES = [ 'GOLD', 'SILVER', 'COPPER', 'BLUE' ];
 // Per-save original snapshots (for Undo) and last log message for bags/boxes.
+// The snapshots are deep copies taken once per loaded save, because SAVE's bags and boxes are edited in place.
 let BAG_STATE = { root: null, original: null, lastMsg: '' };
 let BOX_STATE = { root: null, original: null, lastMsg: '' };
 // UI state: expanded pool lists, selected "fill" entry per rarity; selection for adding a box.
@@ -30,7 +31,9 @@ function bagTitle(r) { return r.charAt(0) + r.slice(1).toLowerCase(); }
 function bagChip(r) { return `<span class="badge" style="border-color:${BAG_COLORS[r] || 'var(--panel-border-bright)'}; color:${BAG_COLORS[r] || 'var(--text)'};">${bagTitle(r)}</span>`; }
 
 // reward -> readable name (shared by both tabs)
-// Blueprint items (ITMP_*) are shown as "Blueprint: <part name>".
+// Type decides which index to look in, since ids from different tables (decals, mushrooms, items...) are separate lists.
+// Blueprint items (ITMP_*) are shown as "Blueprint: <part name>" (the matching PT_* part), which is more
+// useful to a player than the item's generic name.
 function rewardLabel(type, num, v0) {
   const n = num > 1 ? ` ×${Number(num).toLocaleString()}` : '';
   if (type === 'MONEY') return `${Number(num).toLocaleString()} Kill Coins`;
@@ -43,6 +46,7 @@ function rewardLabel(type, num, v0) {
     const bp = String(v0).startsWith('ITMP_') && PT_INDEX[String(v0).replace(/^ITMP_/, 'PT_')];
     nm = bp ? `Blueprint: ${bp.name}` : ITEM_INDEX[v0].name;
   } else if (PT_INDEX[v0]) nm = PT_INDEX[v0].name;
+  // unknown ids fall back to the raw type and id so nothing shows up blank
   return (nm || `${type} ${v0 || ''}`.trim()) + (type === 'MONEY' || type === 'SPIRIT' ? '' : n);
 }
 // Looks up a master_reward row by id from the quest metadata; null if unknown.
@@ -50,7 +54,8 @@ function rwdRow(rwdid) {
   const r = questMeta().rwd[rwdid];
   return r || null;
 }
-// Display name for a reward id (MEDAL money rewards are shown as Death Metal).
+// Display name for a reward id (MEDAL money rewards are shown as Death Metal, which is what the player
+// sees in game, rather than a Kill Coins amount).
 function rewardName(rwdid) {
   const r = rwdRow(rwdid);
   if (!r) return rwdid || '?';
@@ -73,15 +78,16 @@ function bagSync() {
   }
 }
 // every content id we know about -> {id, rarity, freq, rwdid}
+// Merges the base table with the offline odds table so ids from either one can be named, including
+// ids in a save that are no longer in the offline pool.
 function bagGenIndex() {
   const idx = {};
   for (const r of arr(AP && AP.bagGen)) idx[r.id] = r;
   for (const r of arr(AP && AP.bagGenOdds)) idx[r.id] = Object.assign({}, idx[r.id] || {}, r);
   return idx;
 }
-// the pool the game rolls from: the offline odds table, else the base table
 // The pool the game rolls from for a rarity: offline odds rows if present, else base rows (freq > 0),
-// annotated with probability p and a readable name.
+// annotated with probability p and a readable name. freq > 0 only, since a 0 weight can never be rolled.
 function bagPool(rarity) {
   const odds = arr(AP && AP.bagGenOdds).filter(r => r.rarity === rarity && r.freq > 0);
   const rows = odds.length ? odds : arr(AP && AP.bagGen).filter(r => r.rarity === rarity && r.freq > 0);
@@ -93,6 +99,7 @@ function bagRoll(pool, n, rng) {
   const tot = pool.reduce((a, r) => a + r.freq, 0);
   const out = [];
   for (let i = 0; i < n; i++) {
+    // pick starts as the last entry so a rounding leftover still lands on a valid entry
     let x = rng() * tot, pick = pool[pool.length - 1];
     for (const r of pool) { x -= r.freq; if (x < 0) { pick = r; break; } }
     out.push(pick.id);
@@ -128,6 +135,7 @@ function renderBags() {
   for (const r of rars) {
     const list = arr(b[r]);
     const pool = bagPool(r);
+    // k+1 is shown to the player but i keeps the real array index, which the slot dropdowns use to write back
     const order = list.map((e, i) => ({ e, i })); // the game takes the FIRST entry (confirmed in game)
     const fillSel = BAG_FORM.fill[r] || (pool[0] && pool[0].id) || '';
     h += `<div class="subDetails" style="padding:10px; margin-bottom:12px;">
@@ -165,7 +173,9 @@ function renderBags() {
   const redo = msg => { BAG_STATE.lastMsg = msg || ''; renderBags(); if (msg) toast(msg.split('\n')[0]); };
   const undo = document.getElementById('bag-undo');
   if (undo) undo.addEventListener('click', () => {
+    // restore from a copy so a second Undo (after more edits) still has the untouched snapshot
     const o = JSON.parse(JSON.stringify(BAG_STATE.original));
+    // empty and refill b in place (not reassign) because SAVE.soul.mysterybag must stay the same object
     for (const k of Object.keys(b)) delete b[k];
     Object.assign(b, o);
     redo('Lost Bags restored to how they were when you loaded the save.');
@@ -176,6 +186,7 @@ function renderBags() {
     const sel = host.querySelector(`[data-bag-fillsel="${r}"]`);
     const id = sel && sel.value;
     if (!id) return;
+    // keep the list length the save had; 10 if it was empty
     const n = arr(b[r]).length || 10;
     b[r] = Array.from({ length: n }, () => ({ rarity: r, cntgen: id }));
     redo(`Filled all ${n} ${bagTitle(r)} Lost Bags with ${rewardName(gen[id] && gen[id].rwdid)}.`);
@@ -204,6 +215,7 @@ function boxData() {
   return s.deathbox;
 }
 // Snapshots death boxes when a new save is loaded (for Undo).
+// Deep copy, because box objects are edited in place.
 function boxSync() {
   if (BOX_STATE.root !== RAW_SAV_ROOT) {
     const b = boxData();
@@ -211,6 +223,7 @@ function boxSync() {
   }
 }
 // Reward pool for a death box rarity from master_deathbox_content_gen, joined to master_reward rows.
+// Entries with no master_reward row are dropped, since there would be nothing to write into the box.
 function boxPool(rarity) {
   const rows = arr(AP && AP.boxGen).filter(r => r.rarity === rarity && r.freq > 0);
   const tot = rows.reduce((a, r) => a + r.freq, 0) || 1;
@@ -222,6 +235,7 @@ function boxPool(rarity) {
 // Writing master_reward's "ITEM" / num 1 instead makes the game hand over the
 // item but show no icon for it (user report). boxGameType() gives the game's
 // type for a reward.
+// Only ITEM needs translating; other types (SKILL, MONEY, ...) are already stored under their own name.
 function boxGameType(type, val0) {
   if (type === 'ITEM') { const it = ITEM_INDEX[val0]; return (it && it.itemtype) || 'ITEM'; }
   return type;
@@ -229,11 +243,11 @@ function boxGameType(type, val0) {
 // Writes a reward into a box in the game's own storage format (type, num 0, val0..val3).
 function boxApplyReward(box, rw) {
   box.type = boxGameType(rw.type, rw.val0);
-  box.num = 0;
+  box.num = 0; // the game writes num 0 for boxes it creates (see above)
   box.val0 = rw.val0 || '';
   box.val1 = rw.val1 || '';
   box.val2 = rw.val2 || '';
-  box.val3 = '';
+  box.val3 = ''; // master_reward rows are written to val0..val2 only, so val3 is cleared to avoid stale data
 }
 // Readable contents of a box (ITTP_* types are treated as ITEM).
 function boxContentName(box) {
@@ -241,10 +255,10 @@ function boxContentName(box) {
   return rewardLabel(t, box.num || 1, box.val0);
 }
 // Finds the pool entry matching a box's current contents, or null.
+// Tries the game's own type first, then master_reward's type, so boxes in either format still match.
 function boxMatchPool(box) {
   return boxPool(box.rarity).find(p => boxGameType(p.rw.type, p.rw.val0) === box.type && (p.rw.val0 || '') === (box.val0 || '')) || boxPool(box.rarity).find(p => p.rw.type === box.type && (p.rw.val0 || '') === (box.val0 || '')) || null;
 }
-// boxes written by earlier editor versions in master_reward's format
 // Detects boxes in master_reward format (written by older editor versions) that the game shows without an icon.
 function boxBadFormat(box) {
   if (!box || !box.val0) return false;
@@ -252,6 +266,7 @@ function boxBadFormat(box) {
   return (box.type === 'SKILL' || /^ITTP_/.test(box.type || '')) && Number(box.num) !== 0;
 }
 // Converts bad-format boxes to the game's format; returns how many were changed.
+// Only type and num are touched; the reward ids in val0.. are already correct.
 function fixBoxFormats(list) {
   let n = 0;
   for (const b of arr(list)) if (boxBadFormat(b)) { b.type = boxGameType(b.type, b.val0); b.num = 0; n++; }
@@ -275,8 +290,10 @@ function renderBoxes() {
   const host = document.getElementById('box-body');
   if (!host || !SAVE) return;
   boxSync();
+  // a save with no deathbox list gets an empty one so "Add a box" works; boxData() is then never null here
   if (!Array.isArray(SAVE.soul.deathbox)) SAVE.soul.deathbox = [];
   const boxes = boxData();
+  // current time decides which boxes are still locked (opentime in the future)
   const now = Math.floor(Date.now() / 1000);
   const changed = JSON.stringify(boxes) !== JSON.stringify(BOX_STATE.original || []);
   let h = '';
@@ -325,7 +342,8 @@ function renderBoxes() {
     for (const x of JSON.parse(JSON.stringify(BOX_STATE.original || []))) boxes.push(x);
     redo('Death boxes restored to how they were when you loaded the save.');
   });
-  // lowers opentime to just past (never before created)
+  // lowers opentime to just past (never before created): 60 s in the past so the game sees it as ready even
+  // with small clock differences, and never earlier than 'created' so the box doesn't look opened before it existed
   const openNow = x => { const t = Math.floor(Date.now() / 1000) - 60; x.opentime = Math.max(Math.min(t, x.opentime), x.created || 0); };
   document.getElementById('box-open-all').addEventListener('click', () => {
     let n = 0;
@@ -348,6 +366,7 @@ function renderBoxes() {
     const x = boxes[Number(s.dataset.boxRar)];
     x.rarity = s.value;
     const pool = boxPool(x.rarity);
+    // a reward from another rarity's pool wouldn't belong here, so roll a fresh one for the new rarity
     if (!boxMatchPool(x) && pool.length) boxApplyReward(x, bagRoll(pool, 1, Math.random).map(id => pool.find(p => p.id === id))[0].rw);
     redo(`Death box changed to ${bagTitle(x.rarity)}: ${boxContentName(x)}.`);
   }));
@@ -369,6 +388,7 @@ function renderBoxes() {
     const p = boxPool(BOX_FORM.addRarity).find(pp => pp.id === BOX_FORM.addContent);
     if (!p) return;
     const t = Math.floor(Date.now() / 1000) - 60;
+    // bid is left empty (no id scheme is known), and times are set a minute in the past so the box is ready to open
     const x = { bid: '', rarity: BOX_FORM.addRarity, type: '', created: t, opentime: t, num: 0, val0: '', val1: '', val2: '', val3: '' };
     boxApplyReward(x, p.rw);
     boxes.push(x);

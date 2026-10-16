@@ -1,7 +1,8 @@
 // ==== Storage Box tab ====
 // HTML for the Storage Box tab: capacity, bulk blueprint buttons, deposit form, contents list.
 // SAVE.cl.slots is an array of {slot, eptid, emsrid, ebstid, eitemid}; '-1' means empty. Each non-empty
-// slot points at an instance in cl.pts / cl.msrs / cl.bsts / cl.items.
+// slot points at an instance in cl.pts / cl.msrs / cl.bsts / cl.items. A slot counts as empty only when all
+// four ids are '-1' (or missing), so every check below tests all four.
 function blockStorageBox() {
   const cl = SAVE.cl;
   const cap = cl.slots.length;
@@ -10,7 +11,9 @@ function blockStorageBox() {
 }
 
 // Display name for an item id. Blueprints (ITMP_*) show as 'Blueprint - <part name>' with
-// '(unrevealed)' for the ...U variant; unknown ids are returned as-is.
+// '(unrevealed)' for the ...U variant; unknown ids are returned as-is. Blueprint rows in master_item don't
+// carry a useful name of their own, so the name comes from the part the blueprint unlocks (the U suffix is
+// dropped to find that part).
 function itemDisplayName(itemId) {
   const rec = ITEM_INDEX[itemId];
   if (!rec) return itemId;
@@ -39,11 +42,13 @@ function bstDisplayName(bstid, cooked) {
 // ==== Part durability, ammo and level caps ====
 // Full durability grows with the upgrade level: floor(dur * dur_c^(lvl-1)) -- matches every
 // full-durability part in the sample saves. Ammo: rest (loaded) up to capacity, spare up to spare.
-// research entries (FINISHED levels and next-level markers) above the part's highest level
+// research entries (FINISHED levels and next-level markers) above the part's highest level.
+// Such entries describe levels the part can't reach, so they are flagged for cleanup.
 function researchOverCap() {
   return arr(SAVE && SAVE.user_research).filter(r => { const rec = PT_INDEX[r.ptid], cap = maxPartLevel(rec); return rec && cap && Number(r.lvl) > cap; });
 }
-// Remove over-cap research entries and renormalise markers; returns how many were removed.
+// Remove over-cap research entries and renormalise markers (the next-level markers have to be recomputed
+// once the entries they pointed past are gone); returns how many were removed.
 function fixResearchOverCap() {
   const bad = new Set(researchOverCap());
   if (!bad.size) return 0;
@@ -52,9 +57,9 @@ function fixResearchOverCap() {
   normalizeResearchMarkers(SAVE.user_research);
   return n;
 }
-// every weapon / armor in the save whose stored level is above what its part allows (reflvllmt)
 // Find weapons/armor stored above their part's max level (Death Bags, Storage Box, Reward Box).
-// Returns [{inst, ptid, lvl, cap, where, lvlKey}]; Reward Box parts keep ptid in val0 and level in val1.
+// Returns [{inst, ptid, lvl, cap, where, lvlKey}]; Reward Box parts keep ptid in val0 and level in val1
+// (reward-box entries are generic presents with val0..valN, so the field names differ from real part instances).
 function partsOverCap() {
   const out = [];
   const chk = (inst, where, lvlKey) => {
@@ -68,10 +73,13 @@ function partsOverCap() {
   return out;
 }
 // Clamp every over-cap part to its max level and trim durability to that level's maximum; returns the count.
+// Durability is trimmed too because max durability depends on level, so keeping the old value would leave
+// the part above full.
 function fixPartsOverCap() {
   const over = partsOverCap();
   for (const o of over) {
     const rec = PT_INDEX[o.ptid], md = partMaxDur(rec, o.cap);
+    // Reward Box stores everything as strings, so values are written back as strings there
     if (o.lvlKey === 'val1') { o.inst.val1 = String(o.cap); if (md && Number(o.inst.val2) > md) o.inst.val2 = String(md); }
     else { o.inst.lvl = o.cap; if (md && Number(o.inst.dur) > md) o.inst.dur = md; }
   }
@@ -91,6 +99,7 @@ function partNeedsRefresh(inst, rec) {
   return (md > 0 && Number(inst.dur) < md) || (Number(rec.capacity) > 0 && Number(inst.rest || 0) < Number(rec.capacity)) || (Number(rec.spare) > 0 && Number(inst.spare || 0) < Number(rec.spare));
 }
 // Bring a part to full durability and ammo in place; returns true if anything changed.
+// (Only raises values; a part already above max is left alone rather than lowered.)
 function refreshPart(inst) {
   const rec = inst && PT_INDEX[inst.ptid];
   if (!partNeedsRefresh(inst, rec)) return false;
@@ -105,9 +114,11 @@ function ammoText(inst, rec) {
   if (!rec || !(Number(rec.capacity) > 0)) return '';
   return ` · ammo ${Number(inst.rest || 0)}/${Number(rec.capacity)}${Number(rec.spare) > 0 ? ` + ${Number(inst.spare || 0)}/${Number(rec.spare)} spare` : ''}`;
 }
-// Durability as a percentage of max (or of the current value if it exceeds max); 1 decimal under 10%, null if no durability.
+// Durability as a percentage of max (or of the current value if it exceeds max, so the display never goes over
+// 100%); 1 decimal under 10% so small values don't all round to 0 or 1; null if no durability.
 function durabilityPct(inst, rec) {
   if (!rec || !rec.dur) return null;
+  // fall back to the base durability when the level-scaled max can't be computed
   const full = partMaxDur(rec, inst.lvl) || Number(rec.dur);
   const cur = inst.dur != null ? Number(inst.dur) : full;
   const effectiveMax = Math.max(full, cur);
@@ -236,7 +247,8 @@ function sbListHtml() {
 }
 // Currently selected deposit category in the Storage Box: bp, pt, msr, bst or item.
 let sbCategory = 'bp';
-// Storage contents search: filters the list in place (kept across re-renders)
+// Storage contents search: filters the list in place (kept in a global so the text survives the full
+// re-render that follows every edit)
 let SB_CONTENT_FILTER = '';
 // Hide non-matching rows in #sb-list and update the count label.
 function applyStorageContentFilter() {
@@ -246,6 +258,7 @@ function applyStorageContentFilter() {
   const rows = [ ...list.querySelectorAll('.listRow') ];
   let shown = 0;
   for (const r of rows) {
+    // kind is included so typing 'weapon' or 'blueprint' also matches
     const hit = !q || norm(r.textContent + ' ' + (r.dataset.sbKind || '')).includes(q);
     r.style.display = hit ? '' : 'none';
     if (hit) shown++;
@@ -289,6 +302,7 @@ function wireStorageBox() {
   document.getElementById('sb-total-sort').addEventListener('change', e => { SB_TOTAL_SORT = e.target.value; redrawList(); });
   document.getElementById('sb-capacity').addEventListener('change', e => {
     let target = parseInt(e.target.value, 10) || STORAGE_BOX_MIN;
+    // snap to the box's step size so the capacity is always a size the game uses
     target = Math.round(target / storageBoxStep()) * storageBoxStep();
     if (target < STORAGE_BOX_MIN) target = STORAGE_BOX_MIN;
     if (target > storageBoxMax()) {
@@ -302,6 +316,7 @@ function wireStorageBox() {
     toast('Storage box maxed');
   });
   document.getElementById('sb-refresh-all').addEventListener('click', () => {
+    // only parts actually sitting in a slot; cl.pts may also hold instances no slot points at
     const inBox = new Set(SAVE.cl.slots.map(s => s.eptid).filter(e => e && e !== '-1'));
     let n = 0;
     for (const p of arr(SAVE.cl.pts)) if (inBox.has(p.eptid) && refreshPart(p)) n++;
@@ -310,6 +325,7 @@ function wireStorageBox() {
   });
   document.getElementById('sb-clear-all').addEventListener('click', () => {
     if (!confirm(`Delete all ${SAVE.cl.slots.filter(s => s.eptid && s.eptid !== '-1' || s.emsrid && s.emsrid !== '-1' || s.ebstid && s.ebstid !== '-1' || s.eitemid && s.eitemid !== '-1').length} items in Storage Box? This can't be undone.`)) return;
+    // keep the slot array (and its length) so capacity is unchanged; just blank every entry
     SAVE.cl.slots = SAVE.cl.slots.map((s, i) => ({
       slot: i,
       eptid: '-1',
@@ -363,6 +379,7 @@ function wireStorageBox() {
   });
   // deposit a list of blueprint item ids; reports when the box fills up
   function bulkDeposit(ids, label) {
+    // blueprint lists are built from masters.db, so nothing can be resolved without it
     if (!AP || !AP.pts || !AP.pts.length) {
       toast('Load masters.db first', true);
       return;
@@ -400,7 +417,8 @@ function resizeStorageBox(target) {
       eitemid: '-1'
     });
   } else if (target < cl.slots.length) {
-    // never drop occupied slots: stop at the last slot that holds something (rounded up to the box's step)
+    // never drop occupied slots: stop at the last slot that holds something (rounded up to the box's step,
+    // since capacity only comes in whole steps). Shrinking from the end keeps slot numbers of items unchanged.
     const used = s => s && [ s.eptid, s.emsrid, s.ebstid, s.eitemid ].some(v => v && v !== '-1');
     let last = -1;
     cl.slots.forEach((s, i) => { if (used(s)) last = i; });
@@ -416,6 +434,7 @@ function resizeStorageBox(target) {
 }
 
 // Render the deposit form for the current category and hook up the autocomplete that deposits on pick.
+// (The category's form is rebuilt each time because its fields differ per category; bindFormState keeps typed values across rebuilds.)
 function renderSbForm() {
   document.querySelectorAll('[data-sb-cat]').forEach(el => el.classList.toggle('active', el.dataset.sbCat === sbCategory));
   document.getElementById('sb-add-form').innerHTML = sbAddFormHtml() + qtyFirstNote(sbCategory === 'pt');
@@ -434,6 +453,8 @@ function storageFreeSlotIndex() {
 
 // ==== Bulk blueprint lists ====
 // Obtainable blueprints: chain-root parts that are allowed for research, real blueprints, minus PS-only and Travis ones.
+// Chain roots only: higher tiers in an upgrade chain come from researching, not from their own blueprint. PS-only and
+// Travis ones are separate buttons so the default list stays valid for a normal PC save.
 function legitBlueprintItemIds() {
   const bpIds = new Set((AP.items || []).filter(it => it.itemtype === 'ITTP_RMAP').map(it => it.itemId));
   const excluded = new Set([ ...psOnlyFirstTierBlueprintItemIds(), ...TRAVIS_BLUEPRINT_IDS ]);
@@ -482,7 +503,8 @@ function tdmBlueprintItemIds() {
 
 // ==== Storage deposits ====
 // Put blueprint items into free slots (stops when full); returns how many were added.
-// New instances get an 'edit-' prefixed random id so they are distinguishable from game ids.
+// New instances get an 'edit-' prefixed random id so they are distinguishable from game ids and can't collide
+// with an existing one (random + timestamp + counter).
 function depositBlueprintIds(itemIds) {
   const cl = SAVE.cl;
   let added = 0;
@@ -510,7 +532,8 @@ function depositBlueprintIds(itemIds) {
 // Deposit `qty` copies of the picked record into the Storage Box according to sbCategory.
 // Each copy creates an instance in cl.pts / cl.items / cl.msrs / cl.bsts and points a free slot at it.
 // Parts get full durability/ammo for the chosen level; mushrooms only cook if enable_roast;
-// cooked/state: 0 = raw, 1 = grilled.
+// cooked/state: 0 = raw, 1 = grilled. Slots are re-checked for every copy, so a partial deposit stops cleanly
+// when the box fills instead of overwriting an occupied slot.
 function depositToStorage(rec) {
   const cl = SAVE.cl;
   const qty = Math.max(1, parseInt((document.getElementById('sb-qty') || {}).value, 10) || 1);
@@ -522,6 +545,7 @@ function depositToStorage(rec) {
       break;
     }
     if (sbCategory === 'pt') {
+      // the form shows in-game +N; convert to the raw level the save stores (and clamp it to the part's range)
       const clampedLvl = rawFromDisplay(rec, (document.getElementById('sb-add-lvl') || {}).value);
       const eptid = 'edit-' + Math.random().toString(16).slice(2) + Date.now().toString(16) + n;
       cl.pts.push({
@@ -531,6 +555,7 @@ function depositToStorage(rec) {
         rest: Number(rec.capacity) || 0,
         spare: Number(rec.spare) || 0,
         grade: 0,
+        // full durability for that level, so a deposited +N part isn't worn
         dur: partMaxDur(rec, clampedLvl) || rec.dur,
         lvl: clampedLvl
       });
@@ -548,6 +573,7 @@ function depositToStorage(rec) {
         toast('That\'s not a blueprint item', true);
         return;
       }
+      // normalise so the checkbox, not the picked search result, decides revealed vs unrevealed (...U)
       if (unrevealed && !itemId.endsWith('U')) itemId += 'U';
       if (!unrevealed && itemId.endsWith('U')) itemId = itemId.slice(0, -1);
       const eitemid = 'edit-' + Math.random().toString(16).slice(2) + Date.now().toString(16) + n;
@@ -568,6 +594,7 @@ function depositToStorage(rec) {
       if (cooked && !rec.enable_roast) {
         toast(`"${rec.name}" can't be roasted (enable_roast=0 in apiparams) -- depositing uncooked instead`, true);
       }
+      // uncookable mushrooms are deposited raw so the save never holds a cooked state the game doesn't allow
       const actuallyCooked = cooked && !!rec.enable_roast;
       const emsrid = 'edit-' + Math.random().toString(16).slice(2) + Date.now().toString(16) + n;
       cl.msrs.push({

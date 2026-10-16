@@ -5,7 +5,7 @@ function stampBlockHtml() {
   return `\n      <div class="eyebrow" style="margin:16px 0 6px;">Research Stamp (Funshots)</div><div class="capNote" style="margin-top:0;">Each researched part adds its Funshot once: Slash and Shoot +0.4, Hit +0.8, Head, Body and Legs +0.2. Upgrading a part (+1 to +4) adds nothing, and some parts give none (for example the 0A/0N weapon variants, and PS-only blueprints on stock game data). Changing research moves each Funshot by exactly what that change adds or removes, keeping the save's own figure; "Sync all from Research" sets all six to what research gives. The totals follow the masters.db you loaded: a modded one that opens extra blueprints gives more.</div><div id="stamp-note"></div>\n      <div class="toolbar"><button class="subtle" id="stamp-sync-all">Sync all from Research</button></div>\n      <div class="grid" style="grid-template-columns: repeat(3, 1fr);" id="stamp-grid"></div>`;
 }
 
-// Hook set by wireStamp(): re-renders the six Funshot inputs. Called by syncStampFromResearch()
+// Hook set by wireStamp() (a late-bound hook because the grid only exists while the tab is shown): re-renders the six Funshot inputs. Called by syncStampFromResearch()
 // and by other tabs after research changes. Null until the Stamp block has been wired.
 let REFRESH_STAMP_GRID = null;
 
@@ -20,11 +20,13 @@ let REFRESH_STAMP_GRID = null;
 // editor showed Slash 106.4 whatever researchstamp held; an account set up by the game shows exactly
 // the saved value, e.g. 49.2). So when the editor sets Funshots on a save without the flag, it also
 // marks the setup as done at download (STAMP_MARK), and the game keeps the editor's values.
+// It is keyed by RAW_SAV_ROOT so the flag can't carry over when another save is loaded.
 let STAMP_MARK = { root: null, on: false };
 // True when the editor has asked to mark the stamp setup as done for the currently loaded save.
 function stampMarked() { return STAMP_MARK.root === RAW_SAV_ROOT && STAMP_MARK.on; }
 // True if the given save root already has gameflg flag SGF_INIT_RESEARCH_STAMP === 1.
-// gameflg is an object of arrays (e.g. gameflg.sv / gameflg.cl); all arrays are flattened and searched.
+// gameflg is an object of arrays (e.g. gameflg.sv / gameflg.cl); all arrays are flattened and searched, so the
+// flag is found whichever list the save keeps it in.
 function stampFlagIn(root) {
   const g = root && root.gameflg;
   const list = g && typeof g === 'object' ? [].concat(...Object.values(g).filter(Array.isArray)) : [];
@@ -32,7 +34,8 @@ function stampFlagIn(root) {
   return !!f && Number(f.value) === 1;
 }
 // Download-time hook: if marking was requested and the flag is missing, push the flag into
-// root.gameflg.sv (creating containers as needed). Mutates and returns root.
+// root.gameflg.sv (creating containers as needed). Mutates and returns root (called on the download clone, never the loaded file).
+// Skipped when the flag is already set, so we never add a duplicate entry.
 function applyStampMark(root) {
   if (!stampMarked() || stampFlagIn(root)) return root;
   root.gameflg = root.gameflg && typeof root.gameflg === 'object' ? root.gameflg : {};
@@ -40,7 +43,8 @@ function applyStampMark(root) {
   root.gameflg.sv.push({ var: 'SGF_INIT_RESEARCH_STAMP', value: 1, modified: Math.floor(Date.now() / 1e3) });
   return root;
 }
-// Same flag test as stampFlagIn but against the untouched RAW_SAV_ROOT (the state as loaded).
+// Same flag test as stampFlagIn but against the untouched RAW_SAV_ROOT (the state as loaded). The raw root is used
+// because the question is whether the GAME ever ran its setup, not whether the editor has since marked it.
 function stampInitDone() {
   const g = RAW_SAV_ROOT && RAW_SAV_ROOT.gameflg;
   const list = g && typeof g === 'object' ? [].concat(...Object.values(g).filter(Array.isArray)) : [];
@@ -54,7 +58,7 @@ function stampInitDone() {
 function syncStampFromResearch() {
   if (!AP || !AP.pts || !AP.pts.length) return false;
   if (RAW_SAV_ROOT && !stampInitDone()) STAMP_MARK = { root: RAW_SAV_ROOT, on: true };   // see above
-  // researchstamp may be missing or a {} placeholder; arr() normalizes it to an array
+  // researchstamp may be missing or a {} placeholder (an empty object where a list is expected); arr() normalizes it to an array
   SAVE.soul.researchstamp = arr(SAVE.soul.researchstamp);
   const computed = computeStampTotals();
   for (const type of RESEARCH_STAMP_TYPES) {
@@ -91,6 +95,7 @@ function adjustStampFromResearch(before) {
     let e = SAVE.soul.researchstamp.find(r => r.type === type);
     if (!e) { e = { type: type, rate: 0 }; SAVE.soul.researchstamp.push(e); }
     const v = (Number(e.rate) || 0) + (after[type] || 0) - (before[type] || 0);
+    // one decimal, never negative, same 99999 cap as manual edits; rounding hides float noise from the additions
     e.rate = Math.min(99999, Math.max(0, Math.round(v * 10) / 10));
   }
   if (REFRESH_STAMP_GRID) REFRESH_STAMP_GRID();
@@ -113,6 +118,7 @@ function wireStamp() {
       const e = SAVE.soul.researchstamp.find(r => r.type === type);
       const raw = e ? e.rate : 0;
       const comp = computed ? computed[type] : null;
+      // 0.05 tolerance: rates have one decimal, so smaller gaps are just float rounding
       const mismatch = comp != null && Math.abs(comp - raw) > .05;
       return `<div class="field"><label>${STAMP_LABELS[type]}${comp != null ? ` (research says ${comp})` : ''}</label>\n        <input type="number" step="0.1" data-stamp="${type}" value="${raw}" style="${mismatch ? 'border-color:var(--warn);' : ''}">\n      </div>`;
     }).join('');

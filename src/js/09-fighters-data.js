@@ -1,6 +1,7 @@
 // ==== Fighter stat / grade / limit-break math ====
 //
-// Max "core" (stat) level cap constant.
+// Max "core" (stat) level cap constant. (Per-fighter caps actually come from masters.db via fighterRanges();
+// this fixed 40 is the overall ceiling.)
 const BODYLVL_CORE_CAP = 40;
 
 // CLASS_NAMES: fighter class codes (chr.type) -> in-game display names. 'OLD' is a legacy class that
@@ -18,12 +19,14 @@ const CLASS_NAMES = {
 };
 
 // getConstInt(): look up an integer from the master_const_int table (AP.constInt) by id, with a fallback.
+// The fallback is used because older or partial masters.db files may lack a row, and the editor should still work.
 function getConstInt(id, fallback) {
   const row = (AP.constInt || []).find(r => r.id === id);
   return row ? row.value : fallback;
 }
 
 // ---- Part (weapon/armor) upgrade-level conversions ----
+// Both directions are converted in one place so the UI always talks in "+N" while the file always gets the raw value.
 // The save stores a part's level as a RAW level >= 1 (rec.reflvllmt is the raw maximum). The game UI
 // shows "+N". For normal parts display = raw - 1. For "Uncap" (is_limitbreak) parts, which continue a
 // chain from a preceding part (the one whose nextptid points here), display = carry + raw, where
@@ -197,6 +200,7 @@ function fighterRanges(type, grade, lb) {
 }
 
 // rageTotalFor(): total rage bars = base + stored extra, clamped into [rageFloor, rageCap]. R is a fighterRanges() result.
+// The clamp keeps a value from an edited or odd save inside what this class/grade/limit break can actually have.
 function rageTotalFor(chr, R) {
   return Math.min(Math.max(R.rageBase + (chr.rage || 0), R.rageFloor), R.rageCap);
 }
@@ -214,9 +218,11 @@ function deathBagCapacity(chr) {
 // vipBagBonus(): extra Death Bag slots from the Express Pass (VIP).
 // Express Pass (VIP) adds VIP_INCREASE_DEATHBAG (10) Death Bag slots while it is active.
 function vipBagBonus() {
+  // an expired pass (expired_time in the past) no longer gives slots, so it must not raise the limit shown here
   const v = SAVE && SAVE.soul && SAVE.soul.vip;
   if (!v || !Number(v.vip_flag != null ? v.vip_flag : v.flag)) return 0;
   if (Number(v.expired_time) > 0 && Number(v.expired_time) < Math.floor(Date.now() / 1000)) return 0;
+  // prefer the master value; 10 is the fallback when masters.db has no such row
   const r = arr(AP && AP.constInt).find(x => x.id === 'VIP_INCREASE_DEATHBAG');
   return r ? Number(r.value) || 0 : 10;
 }
@@ -234,6 +240,7 @@ function fighterItemCount(chr) {
 // ---- Fighter level formula ----
 // levelFromParts(): level = (sum of the six stat levels) - 5 + bought decal slots + bought bag slots
 // + bought rage bars, minimum 1. (Six stats at level 1 gives level 1.)
+// The level is derived from these parts, so it is recomputed after edits instead of being edited directly.
 function levelFromParts(statSum, skillBought, bagBought, rageBought) {
   return Math.max(1, statSum - 5 + (skillBought || 0) + (bagBought || 0) + (rageBought || 0));
 }
@@ -248,6 +255,7 @@ function computedLevel(chr) {
 // recomputeLevel(): recalculate and store the level in both chr.lvl and chr.bodylvl.lvl (the game keeps both).
 // Call after any stat/slot/rage edit.
 function recomputeLevel(chr) {
+  // lvl is written twice because the game stores the level in two places and they must agree
   chr.bodylvl = chr.bodylvl || {};
   chr.lvl = computedLevel(chr);
   chr.bodylvl.lvl = chr.lvl;
@@ -295,6 +303,7 @@ function fighterStatField(label, key, lo, hi, cur, base) {
 // fighterTotals(): snapshot of displayed totals (six stats, Decal Slots, Death Bag, Rage Bars) used to
 // build the "what changed" message after a class/grade/limit-break change.
 function fighterTotals(chr) {
+  // snapshot taken before a class/grade change; the comparison afterwards tells the user what was auto-adjusted
   const R = fighterRanges(chr.type || 'BAL', chr.grade != null ? chr.grade : 1, chr.limit_break || 0), bl = chr.bodylvl || {};
   const t = {};
   for (const k of [ 'hp', 'str', 'dex', 'vit', 'stm', 'luk' ]) t[k.toUpperCase()] = bl[k] || 1;
@@ -327,6 +336,7 @@ function bodyThumbSrc(id) { return BODY_THUMBS[id] ? 'data:image/webp;base64,' +
 // swapped for the mask with the same trailing number (or the first one) of the new gender.
 // Also mirrors the new body into the defense lineup entry (SAVE.fortsetting) for that cid.
 function setFighterBody(chr, bodyId) {
+  // a mask of the wrong gender would not fit the new model, so it is swapped for the matching one
   const g = bodyGender(bodyId), masks = arr(AP && AP.gasmasks).filter(m => m.gender === g);
   chr.body = bodyId;
   if (!masks.some(m => m.id === chr.gasmask)) {
@@ -347,17 +357,21 @@ let MAX_ALL_ARMED = false;
 // Skipped: dead (ENEMY), placeholder (DUMMY), kidnapped (abid), and the USE fighter while the raw
 // save is paused mid-run (soul.pause). Mutates SAVE only.
 function maxAllFighters() {
+  // the fighter being played mid-run is skipped (the save is paused mid-run), so it is left exactly as the game stored it
   const inRun = !!(RAW_SAV_ROOT && RAW_SAV_ROOT.soul && RAW_SAV_ROOT.soul.pause);
   const done = [], skipped = [];
   for (const c of arr(SAVE && SAVE.soul && SAVE.soul.chrs)) {
     if (!c) continue;
+    // ENEMY/DUMMY/kidnapped entries are not normal freezer fighters, so maxing them would be meaningless or unsafe
     const why = c.state === 'ENEMY' ? 'dead' : c.state === 'DUMMY' ? 'not a real fighter' : c.abid ? 'kidnapped' : c.state === 'USE' && inRun ? 'in a run' : '';
     if (why) { skipped.push(`${c.name || '?'} (${why})`); continue; }
     c.grade = gradeMax();
+    // grade is set first because the available limit breaks depend on the grade
     c.limit_break = maxLimitBreakFor(c.type || 'BAL', 6);
     const R = fighterRanges(c.type || 'BAL', 6, c.limit_break);
     c.bodylvl = c.bodylvl || {};
     setStatLevel(c, R.statCap);
+    // the save stores only the bought extra over base, hence cap minus base
     c.bodylvl.skill = R.skillCap - R.skillBase;
     c.bodylvl.bag = R.bagCap - R.bagBase;
     c.rage = R.rageCap - R.rageBase;
@@ -369,6 +383,7 @@ function maxAllFighters() {
 // clampStatLevelAndRecalc(): after a class/grade/limit-break change, pull the fighter back into the
 // legal ranges (limit break, six stats, decal slots, Death Bag, rage) and recompute the level.
 function clampStatLevelAndRecalc(chr) {
+  // limit break is clamped first because the stat/slot/rage ranges below depend on it
   const type = chr.type || 'BAL', grade = chr.grade != null ? chr.grade : 1;
   const maxLb = maxLimitBreakFor(type, grade);
   chr.limit_break = Math.min(Math.max(chr.limit_break || 0, 0), maxLb);
@@ -377,6 +392,7 @@ function clampStatLevelAndRecalc(chr) {
   for (const k of [ 'hp', 'str', 'dex', 'vit', 'stm', 'luk' ]) {
     chr.bodylvl[k] = Math.min(Math.max(chr.bodylvl[k] || R.statFloor, R.statFloor), R.statCap);
   }
+  // totals are clamped as base + bought, then converted back to "bought extra" because that is what the save stores
   const skillTotal = Math.min(Math.max(R.skillBase + (chr.bodylvl.skill || 0), R.skillFloor), R.skillCap);
   const bagTotal = Math.min(Math.max(R.bagBase + (chr.bodylvl.bag || 0), R.bagFloor), R.bagCap);
   chr.bodylvl.skill = skillTotal - R.skillBase;
@@ -435,6 +451,7 @@ function renderFiForm(chr) {
   wireAutocomplete(document.getElementById('fi-add-search'), document.getElementById('fi-add-acdrop'), catType, rec => {
     const wanted = Math.max(1, parseInt((document.getElementById('fi-qty') || {}).value, 10) || 1);
     const free = Math.max(0, deathBagLimit(chr) - fighterItemCount(chr));
+    // never exceed free Death Bag space, so the editor cannot create a bag the game would treat as overfull
     const qty = Math.min(wanted, free);
     if (!qty) {
       toast(`Death Bag full (${deathBagLimit(chr)} slots${vipBagBonus() ? ', incl. Express Pass' : ''})`, true);
@@ -443,19 +460,23 @@ function renderFiForm(chr) {
     for (let n = 0; n < qty; n++) {
       if (fiCategory === 'pt') {
         const clampedLvl = rawFromDisplay(rec, (document.getElementById('fi-add-lvl') || {}).value);
+        // arr() first because the game writes {} for an empty list, which has no push
         chr.pspts = arr(chr.pspts);
         chr.pspts.push({
           eptid: 'edit-' + Math.random().toString(16).slice(2) + n,
           ptid: rec.id,
           gettime: Math.floor(Date.now() / 1e3),
+          // rest/spare start from the part's master values so a new part behaves like a fresh drop
           rest: Number(rec.capacity) || 0,
           spare: Number(rec.spare) || 0,
           grade: 0,
+          // durability starts at the max for the chosen level (fallback: the master value) so the part is not added half worn
           dur: partMaxDur(rec, clampedLvl) || rec.dur,
           lvl: clampedLvl
         });
       } else if (fiCategory === 'bp') {
         const unrevealed = !!(document.getElementById('fi-add-unrevealed') || {}).checked;
+        // the trailing U is how the game marks a blueprint that has not been revealed yet
         let itemId = rec.id + (unrevealed ? 'U' : '');
         chr.psitems = arr(chr.psitems);
         chr.psitems.push({
@@ -469,6 +490,7 @@ function renderFiForm(chr) {
         chr.psmsrs.push({
           emsrid: 'edit-' + Math.random().toString(16).slice(2) + n,
           msrid: rec.id,
+          // only roastable mushrooms may be cooked, so a non-roastable one is never stored in a state the game cannot make
           cooked: cooked && !!rec.enable_roast
         });
       } else if (fiCategory === 'bst') {
@@ -512,6 +534,7 @@ function renderFiForm(chr) {
 // (bodyuser / deathbag / eqskl) by buildDownloadRoot() at download time.
 // Picks a random gas mask matching the body's gender. Does NOT place it in a hanger (see addFighterToFreezer).
 function newFighterRecord(name, body) {
+  // the uid comes from the original save so the new fighter belongs to the same account
   const uid = Number(RAW_SAV_MAIN_UID);
   const b = arr(AP && AP.bodies).find(x => x.id === body) || arr(AP && AP.bodies)[0] || { id: 'BODY_FEMALE_001', gender: 'GENDER_FEMALE' };
   const masks = arr(AP && AP.gasmasks).filter(m => m.gender === b.gender);
@@ -520,6 +543,7 @@ function newFighterRecord(name, body) {
     uid, cid: presentUuid(), body: b.id, gasmask: mask, type: 'BAL', grade: 1, limit_break: 0,
     money: 0, spirit: 0, bloodnium: 0,
     bloodnium_result: '{"enemy_count":0,"bloodnium":0,"elapsed_time":0,"max_floor_id":""}',
+    // 999999 is the "full HP" value the game itself writes for new fighters
     hp: 999999, escdie: 0, total_exp: 0, rest_exp: 0, gain_exp: 0, start_exp: 0, sklgauge: 0,
     pause: '', abid: '', name: name || 'New Fighter', state: 'FREE', select_arm_slots: '',
     hunter_win: -1, hunter_lose: -1, hunter_draw: -1,
@@ -543,6 +567,7 @@ function newFighterRecord(name, body) {
 // FIGHTER_DELETES: pending deletions to apply to the cloned raw JSON at download time. `root` ties
 // the set to the RAW_SAV_ROOT it was recorded for (reset when a different save is loaded); `cids` are
 // fighter cids that existed in the original save; `eids` are item instance ids (eptid/emsrid/ebstid/eitemid) to drop from deathbags.
+// The deletions are recorded instead of applied to the raw root because RAW_SAV_ROOT is never modified; they are applied to the clone at download.
 let FIGHTER_DELETES = { root: null, cids: new Set, eids: new Set };
 // fighterDeleteBlock(): why a fighter can't be deleted (string for the UI), or null if deletion is allowed.
 function fighterDeleteBlock(c) {
@@ -559,7 +584,9 @@ function fighterDeleteBlock(c) {
 // and bumps playlog.fighter.destory_fighter (sic, the game's spelling). Fighters created in this
 // session never existed in the raw save, so nothing is recorded or counted for them.
 function deleteFighter(c) {
+  // start a fresh record if a different save was loaded since the last deletion
   if (FIGHTER_DELETES.root !== RAW_SAV_ROOT) FIGHTER_DELETES = { root: RAW_SAV_ROOT, cids: new Set, eids: new Set };
+  // a fighter's carried items are removed with it, as in the game, so no orphan items stay in the save
   for (const p of arr(c.pspts)) FIGHTER_DELETES.eids.add(p.eptid);
   for (const m of arr(c.psmsrs)) FIGHTER_DELETES.eids.add(m.emsrid);
   for (const b of arr(c.psbsts)) FIGHTER_DELETES.eids.add(b.ebstid);
@@ -568,7 +595,7 @@ function deleteFighter(c) {
   const rawChrs = arr(RAW_SAV_ROOT.soul && RAW_SAV_ROOT.soul.chr && RAW_SAV_ROOT.soul.chr.chrs && RAW_SAV_ROOT.soul.chr.chrs[RAW_SAV_MAIN_UID]);
   const existed = rawChrs.some(x => x.cid === c.cid);
   if (existed) FIGHTER_DELETES.cids.add(c.cid);
-  // drop the fighter from the working list and empty its hanger
+  // drop the fighter from the working list and empty its hanger (the hanger is kept so the freezer size stays the same)
   SAVE.soul.chrs = SAVE.soul.chrs.filter(x => x !== c);
   for (const s of arr(SAVE.soul.chrslots)) if (s && s.cid === c.cid) s.cid = '';
   if (existed) {
@@ -578,14 +605,17 @@ function deleteFighter(c) {
     const still = new Set(arr(c.eqskls).map(e => e.id || e.sklid));
     SAVE.soul.psskls = arr(SAVE.soul.psskls);
     for (const e of rawEq) {
+      // premium decals only: per the notes above the game returns those to stock, while normal ones are lost
       if (!still.has(e.sklid) || !(SKL_INDEX[e.sklid] && Number(SKL_INDEX[e.sklid].premium) === 1)) continue;
       let st = SAVE.soul.psskls.find(x => x.id === e.sklid);
       if (!st) SAVE.soul.psskls.push(st = { id: e.sklid, lvl: 1, cnt: 0, is_checked: 1 });
+      // capped so stock never exceeds the most the game allows
       st.cnt = Math.min((st.cnt || 0) + 1, DECAL_CAP);
     }
     const pl = SAVE.playlog && SAVE.playlog[0];
     if (pl && pl.fighter && typeof pl.fighter.destory_fighter === 'number') pl.fighter.destory_fighter++;
   }
+  // the selected index may now point past the end or at another fighter, so go back to the first
   activeCharIdx = 0;
 }
 
@@ -610,6 +640,7 @@ function fighterDeathRecords(c) {
 // (FIGHTER_RECOVERS). Returns false if c isn't ENEMY. Does not charge Kill Coins.
 function recoverFighter(c) {
   if (!c || c.state !== 'ENEMY') return false;
+  // start a fresh record if a different save was loaded since the last recovery
   if (FIGHTER_RECOVERS.root !== RAW_SAV_ROOT) FIGHTER_RECOVERS = { root: RAW_SAV_ROOT, cids: new Set };
   c.state = 'FREE';
   c.hp = 999999;
@@ -631,6 +662,7 @@ function fighterDeadNote(chr) {
 // Gotcha: when dchrs[mainUid] becomes empty the game's shape is {} not [] so an empty object is written.
 function applyFighterRecovers(root, rawRoot, mainUid) {
   if (FIGHTER_RECOVERS.root !== rawRoot || !FIGHTER_RECOVERS.cids.size) return;
+  // works on the cloned root only; matched by did so each fighter's own death records go and others stay
   const dc = root.diedchara;
   if (!dc || !dc.dchrs) return;
   const list = arr(dc.dchrs[mainUid]);
@@ -654,6 +686,7 @@ function freeHangers() {
 // addFighterToFreezer(): create a new fighter in the first empty hanger; keeps chrs sorted by cid like the
 // game. Returns the new fighter, or null when the freezer is full.
 function addFighterToFreezer(name, body) {
+  // no free hanger means no room: the game needs a freezer slot for every fighter, so nothing is created
   const hanger = freeHangers()[0];
   if (!hanger) return null;
   const c = newFighterRecord(name, body);
@@ -681,6 +714,7 @@ function setFreezerLevel(level) {
   }
   if (row.count < slots.length) {
     const removed = slots.slice(row.count);
+    // never drop a hanger that holds a fighter, which would orphan that fighter
     if (removed.some(s => s && s.cid)) return `Hangers ${row.count + 1}-${slots.length} aren't empty, so the freezer can't go down to level ${level}.`;
     slots.length = row.count;
   }
@@ -697,6 +731,7 @@ function realFreezerInfo() {
 // brokenFighters(): non-DUMMY fighters that would likely break the game: cid not a UUID, no body, or no freezer hanger.
 function brokenFighters() {
   const slotCids = new Set(arr(SAVE && SAVE.soul && SAVE.soul.chrslots).map(s => s && s.cid));
+  // the game uses UUID cids; the older editor stub ('char-xxxx') and missing body/hanger are the signs of a fighter the game may not boot with
   const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   return arr(SAVE && SAVE.soul && SAVE.soul.chrs).filter(c => c && c.state !== 'DUMMY' && (!uuid.test(c.cid || '') || !c.body || !slotCids.has(c.cid)));
 }

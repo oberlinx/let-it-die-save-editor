@@ -4,9 +4,11 @@
 // UUID v1 stores 100ns ticks since 1582-10-15 split across time_low/mid/hi; 122192928000000000 is the
 // offset (in 100ns ticks) between that epoch and 1970-01-01.
 function uuidTime(u) {
+  // Version nibble sits at hex index 12; only v1 UUIDs carry a time, so anything else returns 0 (unknown) rather than a bogus date.
   const h = String(u || '').replace(/-/g, '');
   if (h.length !== 32 || h[12] !== '1') return 0;
   // reassemble the 60-bit timestamp: time_hi (12 bits) * 2^48 + time_mid * 2^32 + time_low
+  // Multiplied with powers of two instead of bit shifts because the value is over 32 bits, which JS bit operators would truncate.
   const v = parseInt(h.slice(13, 16), 16) * 281474976710656 + parseInt(h.slice(8, 12), 16) * 4294967296 + parseInt(h.slice(0, 8), 16);
   const t = Math.round((v - 122192928000000000) / 1e7);
   return t > 0 ? t : 0;
@@ -26,11 +28,13 @@ function runHaterIndex(root) {
 function runEntryTimes(root, user) {
   const by = runHaterIndex(root);
   const t = user.map(u => uuidTime(u.arcid));
+  // Exact times are preferred; the Hater batches are only a best-effort guess.
   if (t.every(Boolean)) return { t, exact: true, by };
   // fallback: walk from the newest floor backwards, each floor must be built before the one after it
   let bound = Infinity;
   for (let i = user.length - 1; i >= 0; i--) {
     if (t[i]) { bound = t[i]; continue; }
+    // The 5 second slack allows for the Hater batch being stamped slightly after the next floor's time.
     const c = arr(by[user[i].flrid]).filter(x => x <= bound + 5);
     if (c.length) { t[i] = Math.max(...c); bound = t[i]; }
   }
@@ -50,6 +54,7 @@ function runData() {
   const cl = s.chr && s.chr.chrs, list = Array.isArray(cl) ? cl : cl && typeof cl === 'object' ? arr(cl[uid]) : [];
   const c = list.find(x => x && x.state === 'USE') || null;
   let br = {};
+  // Stored as a JSON string by the game; a malformed one must not break the whole tab, so fall back to empty.
   try { br = JSON.parse((c && c.bloodnium_result) || '{}') || {}; } catch (e) {}
   const num = v => Number(v) || 0;
   // human-readable floor label; fall back to raw stage/floor/area ids
@@ -63,6 +68,7 @@ function runData() {
   const users = arr(rlg && rlg.user);
   const et = runEntryTimes(root, users);
   // one entry per floor visited this run: label, boss flag, map used, first-ever clear time, entry time, Hater count
+  // haters counts only batches within 30 seconds of this floor's build time, since the archive also holds earlier visits to the same floor id.
   const floors = users.map((u, i) => {
     const hf = hvnFloor(u.flrid), a = archive[u.flrid + '|' + u.areaid] || {};
     return { n: i + 1, id: u.flrid, label: hf ? hvnFloorLabel(hf) : u.flrid, boss: hf ? Number(hf.mbsmax) > 0 : false, ref: a.ref_areaid || '', cleared: Number(ct[u.flrid + '-' + u.areaid]) || 0, entered: et.t[i] || 0, haters: et.t[i] ? arr(et.by[u.flrid]).filter(x => Math.abs(x - et.t[i]) <= 30).length : 0 };
@@ -81,6 +87,7 @@ function runData() {
     pause: s.pause, crashed: /_CRASH$/.test(s.pause), where, stage: s.stgid || '', flrid: s.flrid || '',
     deepest: maxF ? maxF.no + 'F' : br.max_floor_id || '', money: c ? num(c.money) : 0, blood: c ? num(c.bloodnium) : 0,
     bloodFloors: num(br.bloodnium), bloodMsr: num(br.msr_bloodnium), enemies: num(br.enemy_count),
+    // The first floor may lack a time, so use the first floor that has one.
     began: floors.length ? floors[0].entered || (floors.find(x => x.entered) || {}).entered || 0 : 0, beganExact: et.exact, started: num(br.start_time), elapsed: num(br.elapsed_time), floorStart: num(s.area_start_time),
     exp: c ? num(c.gain_exp) - num(c.start_exp) : 0, expNow: c ? num(c.gain_exp) : 0, hp: c ? num(c.hp) : 0,
     bank: num(s.free_money), bankStart: num(s.replica_money), spl: num(s.spirit), splStart: num(s.replica_spirit),
@@ -94,12 +101,14 @@ function runData() {
 // reward slots that the floor never placed (flmUnplaced) are skipped. Returns '' if nothing applies.
 // a map entry's other rewards as the floor has them (unplaced placeholder boxes left out)
 function runRewardText(e, html) {
+  // Placeholder reward slots that were never placed would show rewards that do not exist on the floor.
   const unp = flmUnplaced(e), rw = arr(e && e.rwds).filter((w, i) => w && !unp.has(i));
   const nm = w => w.rwdtype === 'TBRWD_MONEY' || !w.rwdid ? 'Kill Coins' : html ? rwdNameHtml(w.rwdid) : itemDisplayName(w.rwdid);
   const grp = (re, label) => { const L = rw.filter(w => re.test(w.gentype || '')).map(nm); return L.length ? `${label}: ${L.join(', ')}` : ''; };
   return [ grp(/TRZAKO$/, 'Treasure enemies'), grp(/TRBOX_L$/, 'Large boxes'), grp(/MBOSS/, 'Boss drop') ].filter(Boolean).join(' · ');
 }
 // Format a duration in seconds as '12m', '3h 05m' or 'Nd Nh' (days only from 2 days up, else hours).
+// Days only from 2 days up, so 24 to 47 hours reads as hours, which is easier to compare.
 const runDur = sec => { sec = Math.max(0, Math.floor(sec)); const dd = Math.floor(sec / 86400), h = Math.floor(sec % 86400 / 3600), m = Math.floor(sec % 3600 / 60); return dd >= 2 ? `${dd}d ${h}h` : (dd ? `${dd * 24 + h}h ${m}m` : h ? `${h}h ${m}m` : `${m}m`); };
 // short times (floor pace): 45s, 4m 12s
 // runDurS: short duration for per-floor pace (45s, 4m 12s; falls back to runDur at 1h+). runN: locale-formatted number.
@@ -164,6 +173,7 @@ function runBag() {
   const pts = arr(c.pspts), byEid = {};
   for (const p of pts) byEid[p.eptid] = p;
   // normalise a part instance into display fields: name, +level, durability %, ammo text
+  // Missing masters.db entries still show the raw ptid so nothing disappears silently.
   const gear = p => {
     const r = PT_INDEX[p.ptid];
     if (!r) return { name: p.ptid, lvl: '', dur: '', ammo: '' };
@@ -182,9 +192,11 @@ function runBag() {
     const e = arr(c.eqpts).find(x => x.site === site), p = e && byEid[e.eptid];
     slots.push(Object.assign({ slot: label, inHand: false }, p ? gear(p) : { name: '' }));
   }
+  // Anything not in a quick slot or worn counts as spare gear carried in the bag.
   const used = new Set(Object.values(as).concat(arr(c.eqpts).map(e => e.eptid)));
   const spare = pts.filter(p => !used.has(p.eptid)).map(gear);
   const tally = list => { const m = new Map(); for (const n of list) m.set(n, (m.get(n) || 0) + 1); return [ ...m ].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])); };
+  // Blueprints are split out by name prefix since they share the item list with ordinary items.
   const items = arr(c.psitems).map(it => itemDisplayName(it.itemId));
   return {
     slots, spare,
@@ -223,6 +235,7 @@ function runFloorNow() {
     out.boss.push({ kind, lvl: m.lvl, beaten: Number(m.state) === 0, what: m.eitemid ? runInstName(root, uid, m.eitemid) : '' });
   }
   // zombies on this floor are matched by zid between flrzmbs[uid] and the global zmbs lists
+  // flrzmbs only lists ids; names and fighters come from the global zmbs lists.
   const here = new Set(arr(root.zombie && root.zombie.flrzmbs && root.zombie.flrzmbs[uid]).map(z => z && z.zid));
   for (const L of Object.values((root.zombie && root.zombie.zmbs) || {})) for (const z of arr(L)) if (z && here.has(z.zid)) out.zombies.push({ player: z.name || '', fighter: z.cname || '', cls: [ z.type, z.limit_break ? 'LB ' + z.limit_break : '' ].filter(Boolean).join(' '), lvl: z.lvl });
   for (const it of arr(fl.item)) if (it && it.eid) out.loose.push(runInstName(root, uid, it.eid) || 'item');
@@ -251,7 +264,9 @@ function runPace(d) {
     const hf = hvnFloor(f[i].id);
     steps.push({ label: hf ? hf.no + 'F' + (f[i].boss ? ' (boss)' : '') : f[i].label, boss: f[i].boss, sec: f[i + 1].entered - f[i].entered });
   }
+  // Long gaps mean the player left the game running or stopped playing; counting them would wreck the averages.
   const BREAK = 3600, act = steps.filter(x => x.sec > 0 && x.sec <= BREAK), breaks = steps.filter(x => x.sec > BREAK);
+  // Median rather than mean for typical times, so one slow floor doesn't skew it.
   const med = L => { if (!L.length) return 0; const v = L.map(x => x.sec).sort((a, b) => a - b); return v[Math.floor(v.length / 2)]; };
   const total = act.reduce((a, x) => a + x.sec, 0);
   const by = act.slice().sort((a, b) => a.sec - b.sec);
@@ -309,6 +324,7 @@ function runExtraCsv(d) {
 }
 // Jackal rewards on the Current Run tab are hidden until this is ticked (remembered in this browser)
 // Whether Jackal rewards are visible on the Current Run tab; persisted in localStorage (wrapped in try/catch).
+// Hidden by default so the player isn't spoiled on what Jackals drop.
 let RUN_JKL_SPOIL = false;
 try { RUN_JKL_SPOIL = localStorage.getItem('lid.runJackalSpoilers') === '1'; } catch (err) {}
 // Build the HTML for the Current Run extras: 1 Death Bag, 2 current floor (and Jackals, hidden unless
@@ -378,10 +394,12 @@ function runExtraHtml(d) {
 // tab, or the same box on the Location tab.
 function runCsv(d) {
   // RFC 4180 quoting: wrap in quotes and double embedded quotes when the value has , " or newline
+  // Excel needs quoting for these characters.
   const q = v => { const s = String(v == null ? '' : v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
   const lines = [ [ 'Section', 'Field', 'Value' ].join(',') ];
   for (const r of runRows(d)) lines.push(r.map(q).join(','));
   // reward names only with "Show rewards (spoilers)" ticked, like the tab
+  // Same spoiler rule as the Location tab (LOC_SPOIL), so an export can't reveal what the screen hides.
   if (d.upcoming.length && !LOC_SPOIL) lines.push('', [ 'Map rewards', `${d.upcoming.length} boss floors with rewards on the map (hidden: tick "Show run rewards (spoilers)" on this tab to export them)` ].map(q).join(','));
   else if (d.upcoming.length) {
     lines.push('', [ 'Map rewards', 'Floor', 'Legendary Chest', 'Rare', 'Other rewards' ].join(','));
@@ -390,6 +408,7 @@ function runCsv(d) {
   lines.push('', [ 'Floors visited', '#', 'Floor', 'Boss floor', 'Map used', 'Entered this run', 'Haters', 'First ever cleared' ].join(','));
   for (const x of d.floors) lines.push([ 'Floors visited', x.n, x.label, x.boss ? 'yes' : '', x.ref, x.entered ? dtFmt(x.entered) : '', x.haters, x.cleared ? dtFmt(x.cleared) : '' ].map(q).join(','));
   lines.push(...runExtraCsv(d));
+  // BOM is needed or Excel misreads non-ASCII names; CRLF per CSV convention.
   return '﻿' + lines.join('\r\n') + '\r\n';
 }
 // Section shell for the Current Run tab; renderRun fills #run-body.
