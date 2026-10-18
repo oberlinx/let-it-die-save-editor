@@ -95,6 +95,27 @@ function isPsOnlyPart(ptid) {
   const p = PT_INDEX[ptid];
   return !!p && Number(p.platform) === 1;
 }
+// researchFinishedCount(): number of FINISHED level entries in the research list. The game adds one to "Research done"
+// (playlog.base.total_research_cnt) for every level it finishes, so this is what the counter should have gained.
+function researchFinishedCount() { return arr(SAVE && SAVE.user_research).filter(r => r && r.research_type === 'FINISHED').length; }
+// researchDoneExpected(): what "Research done" would be if every finished level in the list had been researched in play.
+// The starting blueprints come with the account (never researched), so their levels are left out. In saves the game wrote
+// itself the counter sits within a few of this number; research written by tools leaves it far below.
+function researchDoneExpected() {
+  const init = new Set(arr(AP && AP.partresearch).filter(r => Number(r.is_initial) === 1).map(r => r.ptid));
+  return arr(SAVE && SAVE.user_research).filter(r => r && r.research_type === 'FINISHED' && !init.has(r.ptid)).length;
+}
+// adjustResearchDone(before): after a research edit, add the finished levels it created to "Research done". Same idea as
+// adjustStampFromResearch: move the save's own figure by exactly what the edit added, instead of recomputing it, because
+// the counter in played saves is not a clean function of the list (research done by tools or in older versions is not in it).
+// Removing research never lowers it (the game only counts up). Returns how many were added; a save without the counter is left alone.
+function adjustResearchDone(before) {
+  const gained = researchFinishedCount() - before;
+  const base = SAVE && SAVE.playlog && SAVE.playlog[0] && SAVE.playlog[0].base;
+  if (gained <= 0 || !base || !('total_research_cnt' in base)) return 0;
+  base.total_research_cnt = (Number(base.total_research_cnt) || 0) + gained;
+  return gained;
+}
 // isResearchBulkAllowed(ptid): gate used by "Max all" / "+5 all". Normal allowed parts always pass;
 // PS-only parts pass only when the checkbox is ticked, they are researchable, not blocklisted, and have a blueprint.
 function isResearchBulkAllowed(ptid) {
@@ -485,8 +506,10 @@ function wireBlueprints() {
       cb.addEventListener('change', () => {
         // research feeds the Stamp Rally totals, so snapshot them first and let adjustStampFromResearch apply the difference
         const before = stampTotalsNow();
+        const doneBefore = researchFinishedCount();
         setUnlocked(cb.dataset.bp, cb.checked);
         adjustStampFromResearch(before);
+        adjustResearchDone(doneBefore);
         renderList(document.getElementById('bp-filter').value);
       });
     });
@@ -501,10 +524,12 @@ function wireBlueprints() {
         if (v < lo) toast(`Clamped to this part's lowest level (+${lo})`);
         v = Math.max(lo, Math.min(hi, v));
         const before = stampTotalsNow();
+        const doneBefore = researchFinishedCount();
         const err = setLevel(inp.dataset.bpLevel, rawFromDisplay(rec, v));
         if (err) toast(err, true);
         // re-render so the "next level" markers and research stamps follow
         adjustStampFromResearch(before);
+        adjustResearchDone(doneBefore);
         renderList(document.getElementById('bp-filter').value);
       });
     });
@@ -523,6 +548,7 @@ function wireBlueprints() {
     const shown = blueprintableParts().filter(p => (!filter || norm(p.name).includes(norm(filter))) && partSlotLabel(p) === researchSubTab);
     const parts = shown.filter(p => isResearchBulkAllowed(p.id));
     const before = stampTotalsNow();
+    const doneBefore = researchFinishedCount();
     const done = new Set;
     for (const p of parts) {
       for (const id of chainOf(p.id)) {
@@ -535,9 +561,10 @@ function wireBlueprints() {
       }
     }
     adjustStampFromResearch(before);
+    const doneAdded = adjustResearchDone(doneBefore);
     renderList(filter);
     const skipped = shown.length - parts.length;
-    toast(`Maxed ${parts.length} visible ${researchSubTab} research item${parts.length === 1 ? '' : 's'}${skipped ? ` (skipped ${skipped} ${RESEARCH_FORM.includePs ? 'with no blueprint' : 'PS-only / no blueprint'})` : ''}`);
+    toast(`Maxed ${parts.length} visible ${researchSubTab} research item${parts.length === 1 ? '' : 's'}${doneAdded ? ` (Research done +${doneAdded})` : ''}${skipped ? ` (skipped ${skipped} ${RESEARCH_FORM.includePs ? 'with no blueprint' : 'PS-only / no blueprint'})` : ''}`);
   });
   // +5 all: see the comment inside
   document.getElementById('bp-plus5-all').addEventListener('click', () => {
@@ -557,25 +584,29 @@ function wireBlueprints() {
     }
     let changed = 0, alreadyAbove = 0;
     const before = stampTotalsNow();
+    const doneBefore = researchFinishedCount();
     for (const [id, target] of targets) {
       const cur = entryFor(id) ? entryFor(id).lvl : 0;
       if (cur > target) { alreadyAbove++; continue; }
       if (cur !== target) { writeLadder(id, target); changed++; }
     }
     adjustStampFromResearch(before);
+    const doneAdded = adjustResearchDone(doneBefore);
     renderList(filter);
     const skipped = shown.length - parts.length;
-    toast(`Set ${changed} visible ${researchSubTab} research item${changed === 1 ? '' : 's'} to +5 (normal parts max out at +4)${alreadyAbove ? ` (left ${alreadyAbove} already higher untouched)` : ''}${skipped ? ` (skipped ${skipped} ${RESEARCH_FORM.includePs ? 'with no blueprint' : 'PS-only / no blueprint'})` : ''}`);
+    toast(`Set ${changed} visible ${researchSubTab} research item${changed === 1 ? '' : 's'} to +5 (normal parts max out at +4)${doneAdded ? ` (Research done +${doneAdded})` : ''}${alreadyAbove ? ` (left ${alreadyAbove} already higher untouched)` : ''}${skipped ? ` (skipped ${skipped} ${RESEARCH_FORM.includePs ? 'with no blueprint' : 'PS-only / no blueprint'})` : ''}`);
   });
   // Remove all: wipe research, then restore the starting blueprints at level 1
   document.getElementById('bp-remove-all').addEventListener('click', () => {
     const before = stampTotalsNow();
+    const doneBefore = researchFinishedCount();
     // emptied in place (not reassigned) because `research` is the SAVE.user_research array itself
     research.length = 0;
     // every new game starts with these researched; keep them at their first level
     for (const id of INITIAL_PTIDS) if (PT_INDEX[id]) writeLadder(id, 1);
     researchDirty = true;
     adjustStampFromResearch(before);
+    adjustResearchDone(doneBefore);
     renderList(document.getElementById('bp-filter').value);
     toast(`All research removed (starting blueprints kept at +0)`);
   });

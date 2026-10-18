@@ -434,6 +434,19 @@ function runSaveCheck() {
     }
   });
 
+  // "Research done" lower than the research levels give: research written by tools never counted up the game's own counter.
+  // Only a note (the number is cosmetic); the margin keeps the few-point difference seen in saves the game wrote from being reported.
+  safe('research-done', () => {
+    if (!AP || !AP.partresearch || !AP.partresearch.length) return;
+    const base = SAVE.playlog && SAVE.playlog[0] && SAVE.playlog[0].base;
+    if (!base || !('total_research_cnt' in base)) return;
+    const have = Number(base.total_research_cnt) || 0, want = researchDoneExpected();
+    if (have >= want - Math.max(25, Math.round(want * 0.02))) return;
+    add('note', `"Research done" on the Stats tab is ${have.toLocaleString()}, but your research levels add up to ${want.toLocaleString()}. Research made by the editor or other tools doesn't count up the game's own counter. The game never counts it down, so this is only about how the number looks.`, 'stats', {
+      label: 'Set Research done from research levels', run: () => { const n = researchDoneExpected(); SAVE.playlog[0].base.total_research_cnt = Math.max(Number(SAVE.playlog[0].base.total_research_cnt) || 0, n); return `Research done set to ${n.toLocaleString()}.`; }
+    });
+  });
+
   // weapon mastery above the game's top level (20): written by other tools; the game has no data for those levels
   safe('mastery-max', () => {
     const over = mstOverMax(), zov = mstZombieOverMax(RAW_SAV_ROOT);
