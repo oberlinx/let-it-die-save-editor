@@ -6146,13 +6146,16 @@ const RWD_TIER_COLOR = { 1: '#4ea3ef', 2: '#5cc46a', 3: '#a9b0b7', 4: '#e5534b',
 // by the colour the material is named after (44CE Metal shares rarity 5 with Purple, so the name decides), else rarity
 // Name-based tier overrides, first match wins (value = key into RWD_TIER_COLOR).
 const RWD_NAME_COLOR = [ [ /\b44CE\b/, 8 ], [ /\bPlatinum\b/i, 7 ], [ /\bOrange\b/i, 6 ], [ /\bPurple\b/i, 5 ], [ /\bRed\b/i, 4 ], [ /\bBlack\b/i, 3 ], [ /\bGreen\b/i, 2 ], [ /\bBlue\b/i, 1 ] ];
-// rwdTierColor(id): CSS colour for STONE/STEROID items, '' otherwise.
-function rwdTierColor(id) {
+// rwdTier(id): tier number (key of RWD_TIER_COLOR) of a STONE/STEROID item, 0 for anything else. One function for the colour and the
+// rare rule below, so "Orange" and "Platinum" mean the same thing in both.
+function rwdTier(id) {
   const r = ITEM_INDEX[id];
-  if (!r || !/^ITMT_(STONE|STEROID)_/.test(id)) return '';
+  if (!r || !/^ITMT_(STONE|STEROID)_/.test(id)) return 0;
   const hit = RWD_NAME_COLOR.find(([ re ]) => re.test(r.name || ''));
-  return RWD_TIER_COLOR[hit ? hit[1] : Number(r.rarity)] || '';
+  return hit ? hit[1] : Number(r.rarity) || 0;
 }
+// rwdTierColor(id): CSS colour for STONE/STEROID items, '' otherwise.
+function rwdTierColor(id) { return RWD_TIER_COLOR[rwdTier(id)] || ''; }
 // rwdIsBlueprint(id): item is a blueprint (ITTP_RMAP).
 function rwdIsBlueprint(id) { const r = ITEM_INDEX[id]; return !!r && r.itemtype === 'ITTP_RMAP'; }
 // rwdNameHtml(id): escaped, coloured (or blueprint-styled) item name as HTML.
@@ -6222,7 +6225,7 @@ function flmRefix(target) {
     // no arena of the same kind on the new floor: fall back to a mid-boss, then to anything the floor offers, so the floor always gets a valid arena
     if (!pool.length) pool = rows.filter(r => blkKind(r.refareaid).kind === 'mboss');
     if (!pool.length) pool = rows;
-    const r = blkPick(pool), entry = r && blkEntry(u.floor, r.refareaid, Number(u.entry.is_rare) === 1);
+    const r = blkPick(pool), entry = r && blkEntry(u.floor, r.refareaid, Number(u.entry.is_rare) === 1, undefined, true);
     if (entry) out[u.id] = { entry, from: ref, to: r.refareaid };
   }
   return out;
@@ -6640,14 +6643,35 @@ function blkDraw(floor, refareaid, type) {
   const own = arr(AP && AP.hvnBossDrops).some(r => r.flrid === floor.id && r.areaid === floor.areaid && r.type === type && r.refareaid === refareaid);
   return own ? flmDraw(floor.id, floor.areaid, refareaid, type) : flmDraw(floor.id, floor.areaid, '-', type);
 }
-// blkEntry(floor, refareaid, isRare, rewards): builds a new soul.hvntrinfo entry for a boss floor. Reward policy 'none' / 'chest' /
+// Orange and Platinum featured rewards (Orange Metals, Orange 'Roids, Platinum Metals) are written as rare Legendary Chests when the
+// editor writes the entry (user's rule, 2026-10-19). Only when the floor's rare table can give that item: the rare table holds the
+// top tiers, but not on every floor (e.g. Orange Metals are missing from some floors' rare tables), and an entry the game could
+// never produce is not worth the risk. Entries the game wrote are never touched, and an entry the editor replaces keeps its flag.
+const BLK_RARE_TIERS = [ 6, 7 ];
+// blkTableHas(floor, refareaid, type, itemId, mix): does that drop table give the item on this floor and arena? mix=false follows
+// blkDraw (the arena's own rows, else the general '-' rows); mix=true follows flmDraw (both together), so each caller asks the
+// same question as the draw that produced its reward.
+function blkTableHas(floor, refareaid, type, itemId, mix) {
+  const all = arr(AP && AP.hvnBossDrops).filter(r => r.flrid === floor.id && r.areaid === floor.areaid && r.type === type);
+  const own = all.filter(r => r.refareaid === refareaid);
+  const rows = mix ? all.filter(r => r.refareaid === refareaid || r.refareaid === '-') : (own.length ? own : all.filter(r => r.refareaid === '-'));
+  return rows.some(r => flmGroup(r.grp).some(i => (i.itemId || i.itemid) === itemId));
+}
+// blkRareWorthy(floor, refareaid, itemId, mix): true when an editor-written featured reward should carry the rare flag.
+function blkRareWorthy(floor, refareaid, itemId, mix) {
+  return !!itemId && BLK_RARE_TIERS.includes(rwdTier(itemId)) && blkTableHas(floor, refareaid, 'PTGENTP_TRBOX_SPXL_RARE', itemId, mix);
+}
+// blkEntry(floor, refareaid, isRare, rewards, keepFlag): builds a new soul.hvntrinfo entry for a boss floor. keepFlag is true when isRare
+// comes from an entry that already exists (replaced or re-picked): that flag stays as it is. Otherwise an Orange or Platinum reward
+// makes the entry rare (blkRareWorthy). Reward policy 'none' / 'chest' /
 // 'hidden' leaves rwds empty (with a Legendary Chest rwdid except for 'none'); otherwise draws boss drop (mid-boss), 3 treasure-enemy
 // rewards (pit) and 3 large-box rewards. Returns null if a draw fails.
-function blkEntry(floor, refareaid, isRare, rewards) {
+function blkEntry(floor, refareaid, isRare, rewards, keepFlag) {
   if (rewards === 'none' || rewards === 'chest' || rewards === 'hidden') {
     const rwdid = rewards !== 'none' ? blkDraw(floor, refareaid, isRare ? 'PTGENTP_TRBOX_SPXL_RARE' : 'PTGENTP_SPXL') : '';
     if (rewards !== 'none' && !rwdid) return null;
-    return { flrid: floor.id, areaid: floor.areaid, refareaid, rwdtype: 'TBRWD_ITEM', rwdid, is_rare: isRare ? 1 : 0, created: 0, rwds: [] };
+    const rare = isRare || (!keepFlag && blkRareWorthy(floor, refareaid, rwdid, false));
+    return { flrid: floor.id, areaid: floor.areaid, refareaid, rwdtype: 'TBRWD_ITEM', rwdid, is_rare: rare ? 1 : 0, created: 0, rwds: [] };
   }
   const k = blkKind(refareaid), rw = (gentype, ref) => ({ gentype, rwdtype: 'TBRWD_ITEM', rwdid: blkDraw(floor, ref, gentype) });
   const rwds = [];
@@ -6656,7 +6680,8 @@ function blkEntry(floor, refareaid, isRare, rewards) {
   for (let i = 0; i < 3; i++) rwds.push(rw('PTGENTP_TRBOX_L', refareaid));
   const rwdid = blkDraw(floor, refareaid, isRare ? 'PTGENTP_TRBOX_SPXL_RARE' : 'PTGENTP_SPXL');
   if (!rwdid || rwds.some(w => !w.rwdid)) return null;
-  return { flrid: floor.id, areaid: floor.areaid, refareaid, rwdtype: 'TBRWD_ITEM', rwdid, is_rare: isRare ? 1 : 0, created: 0, rwds };
+  const rare = isRare || (!keepFlag && blkRareWorthy(floor, refareaid, rwdid, false));
+  return { flrid: floor.id, areaid: floor.areaid, refareaid, rwdtype: 'TBRWD_ITEM', rwdid, is_rare: rare ? 1 : 0, created: 0, rwds };
 }
 // blkFrom(): floor id the lock plans from (pending floor move target, else the current floor).
 // the floor the fighter will be on at download (a pending floor move counts) and its upcoming entries
@@ -6718,7 +6743,7 @@ function blkPlan() {
     const r = blkPick(want.length ? want : rows);
     // a floor the game hasn't planned yet gets a rare (yellow on the map) Legendary Chest as often as the game gives one
     // an entry that is replaced keeps its is_rare flag so the Legendary Chest colour on the map doesn't change
-    items.push({ floor: f, old, entry: r && blkEntry(f, r.refareaid, old ? Number(old.is_rare) === 1 : Math.random() < HVN_RARE_CHANCE, BOSS_LOCK.rewards), fallback, redrawn: !!keep });
+    items.push({ floor: f, old, entry: r && blkEntry(f, r.refareaid, old ? Number(old.is_rare) === 1 : Math.random() < HVN_RARE_CHANCE, BOSS_LOCK.rewards, !!old), fallback, redrawn: !!keep });
   }
   return { from, mode: BOSS_LOCK.mode, which: BOSS_LOCK.which, extend: BOSS_LOCK.extend, rewards: BOSS_LOCK.rewards, redraw: BOSS_LOCK.redraw, items };
 }
@@ -7034,8 +7059,10 @@ function applyRewind(root) {
         // the map B floor's one fixed arena, which differs by route (D.O.D. MET, W.E ARC, C.W AMS, M.I.L.K. RFT)
         const ar = blkPick(arr(AP && AP.hvnBossAreas).filter(r => r.flrid === f.id));
         if (!ar) continue;
-        const ref = ar.refareaid, rare = Math.random() < HVN_RARE_CHANCE ? 1 : 0;
-        const feat = flmDraw(f.id, f.areaid, ref, rare ? 'PTGENTP_TRBOX_SPXL_RARE' : 'PTGENTP_SPXL');
+        const ref = ar.refareaid, rolledRare = Math.random() < HVN_RARE_CHANCE ? 1 : 0;
+        const feat = flmDraw(f.id, f.areaid, ref, rolledRare ? 'PTGENTP_TRBOX_SPXL_RARE' : 'PTGENTP_SPXL');
+        // a floor the editor writes: Orange and Platinum rewards are flagged rare (flmDraw mixes the arena's and the general rows, so ask it the same way)
+        const rare = rolledRare || (blkRareWorthy(f, ref, feat, true) ? 1 : 0);
         const boxes = [ 0, 1, 2 ].map(() => flmDraw(f.id, f.areaid, ref, 'PTGENTP_TRBOX_L'));
         if (!feat || boxes.some(b => !b)) continue;
         ent = REWIND.extra.by[f.id] = { flrid: f.id, areaid: f.areaid, refareaid: ref, rwdtype: 'TBRWD_ITEM', rwdid: feat, is_rare: rare, created: 0, rwds: boxes.map(b => ({ gentype: 'PTGENTP_TRBOX_L', rwdtype: 'TBRWD_ITEM', rwdid: b })) };
