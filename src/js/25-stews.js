@@ -213,6 +213,220 @@ function stewRarities() {
   return list.length ? list : [5, 4, 3, 2, 1];
 }
 
+// ==== Stew Rebalance (pity) ====
+// The game keeps no pity counter, so pity is built into the ORDER of the queue: every rule below is measured in pulls
+// counted from the next pull. Rules run in this order, and each one tries to REORDER the pulls already queued before it
+// swaps anything in (a swap-in is drawn from the game's odds, from the same pool the rule needs):
+//   1. Good pull: a pull of rarity >= goodFrom at least every `good` pulls. 2. Top pull: rarity >= topFrom every `top` pulls.
+//   3. No repeat: the same decal never twice within `gap` pulls.   4. NEW: a decal you do not own (first time in the queue)
+//   at least every `fresh` pulls. Later rules only swap pulls of the same class (top / good / other), so they cannot undo earlier ones.
+// A swapped-in NEW decal keeps the slot's rarity when it can, otherwise another rarity of the same class.
+// 0 turns a rule off. The queue length never changes.
+const STEW_REB_PRESETS = {
+  gentle:   { goodFrom: 4, good: 15, topFrom: 5, top: 0,  fresh: 20, gap: 5 },
+  standard: { goodFrom: 4, good: 10, topFrom: 5, top: 40, fresh: 10, gap: 10 },
+  generous: { goodFrom: 4, good: 6,  topFrom: 5, top: 20, fresh: 5,  gap: 15 }
+};
+// Tab state: current settings and the seed shared by the preview and the Apply button, so what you see is what you get.
+const STEW_REB = Object.assign({ preset: 'standard', seed: null, preferNew: true }, STEW_REB_PRESETS.standard);
+
+// Clean copy of the settings: whole numbers in range, and the top rarity never below the good rarity.
+function stewRebOpts(o) {
+  o = o || STEW_REB;
+  const n = (v, lo, hi) => Math.min(hi, Math.max(lo, parseInt(v, 10) || 0));
+  const goodFrom = n(o.goodFrom, 1, 9);
+  return { preferNew: o.preferNew !== false, goodFrom, topFrom: Math.max(goodFrom, n(o.topFrom, 1, 9)), good: n(o.good, 0, 200), top: n(o.top, 0, 500), fresh: n(o.fresh, 0, 200), gap: n(o.gap, 0, 100) };
+}
+
+// Longest stretch of pulls (from the next pull on) without a good / top / NEW pull, repeats inside the gap window, NEW count.
+// order = pull 1 first. Used for the before / after preview.
+function stewRebMetrics(order, owned, o) {
+  const rar = s => { const r = stewRarity(s); return typeof r === 'number' ? r : -1; };
+  const wait = test => { let last = -1, worst = 0; order.forEach((s, i) => { if (test(s, i)) { worst = Math.max(worst, i - last); last = i; } }); return worst; };
+  const seen = new Set(); let fresh = 0;
+  const isNew = order.map(s => { const v = !owned.has(s) && !seen.has(s); seen.add(s); if (v) fresh++; return v; });
+  let repeats = 0;
+  if (o.gap > 0) order.forEach((s, i) => { for (let k = Math.max(0, i - o.gap + 1); k < i; k++) if (order[k] === s) { repeats++; break; } });
+  return { goodCount: order.filter(s => rar(s) >= o.goodFrom).length, topCount: order.filter(s => rar(s) >= o.topFrom).length, good: wait(s => rar(s) >= o.goodFrom), top: wait(s => rar(s) >= o.topFrom), fresh: wait((s, i) => isNew[i]), newCount: fresh, repeats };
+}
+
+// Rebalances `queue` (array as stored: next pull LAST) and returns {newq, moved, swapped, unmet, before, after}.
+// Does not change `queue`. moved / swapped / unmet are counts per rule (good, top, gap, fresh).
+function stewRebalance(queue, owned, rows, opt, rng) {
+  const o = stewRebOpts(opt);
+  // nothing to find when you already own every decal in the pool: the NEW rule is skipped instead of failing everywhere
+  const noNew = !rows.some(r => !owned.has(r.sklid));
+  if (noNew) o.fresh = 0;
+  const order = queue.slice().reverse(); // pull 1 first
+  const n = order.length;
+  const before = stewRebMetrics(order, owned, o);
+  const rar = s => { const r = stewRarity(s); return typeof r === 'number' ? r : -1; };
+  const cls = s => rar(s) >= o.topFrom ? 2 : rar(s) >= o.goodFrom ? 1 : 0;
+  const moved = { good: 0, top: 0, gap: 0, fresh: 0 }, swapped = { good: 0, top: 0, gap: 0, fresh: 0 }, unmet = { good: 0, top: 0, gap: 0, fresh: 0 };
+  // weighted pick from odds rows that pass ok(); null if none
+  const pick = (list, ok) => {
+    const c = list.filter(r => ok(r.sklid));
+    if (!c.length) return null;
+    let tot = 0; for (const r of c) tot += r.odds;
+    let x = rng() * tot;
+    for (const r of c) { x -= r.odds; if (x < 0) return r.sklid; }
+    return c[c.length - 1].sklid;
+  };
+  const present = new Set(order);
+  // draw a swap-in from `pool`; with 'Prefer decals I do not own' on, an unowned decal that is not in the queue yet wins, then any unowned one
+  const draw = (pool, i, extra) => {
+    const base = id => (!extra || extra(id)) && !near(id, i, -1);
+    let p = null;
+    if (o.preferNew) p = pick(pool, id => base(id) && !owned.has(id) && !present.has(id)) || pick(pool, id => base(id) && !owned.has(id));
+    return p || pick(pool, base);
+  };
+  const swap = (i, j) => { const t = order[i]; order[i] = order[j]; order[j] = t; };
+  // is `id` at any pull within gap-1 of pos (other than pos itself and skip)?
+  const near = (id, pos, skip) => {
+    if (o.gap <= 0) return false;
+    for (let k = Math.max(0, pos - o.gap + 1); k <= Math.min(n - 1, pos + o.gap - 1); k++) if (k !== pos && k !== skip && order[k] === id) return true;
+    return false;
+  };
+
+  // 1 + 2: good and top pulls, forward pass. At pull i the item must be at least class `need` once the wait runs out.
+  if (o.good > 0 || o.top > 0) {
+    let lastGood = -1, lastTop = -1;
+    for (let i = 0; i < n; i++) {
+      const needTop = o.top > 0 && i - lastTop >= o.top;
+      const needGood = o.good > 0 && i - lastGood >= o.good;
+      const need = needTop ? 2 : needGood ? 1 : 0;
+      if (need && cls(order[i]) < need) {
+        const kind = need === 2 ? 'top' : 'good';
+        let j = -1;
+        // prefer a later item of exactly the needed class, so top pulls are not used up on a plain good-pull need
+        for (let k = i + 1; k < n && j < 0; k++) if (cls(order[k]) === need) j = k;
+        if (j < 0 && need === 1) for (let k = i + 1; k < n && j < 0; k++) if (cls(order[k]) > need) j = k;
+        if (j >= 0) { swap(i, j); moved[kind]++; }
+        else {
+          const minR = need === 2 ? o.topFrom : o.goodFrom;
+          const pool = rows.filter(r => rar(r.sklid) >= minR);
+          const p = draw(pool, i) || pick(pool, () => true);
+          if (p) { order[i] = p; present.add(p); swapped[kind]++; } else unmet[kind]++;
+        }
+      }
+      if (cls(order[i]) >= 1) lastGood = i;
+      if (cls(order[i]) >= 2) lastTop = i;
+    }
+  }
+
+  // 3: no repeat within gap pulls. Only looks backwards, so the later copy is the one that moves.
+  if (o.gap > 0) {
+    for (let i = 1; i < n; i++) {
+      let rep = false;
+      for (let k = Math.max(0, i - o.gap + 1); k < i; k++) if (order[k] === order[i]) { rep = true; break; }
+      if (!rep) continue;
+      let j = -1;
+      for (let k = i + 1; k < Math.min(n, i + 300); k++) {
+        if (cls(order[k]) !== cls(order[i]) || order[k] === order[i]) continue;
+        if (!near(order[k], i, k) && !near(order[i], k, i)) { j = k; break; }
+      }
+      if (j >= 0) { swap(i, j); moved.gap++; continue; }
+      const pool = rows.filter(r => rar(r.sklid) === rar(order[i]));
+      const p = draw(pool, i, id => id !== order[i]);
+      if (p) { order[i] = p; present.add(p); swapped.gap++; } else unmet.gap++;
+    }
+  }
+
+  // 4: NEW decals. Keeps each slot's class, and rarity when it has to swap one in.
+  if (o.fresh > 0) {
+    const seen = new Set(); let lastNew = -1;
+    for (let i = 0; i < n; i++) {
+      const isNewAt = id => !owned.has(id) && !seen.has(id);
+      if (isNewAt(order[i])) { seen.add(order[i]); lastNew = i; continue; }
+      if (i - lastNew >= o.fresh) {
+        let j = -1;
+        for (let k = i + 1; k < n; k++) {
+          if (cls(order[k]) !== cls(order[i]) || !isNewAt(order[k])) continue;
+          if (!near(order[k], i, k) && !near(order[i], k, i)) { j = k; break; }
+        }
+        if (j >= 0) { swap(i, j); moved.fresh++; }
+        else {
+          // same rarity first, then any rarity in the same class (so good / top spacing stays intact)
+          const same = rows.filter(r => rar(r.sklid) === rar(order[i])), sameCls = rows.filter(r => cls(r.sklid) === cls(order[i]));
+          // prefer a decal that is not in the queue at all, then any you do not own
+          const p = pick(same, id => isNewAt(id) && !present.has(id) && !near(id, i, -1)) || pick(same, id => isNewAt(id) && !near(id, i, -1))
+            || pick(sameCls, id => isNewAt(id) && !present.has(id) && !near(id, i, -1)) || pick(sameCls, id => isNewAt(id) && !near(id, i, -1));
+          if (p) { order[i] = p; present.add(p); swapped.fresh++; } else unmet.fresh++;
+        }
+        lastNew = i; // a window with nothing to give is counted once, not on every pull
+      }
+      seen.add(order[i]);
+    }
+  }
+  return { newq: order.slice().reverse(), moved, swapped, unmet, before, after: stewRebMetrics(order, owned, o), opt: o, noNew };
+}
+
+// Runs a rebalance on the current queue using the shared seed. When the save has no queue, one of the usual length is
+// rolled from the game's odds first. Used by both the preview and the Apply button so they always agree.
+function stewRebRun() {
+  const rows = arr(AP && AP.stewOdds), cur = stewQueue();
+  if (STEW_REB.seed == null) STEW_REB.seed = Math.floor(Math.random() * 4294967295);
+  const rng = stewRng(STEW_FORM.seed !== '' ? STEW_FORM.seed : STEW_REB.seed);
+  let base = cur && cur.length ? cur : null;
+  if (!base) { const len = Math.min(parseInt(STEW_FORM.count, 10) > 0 ? parseInt(STEW_FORM.count, 10) : 200, STEW_MAX_LEN); base = stewMakeQueue(rows, len, null, rng); }
+  const res = stewRebalance(base, stewOwnedDecals(), rows, STEW_REB, rng);
+  res.base = base; res.built = !(cur && cur.length);
+  return res;
+}
+
+// Fills the preview box under the Rebalance sliders: before / after for every rule, and what it would have to swap in.
+function renderStewRebPreview() {
+  const host = document.getElementById('stew-reb-preview');
+  if (!host) return;
+  const rows = arr(AP && AP.stewOdds);
+  if (!RAW_SAV_ROOT || !rows.length) { host.innerHTML = ''; return; }
+  const o = stewRebOpts();
+  // the 'prefer decals I don't own' tick box and the NEW slider mean nothing when there is nothing left to own, so they are hidden then
+  const pref = document.getElementById('stew-reb-prefer');
+  const canNew = (() => { const owned = stewOwnedDecals(); return rows.some(x => !owned.has(x.sklid)); })();
+  if (pref) pref.style.display = canNew ? 'flex' : 'none';
+  const freshField = document.getElementById('stew-reb-fresh');
+  if (freshField) freshField.style.display = canNew ? '' : 'none';
+  let r;
+  try { r = stewRebRun(); } catch (e) { host.innerHTML = `<div class="warnNote">${escapeHtml(e.message)}</div>`; return; }
+  const off = '<span style="color:var(--text-faint);">off</span>';
+  const line = (label, on, b, a, unit) => `<tr><td>${label}</td><td>${on ? `${b} ${unit}` : off}</td><td>${on ? `${a} ${unit}` : off}</td></tr>`;
+  const sw = k => r.swapped[k] ? ` · swaps in ${r.swapped[k]}` : '';
+  let h = r.built ? '<div class="stewStat" style="margin-bottom:8px;">This save has no queue yet, so Rebalance rolls a fresh one from the game\'s odds first, then balances it.</div>' : '';
+  h += `<table class="stewTable"><thead><tr><th>Lower waits are better</th><th>Now</th><th>After</th></tr></thead><tbody>
+    <tr><td>Rarity ${o.goodFrom}+ in the queue</td><td>${r.before.goodCount}</td><td>${r.after.goodCount}</td></tr>
+    <tr><td>Rarity ${o.topFrom}+ in the queue</td><td>${r.before.topCount}</td><td>${r.after.topCount}</td></tr>
+    ${line(`Longest wait for rarity ${o.goodFrom}+`, o.good > 0, r.before.good, r.after.good, 'pulls')}
+    ${line(`Longest wait for rarity ${o.topFrom}+`, o.top > 0, r.before.top, r.after.top, 'pulls')}
+    ${r.noNew && o.fresh > 0 ? '<tr><td>Longest wait for a NEW decal</td><td colspan="2" style="color:var(--text-faint);">nothing to find: you already own every decal in the pool</td></tr>' : line('Longest wait for a NEW decal', o.fresh > 0, r.before.fresh, r.after.fresh, 'pulls')}
+    ${line(`Repeats within ${o.gap} pulls`, o.gap > 0, r.before.repeats, r.after.repeats, 'repeats')}
+    ${r.noNew ? '' : `<tr><td>NEW decals queued</td><td>${r.before.newCount}</td><td>${r.after.newCount}</td></tr>`}</tbody></table>`;
+  const mv = r.moved.good + r.moved.top + r.moved.gap + r.moved.fresh, sv = r.swapped.good + r.swapped.top + r.swapped.gap + r.swapped.fresh;
+  const um = r.unmet.good + r.unmet.top + r.unmet.gap + r.unmet.fresh;
+  h += `<div class="capNote" style="margin-top:8px;">${mv} pull(s) moved to a new place${sv ? `, ${sv} swapped in from the game's odds (good ${r.swapped.good}, top ${r.swapped.top}, repeats ${r.swapped.gap}, NEW ${r.swapped.fresh})` : ', nothing swapped in'}.${um ? ` Could not satisfy ${um} window(s): nothing left to draw (for example you own every decal of a rarity you asked for).` : ''}${STEW_FORM.seed !== '' ? '' : ' Click Rebalance for exactly this result; changing a setting rolls a fresh one.'}</div>`;
+  host.innerHTML = h;
+}
+
+// Rebalance sliders and presets: fills the inputs from STEW_REB and keeps it up to date as you drag.
+function wireStewRebalance() {
+  const root = document.getElementById('stew-reb');
+  if (!root) return;
+  const sync = () => {
+    root.querySelectorAll('[data-reb]').forEach(el => { el.value = STEW_REB[el.dataset.reb]; const l = root.querySelector(`[data-reb-val="${el.dataset.reb}"]`); if (l) l.textContent = el.type === 'range' ? (Number(el.value) === 0 ? 'off' : el.value) : ''; });
+    root.querySelectorAll('[data-reb-chk]').forEach(el => { el.checked = STEW_REB[el.dataset.rebChk] !== false; });
+    root.querySelectorAll('[data-reb-preset]').forEach(b => b.classList.toggle('on', b.dataset.rebPreset === STEW_REB.preset));
+  };
+  root.querySelectorAll('[data-reb]').forEach(el => el.addEventListener(el.type === 'range' ? 'input' : 'change', () => {
+    STEW_REB[el.dataset.reb] = Number(el.value); STEW_REB.preset = ''; STEW_REB.seed = null; sync(); renderStewRebPreview();
+  }));
+  root.querySelectorAll('[data-reb-chk]').forEach(el => el.addEventListener('change', () => { STEW_REB[el.dataset.rebChk] = el.checked; STEW_REB.seed = null; renderStewRebPreview(); }));
+  root.querySelectorAll('[data-reb-preset]').forEach(b => b.addEventListener('click', () => {
+    Object.assign(STEW_REB, STEW_REB_PRESETS[b.dataset.rebPreset], { preset: b.dataset.rebPreset, seed: null }); sync(); renderStewRebPreview();
+  }));
+  sync();
+  renderStewRebPreview();
+}
+
 // Static HTML for the Stews tab: explanation, option fields and action buttons (data-stew="...").
 function blockStews() {
   return `<section class="block">
@@ -234,6 +448,22 @@ function blockStews() {
         <div class="stewAct"><button class="action" data-stew="regen">Fair reroll</button><span>Rerolls the queue from the game's normal odds, as if you had never touched it.</span></div>
         <div class="stewAct"><button class="action" data-stew="clear">Clear queue</button><span>Empties the queue. The game builds a new one from the current odds on your next stew.</span></div>
         <div class="stewAct"><button class="subtle" data-stew="revert">Undo all stew changes</button><span>Puts the queue back to the way it was when you loaded the save.</span></div>
+      </div>
+      <div class="stewReb" id="stew-reb" style="margin:14px 0 4px; padding:12px; border:1px solid var(--panel-border);">
+        <h3 class="stewH" style="margin-top:0;">Rebalance (pity)</h3>
+        <div class="capNote" style="margin-top:0;">The game keeps no pity counter, so this builds it into the order of your queue. It first reorders the pulls you already have so good pulls and NEW decals come at least as often as you set, and only swaps one in from the game's odds when there is nothing left to move. Every number counts pulls from your next stew. 0 turns that rule off. The queue length stays the same.</div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin:8px 0 12px;"><button class="subtle" data-reb-preset="gentle">Gentle</button><button class="subtle" data-reb-preset="standard">Standard</button><button class="subtle" data-reb-preset="generous">Generous</button></div>
+        <div class="grid" style="margin-bottom:10px;">
+          <div class="field"><label>Good pull is rarity</label><select data-reb="goodFrom" style="width:100%; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono); font-size:13px;"><option value="2">2 or higher</option><option value="3">3 or higher</option><option value="4">4 or higher</option><option value="5">5</option></select></div>
+          <div class="field"><label>Good pull at least every <b data-reb-val="good"></b> pulls</label><input type="range" data-reb="good" min="0" max="60" style="accent-color:var(--accent); width:100%;"></div>
+          <div class="field"><label>Top pull is rarity</label><select data-reb="topFrom" style="width:100%; background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono); font-size:13px;"><option value="3">3 or higher</option><option value="4">4 or higher</option><option value="5">5</option></select></div>
+          <div class="field"><label>Top pull at least every <b data-reb-val="top"></b> pulls</label><input type="range" data-reb="top" min="0" max="100" style="accent-color:var(--accent); width:100%;"></div>
+          <div class="field" id="stew-reb-fresh"><label>A NEW decal at least every <b data-reb-val="fresh"></b> pulls</label><input type="range" data-reb="fresh" min="0" max="60" style="accent-color:var(--accent); width:100%;"></div>
+          <div class="field"><label>Same decal not twice within <b data-reb-val="gap"></b> pulls</label><input type="range" data-reb="gap" min="0" max="40" style="accent-color:var(--accent); width:100%;"></div>
+        </div>
+        <label id="stew-reb-prefer" style="display:flex; align-items:center; gap:6px; margin:0 0 10px; font-size:12px; cursor:pointer;" title="Applies when a rule has to swap a pull in from the game's odds"><input type="checkbox" data-reb-chk="preferNew" style="accent-color:var(--accent);"> Prefer decals I don't own when a pull has to be swapped in</label>
+        <div id="stew-reb-preview"></div>
+        <div class="stewAct" style="margin-top:10px;"><button class="action" data-stew="rebalance">Rebalance queue</button><span>Applies exactly what the preview shows. Undo all stew changes puts the queue back.</span></div>
       </div>
       <div id="stew-msg"></div>
       <div id="stew-report"></div>
@@ -265,7 +495,7 @@ function renderStewReport() {
   if (warn) warn.innerHTML = w;
   document.querySelectorAll('[data-stew]').forEach(b => {
     const m = b.dataset.stew;
-    b.disabled = !RAW_SAV_ROOT || (['dedupe', 'stack', 'regen'].includes(m) && !rows.length) || (['dedupe', 'front'].includes(m) && !(q && q.length)) || (m === 'revert' && !changed);
+    b.disabled = !RAW_SAV_ROOT || (['dedupe', 'stack', 'regen', 'rebalance'].includes(m) && !rows.length) || (['dedupe', 'front'].includes(m) && !(q && q.length)) || (m === 'revert' && !changed);
   });
   const msg = document.getElementById('stew-msg');
   if (msg) msg.innerHTML = STEW_STATE.lastMsg ? `<pre class="stewLog">${escapeHtml(STEW_STATE.lastMsg)}</pre>` : '';
@@ -326,6 +556,7 @@ function renderStewReport() {
     html += '</tbody></table></div></details>';
   }
   host.innerHTML = html;
+  renderStewRebPreview(); // owned decals / queue may have changed
   // the report was just rebuilt, so every listener below is attached fresh to the new elements
   host.querySelectorAll('[data-stew-hl]').forEach(b => b.addEventListener('click', () => {
     const k = b.dataset.stewHl;
@@ -416,6 +647,21 @@ function runStewAction(mode) {
       if (res.swapped.length > 20) lines.push(`   ... and ${res.swapped.length - 20} more`);
       if (res.ranOut) lines.push(`Ran out of rarity-${rarity} decals you don't own partway through. Left ${res.ranOut} repeat pull(s) unchanged.`);
     }
+  } else if (mode === 'rebalance') {
+    const res = stewRebRun(), o = res.opt;
+    setStewQueue(res.newq);
+    const mv = res.moved.good + res.moved.top + res.moved.gap + res.moved.fresh, sv = res.swapped.good + res.swapped.top + res.swapped.gap + res.swapped.fresh;
+    lines.push(`Rebalanced ${res.newq.length} pulls${res.built ? ' (rolled a fresh queue first)' : ''}: ${mv} moved, ${sv} swapped in.`);
+    lines.push(`  rules : rarity ${o.goodFrom}+ every ${o.good || 'off'}, rarity ${o.topFrom}+ every ${o.top || 'off'}, NEW every ${o.fresh || 'off'}, no repeat within ${o.gap || 'off'}`);
+    lines.push(`  longest wait for rarity ${o.goodFrom}+: ${res.before.good} -> ${res.after.good} pulls`);
+    if (o.top) lines.push(`  longest wait for rarity ${o.topFrom}+: ${res.before.top} -> ${res.after.top} pulls`);
+    if (res.noNew && STEW_REB.fresh) lines.push('  NEW rule skipped: you already own every decal in the pool.');
+    if (o.fresh) lines.push(`  longest wait for a NEW decal: ${res.before.fresh} -> ${res.after.fresh} pulls`);
+    lines.push(`  before: ${stewHistText(res.base)}`);
+    lines.push(`  after : ${stewHistText(res.newq)}`);
+    const um = res.unmet.good + res.unmet.top + res.unmet.gap + res.unmet.fresh;
+    if (um) lines.push(`  ${um} window(s) could not be satisfied: nothing left to draw.`);
+    STEW_REB.seed = null; // next preview rolls fresh
   } else if (mode === 'clear') {
     setStewQueue([]); // empty array, not null: an empty queue is what makes the game rebuild from the current odds
     lines.push('Cleared the queue. The game rebuilds it from the current odds on your next stew.');
@@ -466,6 +712,7 @@ function wireStews() {
     try { runStewAction(b.dataset.stew); }
     catch (err) { toast('Stew edit failed: ' + err.message, true); }
   }));
+  wireStewRebalance();
   if (activeTab === 'stews') renderStewReport();
 }
 
