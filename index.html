@@ -9142,7 +9142,7 @@ function renderRun() {
   let h = `<div class="runHead"><span class="runName">${escapeHtml(d.name || 'Fighter')}</span><span class="runWhere">${escapeHtml(d.where)}</span>
     <span class="runBadge ${d.crashed ? 'bad' : 'ok'}">${d.crashed ? 'Closed without pausing' : 'Paused'}</span>${d.cls ? `<span class="runWhere" style="font-size:13px;">${escapeHtml(d.cls)}</span>` : ''}</div>`;
   h += `<div class="runTiles">
-    ${tile('Floor', escapeHtml(d.where.match(/(\d+)F/) ? d.where.match(/(\d+)F/)[1] + 'F' : '—'), `deepest ${escapeHtml(d.deepest || '—')} · ${runN(d.floors.length)} floors visited`, '#d6392c')}
+    ${tile('Floor', escapeHtml(d.where.match(/(\d+)F/) ? d.where.match(/(\d+)F/)[1] + 'F' : '—'), `deepest ${escapeHtml(d.deepest || '—')} · ${runN(d.floors.length)} floors visited`, '#1fb5ad')}
     ${tile('Kill Coins carried', runN(d.money), `Bank ${runN(d.bank)} of ${runN(d.bankCap)}`, '#e0b341')}
     ${tile('Bloodnium carried', runN(d.blood), `${runN(d.bloodFloors)} floors/kills · ${runN(d.bloodMsr)} mushrooms`, '#c0392b')}
     ${tile('Enemies killed', runN(d.enemies), '', '#8e6bd6')}
