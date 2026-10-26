@@ -87,7 +87,7 @@ window.confirm = () => true; window.alert = () => {}; window.prompt = () => '';
 window.__T = {
   sleep: ms => new Promise(r => setTimeout(r, ms)),
   plain: h => String(h).replace(/<[^>]*>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\s+/g, ' ').trim(),
-  kindOf(t) { return this.plain(t).replace(/\([^)]*\)/g, '').replace(/[\d,.]+/g, '#').replace(/: .*$/, '').split(' ').slice(0, 14).join(' '); },
+  kindOf(t) { return this.plain(t).replace(/\([^)]*\)/g, '').replace(/[\d,.]+/g, '#').replace(/: .*$/, '').replace(/(\w)s(?=\/|\s+(?:is|are|has|have)\b)/g, '$1').replace(/\b(?:are)\b/g, 'is').replace(/\bhave\b/g, 'has').replace(/\btheir\b/g, 'its').split(' ').slice(0, 14).join(' '); },
   // the Save check's problems and warnings, as "level: kind" -> its own wording
   findings() { const m = new Map(); for (const it of HEALTH.items) if (it.level !== 'note') m.set(it.level + ': ' + this.kindOf(it.text), it.level + ' "' + this.plain(it.text).slice(0, 160) + '"'); return m; },
   firstDiff(a, b, p) {
