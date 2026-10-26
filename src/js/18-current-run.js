@@ -13,6 +13,17 @@ function uuidTime(u) {
   const t = Math.round((v - 122192928000000000) / 1e7);
   return t > 0 ? t : 0;
 }
+// Enemy spawn points of one visited floor, read from the floor's saved layout (rlg.archive[].units): ZAKO = regular
+// enemy points, ZMB = zombie (Hater / other-player fighter) points. These are places where enemies can appear, not a kill
+// count (the save only stores the run's total kills). Returns null when the floor has no saved layout.
+function runEnemySpots(a) {
+  let u = a && a.units;
+  if (typeof u === 'string') { try { u = JSON.parse(u); } catch (e) { return null; } }
+  if (!Array.isArray(u)) return null;
+  let zako = 0, zmb = 0;
+  for (const x of u) for (const p of arr(x && x.pntlsts)) { if (p.type === 'TGTPNTTP_ZAKO') zako++; else if (p.type === 'TGTPNTTP_ZMB') zmb++; }
+  return { zako, zmb };
+}
 // Index the archived enemy fighters ("Haters") by floor id.
 // root.diedchara.dchrarcs holds lists of archived fighters; entries with state 'ENEMY' were placed on a
 // floor when the game built it. Returns { flrid: [created timestamps...] }.
@@ -71,7 +82,7 @@ function runData() {
   // haters counts only batches within 30 seconds of this floor's build time, since the archive also holds earlier visits to the same floor id.
   const floors = users.map((u, i) => {
     const hf = hvnFloor(u.flrid), a = archive[u.flrid + '|' + u.areaid] || {};
-    return { n: i + 1, id: u.flrid, label: hf ? hvnFloorLabel(hf) : u.flrid, boss: hf ? Number(hf.mbsmax) > 0 : false, ref: a.ref_areaid || '', cleared: Number(ct[u.flrid + '-' + u.areaid]) || 0, entered: et.t[i] || 0, haters: et.t[i] ? arr(et.by[u.flrid]).filter(x => Math.abs(x - et.t[i]) <= 30).length : 0 };
+    return { n: i + 1, id: u.flrid, label: hf ? hvnFloorLabel(hf) : u.flrid, boss: hf ? Number(hf.mbsmax) > 0 : false, ref: a.ref_areaid || '', cleared: Number(ct[u.flrid + '-' + u.areaid]) || 0, entered: et.t[i] || 0, spots: runEnemySpots(a), haters: et.t[i] ? arr(et.by[u.flrid]).filter(x => Math.abs(x - et.t[i]) <= 30).length : 0 };
   });
   // count items/parts the run itself generated (owner matches RUN_OWNERS: floor, chests, enemies, zombies, bosses, Jackals)
   const owners = {};
@@ -92,6 +103,7 @@ function runData() {
     exp: c ? num(c.gain_exp) - num(c.start_exp) : 0, expNow: c ? num(c.gain_exp) : 0, hp: c ? num(c.hp) : 0,
     bank: num(s.free_money), bankStart: num(s.replica_money), spl: num(s.spirit), splStart: num(s.replica_spirit),
     bp: num(s.bloodnium_point), bpStart: num(s.replica_bloodnium_point), bankCap: bankCapacityForLevel(s.safe_level != null ? s.safe_level : 1),
+    splCarried: c ? num(c.spirit) : 0, splCap: bankCapacityForLevel(s.spirit_tank_level != null ? s.spirit_tank_level : 1, 'spirit_tank_level'), bloodCap: bloodniumMax(),
     fsc, floors, owners, made: Object.values(owners).reduce((a, b) => a + b, 0), upcoming: arr(s.hvntrinfo),
     pos: [ s.pause_x, s.pause_y, s.pause_z ].map(v => Math.round(num(v))).join(', ')
   };
@@ -114,6 +126,29 @@ const runDur = sec => { sec = Math.max(0, Math.floor(sec)); const dd = Math.floo
 // runDurS: short duration for per-floor pace (45s, 4m 12s; falls back to runDur at 1h+). runN: locale-formatted number.
 const runDurS = sec => { sec = Math.max(0, Math.round(sec)); const m = Math.floor(sec / 60), x = sec % 60; return m >= 60 ? runDur(sec) : m ? `${m}m ${String(x).padStart(2, '0')}s` : `${x}s`; };
 const runN = v => Number(v || 0).toLocaleString();
+// What banking the run would do, per currency: in the bank now, carried by the fighter, the total after banking, the
+// limit and the room left. Anything past the limit would be lost (lost > 0). SPLithium is listed only when the fighter
+// carries some. A limit of 0 means the level table is missing from masters.db, so the limit and room are unknown.
+function runBanking(d) {
+  const row = (name, bank, carried, limit) => { const after = bank + carried; return { name, bank, carried, after, limit, room: limit ? Math.max(0, limit - after) : 0, lost: limit ? Math.max(0, after - limit) : 0 }; };
+  const R = [ row('Kill Coins', d.bank, d.money, d.bankCap), row('Bloodnium', d.bp, d.blood, d.bloodCap) ];
+  if (d.splCarried > 0) R.splice(1, 0, row('SPLithium', d.spl, d.splCarried, d.splCap));
+  return R;
+}
+// How fast the run is earning, from its play time (breaks are not counted: the save only records time played). Returns
+// null for a run under 5 minutes. full = estimated play time until the Kill Coin bank is full at this pace, or null.
+function runRates(d) {
+  if (!(d.elapsed >= 300)) return null;
+  const hrs = d.elapsed / 3600, kc = d.money / hrs, room = d.bankCap ? Math.max(0, d.bankCap - d.bank - d.money) : 0;
+  return { kcHour: kc, kcFloor: d.floors.length ? d.money / d.floors.length : 0, bloodHour: d.blood / hrs, killsHour: d.enemies / hrs, full: d.bankCap ? (room === 0 ? { already: true, sec: 0 } : kc > 0 ? { already: false, sec: room / kc * 3600 } : null) : null };
+}
+// Play time until the bank is full, as text; anything over a week is just "over a week" (a slow run's estimate is not meaningful).
+const runFullText = sec => sec > 7 * 86400 ? 'over a week' : runDur(sec);
+// Bank, SPLithium or Bloodnium values that differ from the run start (the bank does not normally change during a run;
+// it does after an edit). Returns text like "Bank Kill Coins +1,000,000", or '' when nothing changed.
+function runBankChanges(d) {
+  return [ [ 'Bank Kill Coins', d.bank, d.bankStart ], [ 'SPLithium', d.spl, d.splStart ], [ 'Bloodnium', d.bp, d.bpStart ] ].filter(x => x[1] !== x[2]).map(x => `${x[0]} ${x[1] > x[2] ? '+' : '-'}${runN(Math.abs(x[1] - x[2]))}`).join(' · ');
+}
 // Flatten the run data into [section, field, value] rows. Used by the CSV export and, filtered to a few
 // sections, by the 'Run details' table. Numbers stay numbers so the page formats them and the CSV is plain.
 // Quirk: the game saves HP 999999 to mean full HP.
@@ -132,9 +167,14 @@ function runRows(d) {
   add('Time', 'Play time in the run', runDur(d.elapsed)); add('Time', d.beganExact ? 'Run began (first floor entered)' : 'Run began (about)', d.began ? dtFmt(d.began) : ''); add('Time', 'Run last started or resumed', d.started ? dtFmt(d.started) : '');
   add('Time', 'Current floor entered', d.floorStart ? dtFmt(d.floorStart) : '');
   add('Account', 'Bank Kill Coins now', d.bank); add('Account', 'Bank Kill Coins at run start', d.bankStart);
-  add('Account', 'Bank limit', d.bankCap); add('Account', 'Bank + Kill Coins carried', d.bank + d.money);
-  add('Account', 'SPLithium now', d.spl); add('Account', 'SPLithium at run start', d.splStart);
+    add('Account', 'SPLithium now', d.spl); add('Account', 'SPLithium at run start', d.splStart);
   add('Account', 'Bloodnium now', d.bp); add('Account', 'Bloodnium at run start', d.bpStart);
+  for (const r of runBanking(d)) { add('If banked', r.name + ' in the bank', r.bank); add('If banked', r.name + ' carried', r.carried); add('If banked', r.name + ' after banking', r.after); add('If banked', r.name + ' limit', r.limit || ''); add('If banked', r.name + ' lost if banked', r.lost); }
+  const rt = runRates(d);
+  if (rt) {
+    add('Run rates', 'Kill Coins per hour', Math.round(rt.kcHour)); add('Run rates', 'Kill Coins per floor', Math.round(rt.kcFloor)); add('Run rates', 'Bloodnium per hour', Math.round(rt.bloodHour)); add('Run rates', 'Kills per hour', Math.round(rt.killsHour));
+    if (rt.full) add('Run rates', 'Time until the Kill Coin bank is full (estimate)', rt.full.already ? 'already full' : runFullText(rt.full.sec));
+  }
   add('Health', 'Force-closes this run', d.fsc);
   add('Health', 'Items the run left behind', d.made);
   for (const [ k, n ] of Object.entries(d.owners)) add('Health', 'Left behind: ' + k, n);
@@ -405,8 +445,9 @@ function runCsv(d) {
     lines.push('', [ 'Map rewards', 'Floor', 'Legendary Chest', 'Rare', 'Other rewards' ].join(','));
     for (const e of d.upcoming) { const hf = hvnFloor(e.flrid); lines.push([ 'Map rewards', hf ? hf.no + 'F' : e.flrid, e.rwdid ? itemDisplayName(e.rwdid) : '', Number(e.is_rare) ? 'yes' : '', runRewardText(e) ].map(q).join(',')); }
   }
-  lines.push('', [ 'Floors visited', '#', 'Floor', 'Boss floor', 'Map used', 'Entered this run', 'Haters', 'First ever cleared' ].join(','));
-  for (const x of d.floors) lines.push([ 'Floors visited', x.n, x.label, x.boss ? 'yes' : '', x.ref, x.entered ? dtFmt(x.entered) : '', x.haters, x.cleared ? dtFmt(x.cleared) : '' ].map(q).join(','));
+  const hasHaters = d.floors.some(x => x.haters);
+  lines.push('', [ 'Floors visited', '#', 'Floor', 'Boss floor', 'Map used', 'Entered this run', 'Enemy spots (regular)', 'Enemy spots (zombie)', ...(hasHaters ? [ 'Haters' ] : []), 'First ever cleared' ].join(','));
+  for (const x of d.floors) lines.push([ 'Floors visited', x.n, x.label, x.boss ? 'yes' : '', x.ref, x.entered ? dtFmt(x.entered) : '', x.spots ? x.spots.zako : '', x.spots ? x.spots.zmb : '', ...(hasHaters ? [ x.haters ] : []), x.cleared ? dtFmt(x.cleared) : '' ].map(q).join(','));
   lines.push(...runExtraCsv(d));
   // BOM is needed or Excel misreads non-ASCII names; CRLF per CSV convention.
   return '﻿' + lines.join('\r\n') + '\r\n';
@@ -426,7 +467,6 @@ function renderRun() {
   const d = runData();
   if (!d) { host.innerHTML = '<div class="capNote">This save isn\'t in a run.</div>'; return; }
   const tile = (k, v, sub, color) => `<div class="runTile" style="--tile:${color};"><div class="k">${k}</div><div class="v">${v}</div>${sub ? `<div class="s">${sub}</div>` : ''}</div>`;
-  const delta = (now, then) => { const x = now - then; return x ? `<span class="${x > 0 ? 'up' : 'down'}">${x > 0 ? '+' : ''}${runN(x)}</span>` : '<span class="muted">no change</span>'; };
   let h = `<div class="runHead"><span class="runName">${escapeHtml(d.name || 'Fighter')}</span><span class="runWhere">${escapeHtml(d.where)}</span>
     <span class="runBadge ${d.crashed ? 'bad' : 'ok'}">${d.crashed ? 'Closed without pausing' : 'Paused'}</span>${d.cls ? `<span class="runWhere" style="font-size:13px;">${escapeHtml(d.cls)}</span>` : ''}</div>`;
   h += `<div class="runTiles">
@@ -438,12 +478,17 @@ function renderRun() {
     ${tile('EXP gained', runN(d.exp), `now ${runN(d.expNow)}`, '#4fb37a')}
     ${tile('Force-closes', runN(d.fsc), d.fsc >= 3 ? '<span class="down">Bloodnium penalty</span>' : 'no penalty', d.fsc >= 3 ? '#d6392c' : '#666')}
   </div>`;
-  h += `<h3>Account since the run started</h3><table class="runTable"><thead><tr><th></th><th style="text-align:right;">At run start</th><th style="text-align:right;">Now</th><th style="text-align:right;">Change</th></tr></thead><tbody>
-    <tr><td>Bank Kill Coins</td><td class="n">${runN(d.bankStart)}</td><td class="n">${runN(d.bank)}</td><td class="n">${delta(d.bank, d.bankStart)}</td></tr>
-    <tr><td>SPLithium</td><td class="n">${runN(d.splStart)}</td><td class="n">${runN(d.spl)}</td><td class="n">${delta(d.spl, d.splStart)}</td></tr>
-    <tr><td>Bloodnium</td><td class="n">${runN(d.bpStart)}</td><td class="n">${runN(d.bp)}</td><td class="n">${delta(d.bp, d.bpStart)}</td></tr>
-    <tr><td>Bank + Kill Coins carried</td><td class="n muted">—</td><td class="n">${runN(d.bank + d.money)}</td><td></td></tr>
-  </tbody></table>`;
+  const bk = runBanking(d), rt = runRates(d), chg = runBankChanges(d);
+  h += `<h3>If you bank this run</h3><table class="runTable"><thead><tr><th></th><th style="text-align:right;">In the bank</th><th style="text-align:right;">Carried</th><th style="text-align:right;">After banking</th><th style="text-align:right;">Limit</th><th style="text-align:right;">Room left</th></tr></thead><tbody>
+    ${bk.map(r => `<tr><td>${r.name}</td><td class="n">${runN(r.bank)}</td><td class="n">${runN(r.carried)}</td><td class="n">${r.lost ? `<span class="down">${runN(r.after)}</span>` : runN(r.after)}</td><td class="n">${r.limit ? runN(r.limit) : '<span class="muted">—</span>'}</td><td class="n">${r.lost ? `<span class="down">${runN(r.lost)} would be lost</span>` : r.limit ? runN(r.room) : '<span class="muted">—</span>'}</td></tr>`).join('')}
+  </tbody></table>${chg ? `<p class="muted" style="margin:6px 0 0;">Changed since the run started: ${escapeHtml(chg)}</p>` : ''}`;
+  if (rt) h += `<h3>Run pace</h3><table class="runTable"><tbody>
+    <tr><td>Kill Coins per hour</td><td class="n">${runN(Math.round(rt.kcHour))}</td></tr>
+    <tr><td>Kill Coins per floor</td><td class="n">${runN(Math.round(rt.kcFloor))}</td></tr>
+    <tr><td>Bloodnium per hour</td><td class="n">${runN(Math.round(rt.bloodHour))}</td></tr>
+    <tr><td>Kills per hour</td><td class="n">${runN(Math.round(rt.killsHour))}</td></tr>
+    ${rt.full ? `<tr><td>Time until the Kill Coin bank is full (estimate)</td><td class="n">${rt.full.already ? '<span class="down">already full</span>' : runFullText(rt.full.sec)}</td></tr>` : ''}
+  </tbody></table><p class="muted" style="margin:6px 0 0;">Rates use the run's play time, so breaks are not counted.</p>`;
   h += `<h3>Run details</h3><table class="runTable"><tbody>${runRows(d).filter(r => [ 'Where', 'Time', 'Health', 'Fighter' ].includes(r[0])).map(r => `<tr><td>${escapeHtml(r[1])}</td><td class="n">${escapeHtml(typeof r[2] === 'number' ? runN(r[2]) : String(r[2]))}</td></tr>`).join('')}</tbody></table>`;
   h += runExtraHtml(d);
   if (d.upcoming.length) {
@@ -454,7 +499,8 @@ function renderRun() {
     if (!LOC_SPOIL) h += `<div class="capNote" style="margin-top:0;">${d.upcoming.length} boss floor${d.upcoming.length === 1 ? '' : 's'} with rewards on the map. Tick the box to list them.</div>`;
     else h += `<table class="runTable"><thead><tr><th>Floor</th><th>Legendary Chest</th><th>Other rewards</th></tr></thead><tbody>${d.upcoming.map(e => { const hf = hvnFloor(e.flrid); return `<tr><td>${escapeHtml(hf ? hf.no + 'F' : e.flrid)}${Number(e.is_rare) ? legendTag() : ''}${beyond.has(e.flrid) ? preplanTag() : ''}</td><td>${e.rwdid ? rwdNameHtml(e.rwdid) : '—'}</td><td class="muted">${runRewardText(e, true)}</td></tr>`; }).join('')}</tbody></table>`;
   }
-  h += `<details class="subDetails" style="margin-top:16px;"><summary>▸ Floors visited (${d.floors.length})</summary><div class="subDetailsBody"><table class="runTable"><thead><tr><th>#</th><th>Floor</th><th>Map used</th><th>Entered this run</th><th style="text-align:right;">Haters</th><th>First ever cleared</th></tr></thead><tbody>${d.floors.slice().reverse().map(x => `<tr><td class="muted">${x.n}</td><td>${escapeHtml(x.label)}${x.boss ? ' <span class="runBadge ok" style="font-size:10.5px; padding:1px 7px;">boss</span>' : ''}</td><td class="muted">${escapeHtml(x.ref)}</td><td>${x.entered ? escapeHtml(dtFmt(x.entered)) : '<span class="muted">—</span>'}</td><td class="n">${x.haters || '<span class="muted">0</span>'}</td><td class="muted">${x.cleared ? escapeHtml(dtFmt(x.cleared)) : '—'}</td></tr>`).join('')}</tbody></table></div></details>`;
+  const hasHaters = d.floors.some(x => x.haters);
+  h += `<details class="subDetails" style="margin-top:16px;"><summary>▸ Floors visited (${d.floors.length})</summary><div class="subDetailsBody"><p class="muted" style="margin:0 0 8px;">Enemy spots = where regular enemies / zombie (Hater) fighters can appear on that floor, from the floor's saved layout. The save does not record kills per floor.</p><table class="runTable"><thead><tr><th>#</th><th>Floor</th><th>Map used</th><th>Entered this run</th><th style="text-align:right;" title="Places where enemies can appear on the floor, from its saved layout: regular enemies / zombies (Hater fighters). Not a kill count.">Enemy spots</th>${hasHaters ? '<th style="text-align:right;">Haters</th>' : ''}<th>First ever cleared</th></tr></thead><tbody>${d.floors.slice().reverse().map(x => `<tr><td class="muted">${x.n}</td><td>${escapeHtml(x.label)}${x.boss ? ' <span class="runBadge ok" style="font-size:10.5px; padding:1px 7px;">boss</span>' : ''}</td><td class="muted">${escapeHtml(x.ref)}</td><td>${x.entered ? escapeHtml(dtFmt(x.entered)) : '<span class="muted">—</span>'}</td><td class="n">${x.spots ? `${x.spots.zako} / ${x.spots.zmb}` : '<span class="muted">—</span>'}</td>${hasHaters ? `<td class="n">${x.haters || '<span class="muted">0</span>'}</td>` : ''}<td class="muted">${x.cleared ? escapeHtml(dtFmt(x.cleared)) : '—'}</td></tr>`).join('')}</tbody></table></div></details>`;
   h += `<div class="capNote" style="margin-top:12px;">Read from the save as loaded. "Run began" is when the game built the run's first floor; "last started or resumed" is when it last picked the run up. "First ever cleared" is the game's record of the first time each floor was cleared, in any run. Changes made on the Location tab (moving or ending the run) apply on download and aren't shown here.</div>`;
   host.innerHTML = h;
   const js = document.getElementById('run-jkl-spoil');
