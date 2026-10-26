@@ -414,9 +414,10 @@ function buildRawSavRootFromSave(SAVE, rawRoot, mainUid) {
   root.mushroom.msrs = inOrigOrder(preservedMsrs.concat(newMsrs), rawRoot.mushroom && rawRoot.mushroom.msrs);
   root.beast.bsts = inOrigOrder(preservedBsts.concat(newBsts), rawRoot.beast && rawRoot.beast.bsts);
   root.item.items = inOrigOrder(preservedItems.concat(newItems), rawRoot.item && rawRoot.item.items);
-  // Abduct records are removed for released prisoners so no orphan record is left pointing at a fighter that is no longer in prison.
-  // presents / prison; released prisoners are removed from root.abduct
-  root.soul.present = SAVE.presents;
+  // presents / prison. A released prisoner's kidnap record is kept, as the game does; one still CONCILIATE is closed (TIMEOVER)
+  // the Reward Box keeps the shape the save had: a {new_arrivals, sorted, presents} wrapper stays a wrapper
+  { const rawPresent = (rawRoot.soul || {}).present;
+    root.soul.present = rawPresent && typeof rawPresent === 'object' && !Array.isArray(rawPresent) ? Object.assign({}, rawPresent, 'presents' in rawPresent || SAVE.presents.length ? { presents: SAVE.presents } : {}) : SAVE.presents; }
   // (a save with no prison list for the account, and no prisoners, is left without one)
   const prisonRows = SAVE.prison.map(p => {
     const c = Object.assign({}, p);
@@ -429,7 +430,7 @@ function buildRawSavRootFromSave(SAVE, rawRoot, mainUid) {
   const origPrisonAbids = new Set(arr((rawRoot.soul || {}).prison && (rawRoot.soul || {}).prison[mainUid]).map(p => p.abid).filter(Boolean));
   const currentPrisonAbids = new Set(SAVE.prison.map(p => p.abid).filter(Boolean));
   const releasedAbids = new Set([ ...origPrisonAbids ].filter(a => !currentPrisonAbids.has(a)));
-  if (releasedAbids.size) root.abduct = (Array.isArray(root.abduct) ? root.abduct : []).filter(a => !releasedAbids.has(a.abid));
+  if (releasedAbids.size) root.abduct = (Array.isArray(root.abduct) ? root.abduct : []).map(a => releasedAbids.has(a.abid) && a.state === 'CONCILIATE' ? Object.assign({}, a, { state: 'TIMEOVER' }) : a);
   // VIP: write back under the game's key names, keeping unknown VIP fields from the raw save
   const v = SAVE.soul.vip || {};
   root.soul.vip = Object.assign({}, rawRoot.soul && rawRoot.soul.vip || {}, {

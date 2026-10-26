@@ -248,7 +248,8 @@ function adaptFullDumpToLegacyShape(rawRoot) {
     soul: soul,
     user: Object.assign({}, root.user || {}),
     playlog: [ root.playlog || {} ],
-    presents: arr(root.soul && root.soul.present),
+    // newer game saves keep the Reward Box as {new_arrivals, sorted, presents: [...]}, older ones as the bare list
+    presents: rewardBoxList(root.soul && root.soul.present),
     prison: prison,
     cl: {
       slots: clSlots,

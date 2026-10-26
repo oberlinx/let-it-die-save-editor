@@ -102,7 +102,7 @@ function fixStatsOverCap() {
 // of 509 game-made fighters checked); fighters over their limits are left to that check, whose fix sets the level
 function levelMismatches() {
   const skip = new Set(fightersOverCap().concat(statsOverCap()).map(o => o.c));
-  return arr(SAVE && SAVE.soul && SAVE.soul.chrs).filter(c => c && c.bodylvl && c.state !== 'ENEMY' && !skip.has(c) && Number(c.lvl) !== computedLevel(c));
+  return arr(SAVE && SAVE.soul && SAVE.soul.chrs).filter(c => c && c.bodylvl && !c.abid && c.state !== 'ENEMY' && !skip.has(c) && Number(c.lvl) !== computedLevel(c));
 }
 // Recomputes level for every mismatched fighter; returns the count.
 function fixLevelMismatches() { const list = levelMismatches(); for (const c of list) recomputeLevel(c); return list.length; }
@@ -217,6 +217,19 @@ function bankLimitMismatches() {
 // Each item: {level, text (HTML, caller-escaped), tab (tab id to jump to), fix: {label, run()} optional}.
 // run() mutates SAVE (or arms a download-time rule) and returns a message. Every check is wrapped by safe() so a
 // failing check becomes a note instead of breaking the rest. Side effects: replaces the HEALTH global only.
+// Fighters held in the restroom (a prison row names them by abid) whose state is a freezer / defense one (GUARD or FREE).
+// The game saves every prisoner it holds as DUMMY. Other odd states are left alone.
+function prisonersWrongState() {
+  const held = new Set(arr(SAVE && SAVE.prison).map(p => p && p.abid).filter(Boolean));
+  return arr(SAVE && SAVE.soul && SAVE.soul.chrs).filter(c => c && c.abid && held.has(c.abid) && (c.state === 'GUARD' || c.state === 'FREE'));
+}
+// Sets them to DUMMY and drops them from the defense lineup. Returns how many were changed.
+function fixPrisonersWrongState() {
+  const bad = prisonersWrongState(), ids = new Set(bad.map(c => c.cid));
+  for (const c of bad) c.state = 'DUMMY';
+  SAVE.fortsetting = arr(SAVE.fortsetting).filter(e => !ids.has(e.cid));
+  return bad.length;
+}
 function runSaveCheck() {
   const out = [];
   // add(): push one finding. safe(): run a check, converting exceptions into a 'couldn't run' note.
@@ -264,13 +277,18 @@ function runSaveCheck() {
 
   // weapons / armor with more durability or ammo than the part allows
   safe('durability', () => {
-    const over = partsOverMax();
-    if (!over.length) return;
+    const all = partsOverMax();
+    if (!all.length) return;
     const what = { dur: 'durability', rest: 'ammo', spare: 'spare ammo' };
     const lbl = o => `${escapeHtml(o.rec.name || o.inst.ptid)} (${escapeHtml(o.where)}: ${o.why.map(w => w === 'dur' ? `durability ${o.inst.dur} of ${o.md}` : w === 'rest' ? `ammo ${o.inst.rest} of ${o.rec.capacity}` : `spare ammo ${o.inst.spare} of ${o.rec.spare}`).join(', ')})`;
-    add('warning', `${over.length} weapon${over.length === 1 ? '' : 's'}/armor ${over.length === 1 ? 'has' : 'have'} more ${[ ...new Set(over.flatMap(o => o.why)) ].map(w => what[w]).join(' or ')} than the part allows: ${over.slice(0, 4).map(lbl).join('; ')}${over.length > 4 ? '; …' : ''}. The game never goes above the part's maximum.`, 'storage', {
-      label: 'Set them to the maximum', run: () => { const k = fixPartsOverMax(); return `${k} weapon${k === 1 ? '' : 's'}/armor set to the part's maximum.`; }
-    });
+    const fix = { label: 'Set them to the maximum', run: () => { const k = fixPartsOverMax(); return `${k} weapon${k === 1 ? '' : 's'}/armor set to the part's maximum.`; } };
+    const list = over => `${over.slice(0, 4).map(lbl).join('; ')}${over.length > 4 ? '; …' : ''}`;
+    // too much durability: the game never makes it
+    const dur = all.filter(o => o.why.includes('dur'));
+    if (dur.length) add('warning', `${dur.length} weapon${dur.length === 1 ? '' : 's'}/armor ${dur.length === 1 ? 'has' : 'have'} more ${[ ...new Set(dur.flatMap(o => o.why)) ].map(w => what[w]).join(' or ')} than the part allows: ${list(dur)}. The game never goes above the part's maximum.`, 'storage', fix);
+    // too much ammo only: the game's updates change ammo sizes (e.g. Mad Police went from a 45-round magazine and 1,065 spare to 110 and 1,000), and a part made before an update keeps its old amounts
+    const ammo = all.filter(o => !o.why.includes('dur'));
+    if (ammo.length) add('note', `${ammo.length} weapon${ammo.length === 1 ? '' : 's'} ${ammo.length === 1 ? 'has' : 'have'} more ${[ ...new Set(ammo.flatMap(o => o.why)) ].map(w => what[w]).join(' or ')} than the loaded masters.db allows: ${list(ammo)}. This is usually normal: the game's updates change ammo sizes, and a weapon made before an update keeps its old amounts. Only fix it if you know the game rejects it.`, 'storage', fix);
   });
 
   // stat levels above the cap for the limit break
@@ -645,6 +663,17 @@ function runSaveCheck() {
         activeCharIdx = 0;
         return `Removed ${ids.size} broken fighter${ids.size === 1 ? '' : 's'}. Your real fighters are untouched.`;
       }
+    });
+  });
+
+  // prisoners whose fighter record is not a prisoner's: the game keeps a captured fighter as a DUMMY copy and never
+  // puts it on defense (or in the freezer). Seen in one account only, where three prisoners were GUARD, and the game
+  // gave an error when releasing them.
+  safe('prisoner state', () => {
+    const bad = prisonersWrongState();
+    if (!bad.length) return;
+    add('problem', `${bad.length} prisoner${bad.length === 1 ? '' : 's'} in your restroom ${bad.length === 1 ? 'is' : 'are'} saved as ${[ ...new Set(bad.map(c => c.state)) ].map(s => escapeHtml(s)).join('/')} fighters (${escapeHtml(bad.map(c => c.name || '?').join(', '))}). A captured fighter is a prisoner copy (state DUMMY) and is never a defender or in the freezer, so the game can fail when you release ${bad.length === 1 ? 'it' : 'them'}.`, 'fighters', {
+      label: 'Make them prisoners again', run: () => { const n = fixPrisonersWrongState(); return `${n} prisoner${n === 1 ? '' : 's'} set back to the prisoner state (DUMMY) and taken out of the defense lineup.`; }
     });
   });
 

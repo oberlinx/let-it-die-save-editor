@@ -49,6 +49,7 @@ const DT_LABELS = {
   'soul.vip.last_use_day': 'Death Metal (VIP) last used',
   'soul.mail[].created': 'Mail received',
   'soul.present[].created': 'Reward box items received',
+  'soul.present.presents[].created': 'Reward box items received',
   'soul.skl.psskl[].updated': 'Decals obtained / updated',
   'soul.deathbox[].created': 'Death boxes created',
   'soul.deathbox[].opentime': 'Death boxes open at',

@@ -156,6 +156,7 @@ function collectSaves(p, depth = 2) {
 const plain = html => String(html).replace(/<[^>]*>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\s+/g, ' ').trim();
 // A Save check finding's "kind": its text with numbers and parentheses stripped, so the same check on different saves
 // (or before and after an edit) compares equal.
-const kindOf = text => plain(text).replace(/\([^)]*\)/g, '').replace(/[\d,.]+/g, '#').replace(/: .*$/, '').split(' ').slice(0, 14).join(' ');
+// singular and plural wording of one finding ("1 weapon/armor is" / "4 weapons/armor are") count as the same kind
+const kindOf = text => plain(text).replace(/\([^)]*\)/g, '').replace(/[\d,.]+/g, '#').replace(/: .*$/, '').replace(/(\w)s(?=\/|\s+(?:is|are|has|have)\b)/g, '$1').replace(/\b(?:are)\b/g, 'is').replace(/\bhave\b/g, 'has').replace(/\btheir\b/g, 'its').split(' ').slice(0, 14).join(' ');
 
 module.exports = { createEditor, roundTrip, firstDiff, collectSaves, plain, kindOf, ROOT };

@@ -283,7 +283,7 @@ function fightersOverCap() {
     // ENEMY / DUMMY fighters are skipped as well (they are not the player's own fighters)
     // CONCILIATE fighters (taken from other players) keep the stats and upgrades of their own limit break while the
     // game stores them at Limit Break 0 (seen in game saves: 30-45 stats, +3 slots / +9 bag), so they're not checked
-    if (!c || !c.bodylvl || c.state === 'ENEMY' || c.state === 'DUMMY' || c.state === 'CONCILIATE') continue;
+    if (!c || !c.bodylvl || c.abid || c.state === 'ENEMY' || c.state === 'DUMMY' || c.state === 'CONCILIATE') continue;
     const R = fighterRanges(c.type || 'BAL', c.grade != null ? c.grade : 1, c.limit_break || 0);
     // lim = how much can be BOUGHT above the type's base; has = how much the fighter actually has stored
     const lim = { skill: R.skillCap - R.skillBase, bag: R.bagCap - R.bagBase, rage: R.rageCap - R.rageBase };

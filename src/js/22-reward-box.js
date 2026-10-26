@@ -235,6 +235,8 @@ function presentProblems(p) {
   if (p.type === 'ITEM' && ITEM_INDEX[p.val0]) bad.push('type ITEM instead of the item\'s own type');
   return bad;
 }
+// The Reward Box list of a save's soul.present: the bare list, or the presents of the newer {new_arrivals, sorted, presents} wrapper.
+function rewardBoxList(x) { return Array.isArray(x) ? x : x && typeof x === 'object' && Array.isArray(x.presents) ? x.presents : []; }
 // Repair malformed presents in place (adds pid, stringifies val fields, uses the item's own itemtype); returns how many were fixed.
 // Rebuilt as a fresh object so stray fields like the old 'uid' are dropped; 'LOGIN' is the source the editor uses for its own rewards.
 function normalizePresents(list) {

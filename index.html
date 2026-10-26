@@ -1857,7 +1857,8 @@ function adaptFullDumpToLegacyShape(rawRoot) {
     soul: soul,
     user: Object.assign({}, root.user || {}),
     playlog: [ root.playlog || {} ],
-    presents: arr(root.soul && root.soul.present),
+    // newer game saves keep the Reward Box as {new_arrivals, sorted, presents: [...]}, older ones as the bare list
+    presents: rewardBoxList(root.soul && root.soul.present),
     prison: prison,
     cl: {
       slots: clSlots,
@@ -2294,9 +2295,10 @@ function buildRawSavRootFromSave(SAVE, rawRoot, mainUid) {
   root.mushroom.msrs = inOrigOrder(preservedMsrs.concat(newMsrs), rawRoot.mushroom && rawRoot.mushroom.msrs);
   root.beast.bsts = inOrigOrder(preservedBsts.concat(newBsts), rawRoot.beast && rawRoot.beast.bsts);
   root.item.items = inOrigOrder(preservedItems.concat(newItems), rawRoot.item && rawRoot.item.items);
-  // Abduct records are removed for released prisoners so no orphan record is left pointing at a fighter that is no longer in prison.
-  // presents / prison; released prisoners are removed from root.abduct
-  root.soul.present = SAVE.presents;
+  // presents / prison. A released prisoner's kidnap record is kept, as the game does; one still CONCILIATE is closed (TIMEOVER)
+  // the Reward Box keeps the shape the save had: a {new_arrivals, sorted, presents} wrapper stays a wrapper
+  { const rawPresent = (rawRoot.soul || {}).present;
+    root.soul.present = rawPresent && typeof rawPresent === 'object' && !Array.isArray(rawPresent) ? Object.assign({}, rawPresent, 'presents' in rawPresent || SAVE.presents.length ? { presents: SAVE.presents } : {}) : SAVE.presents; }
   // (a save with no prison list for the account, and no prisoners, is left without one)
   const prisonRows = SAVE.prison.map(p => {
     const c = Object.assign({}, p);
@@ -2309,7 +2311,7 @@ function buildRawSavRootFromSave(SAVE, rawRoot, mainUid) {
   const origPrisonAbids = new Set(arr((rawRoot.soul || {}).prison && (rawRoot.soul || {}).prison[mainUid]).map(p => p.abid).filter(Boolean));
   const currentPrisonAbids = new Set(SAVE.prison.map(p => p.abid).filter(Boolean));
   const releasedAbids = new Set([ ...origPrisonAbids ].filter(a => !currentPrisonAbids.has(a)));
-  if (releasedAbids.size) root.abduct = (Array.isArray(root.abduct) ? root.abduct : []).filter(a => !releasedAbids.has(a.abid));
+  if (releasedAbids.size) root.abduct = (Array.isArray(root.abduct) ? root.abduct : []).map(a => releasedAbids.has(a.abid) && a.state === 'CONCILIATE' ? Object.assign({}, a, { state: 'TIMEOVER' }) : a);
   // VIP: write back under the game's key names, keeping unknown VIP fields from the raw save
   const v = SAVE.soul.vip || {};
   root.soul.vip = Object.assign({}, rawRoot.soul && rawRoot.soul.vip || {}, {
@@ -2555,7 +2557,7 @@ async function loadMastersBuffer(buf) {
       bodydetail: all('SELECT * FROM master_body_detail')
     };
     // optional tables: tolerate absence (a modded or older masters.db may lack them; the features that use them then fall back to empty or default data instead of the whole load failing)
-    for (const [key, sql] of [['questParamText', 'SELECT qid, no, val FROM master_quest_param_text'], ['questParamDesc', 'SELECT qid, no, val FROM master_quest_param_desc_text'], ['rewards', 'SELECT * FROM master_reward'], ['expertLvl', 'SELECT ptarmtp, lvl, abp FROM master_expert_lvl_reward'], ['stampBonus', 'SELECT * FROM master_stamp_bonus'], ['stampFloors', 'SELECT * FROM master_stamp'], ['hvnFloors', "SELECT id, areaid, no, mbsmin, mbsmax, mbslvlmin, mbslvlmax FROM master_floor WHERE stgid = 'S_HVN'"], ['jackals', 'SELECT * FROM master_jackal'], ['magazines', 'SELECT * FROM master_magazine'], ['magazineBonus', 'SELECT * FROM master_magazine_bonus'], ['hvnBossDrops', "SELECT d.flrid, d.areaid, d.refareaid, d.type, d.grp, d.freq FROM master_floor_drop_gen d JOIN master_floor f ON f.id = d.flrid AND f.areaid = d.areaid WHERE f.stgid = 'S_HVN' AND f.mbsmax > 0 AND (d.type IN ('PTGENTP_TRBOX_L', 'PTGENTP_TRBOX_SPXL_RARE', 'PTGENTP_SPXL', 'PTGENTP_TRZAKO') OR d.type LIKE 'PTGENTP_MBOSS%')"], ['questCats', 'SELECT * FROM master_quest_category'], ['bagGen', 'SELECT * FROM master_mysterybag_content_gen'], ['bagGenOdds', "SELECT * FROM master_mysterybag_content_gen_odds WHERE odds_id = (SELECT odds_id FROM master_mysterybag_content_odds ORDER BY expires DESC LIMIT 1)"], ['boxGen', 'SELECT * FROM master_deathbox_content_gen'], ['hubCustom', 'SELECT * FROM master_hubcustomize'], ['floorInfo', 'SELECT id, sname, stgid, stgpfx, name FROM master_floor'], ['freezer', 'SELECT * FROM master_freezer'], ['bodies', 'SELECT id, gender FROM master_body'], ['gasmasks', 'SELECT id, gender FROM master_gasmask'], ['fortWhistle', 'SELECT * FROM master_fort_whistle'], ['hvnBossAreas', 'SELECT flrid, refareaid, freq FROM master_ref_boss_area_setting'], ['hvnBossKis', "SELECT areaid, kis FROM master_area_setting_unit WHERE stgid = 'S_HVN' AND unit = 'HEAVEN_BOSS'"]]) {
+    for (const [key, sql] of [['questParamText', 'SELECT qid, no, val FROM master_quest_param_text'], ['questParamDesc', 'SELECT qid, no, val FROM master_quest_param_desc_text'], ['rewards', 'SELECT * FROM master_reward'], ['expertLvl', 'SELECT ptarmtp, lvl, abp FROM master_expert_lvl_reward'], ['stampBonus', 'SELECT * FROM master_stamp_bonus'], ['stampFloors', 'SELECT * FROM master_stamp'], ['hvnFloors', "SELECT id, areaid, no, mbsmin, mbsmax, mbslvlmin, mbslvlmax FROM master_floor WHERE stgid = 'S_HVN'"], ['jackals', 'SELECT * FROM master_jackal'], ['magazines', 'SELECT * FROM master_magazine'], ['magazineBonus', 'SELECT * FROM master_magazine_bonus'], ['hvnBossDrops', "SELECT d.flrid, d.areaid, d.refareaid, d.type, d.grp, d.freq FROM master_floor_drop_gen d JOIN master_floor f ON f.id = d.flrid AND f.areaid = d.areaid WHERE f.stgid = 'S_HVN' AND f.mbsmax > 0 AND (d.type IN ('PTGENTP_TRBOX_L', 'PTGENTP_TRBOX_SPXL_RARE', 'PTGENTP_SPXL', 'PTGENTP_TRZAKO') OR d.type LIKE 'PTGENTP_MBOSS%')"], ['questCats', 'SELECT * FROM master_quest_category'], ['bagGen', 'SELECT * FROM master_mysterybag_content_gen'], ['bagGenOdds', "SELECT * FROM master_mysterybag_content_gen_odds WHERE odds_id = (SELECT odds_id FROM master_mysterybag_content_odds ORDER BY expires DESC LIMIT 1)"], ['boxGen', 'SELECT * FROM master_deathbox_content_gen'], ['hubCustom', 'SELECT * FROM master_hubcustomize'], ['floorInfo', 'SELECT id, sname, stgid, stgpfx, name FROM master_floor'], ['freezer', 'SELECT * FROM master_freezer'], ['restroomLevels', 'SELECT * FROM master_prison'], ['bodies', 'SELECT id, gender FROM master_body'], ['gasmasks', 'SELECT id, gender FROM master_gasmask'], ['fortWhistle', 'SELECT * FROM master_fort_whistle'], ['hvnBossAreas', 'SELECT flrid, refareaid, freq FROM master_ref_boss_area_setting'], ['hvnBossKis', "SELECT areaid, kis FROM master_area_setting_unit WHERE stgid = 'S_HVN' AND unit = 'HEAVEN_BOSS'"]]) {
       try { AP[key] = all(sql); } catch (err) { AP[key] = []; console.warn(`${key} not available in this masters.db:`, err); }
     }
     // Stew (skill gacha) odds: the table id may be redirected through master_skillgacha.odds_id
@@ -3266,10 +3268,11 @@ function renderAll() {
   if (TABS.some(t => t.id === activeTab && t.when && !t.when())) activeTab = 'account';
   // All panels are built even when hidden so every tab always reflects the current SAVE. The Fighters tab holds two blocks and VIP also carries Free Cont.
   // one panel per tab; the markup comes from the block*() HTML builders
-  app.innerHTML = `\n    ${blockHealth()}\n    ${uiTabbarHtml()}\n    <div class="tabpanel" data-tab-panel="account" style="display:${activeTab === 'account' ? 'block' : 'none'}">${blockCurrency()}</div>\n    <div class="tabpanel" data-tab-panel="fighters" style="display:${activeTab === 'fighters' ? 'block' : 'none'}">${blockCharacters()}${blockSkins()}</div>\n    <div class="tabpanel" data-tab-panel="research" style="display:${activeTab === 'research' ? 'block' : 'none'}">${blockBlueprints()}</div>\n    <div class="tabpanel" data-tab-panel="decals" style="display:${activeTab === 'decals' ? 'block' : 'none'}">${blockSkillDecals()}</div>\n    <div class="tabpanel" data-tab-panel="stews" style="display:${activeTab === 'stews' ? 'block' : 'none'}">${blockStews()}</div>\n    <div class="tabpanel" data-tab-panel="bags" style="display:${activeTab === 'bags' ? 'block' : 'none'}">${blockBags()}</div>\n    <div class="tabpanel" data-tab-panel="boxes" style="display:${activeTab === 'boxes' ? 'block' : 'none'}">${blockBoxes()}</div>\n    <div class="tabpanel" data-tab-panel="hub" style="display:${activeTab === 'hub' ? 'block' : 'none'}">${blockHub()}</div>\n    <div class="tabpanel" data-tab-panel="defense" style="display:${activeTab === 'defense' ? 'block' : 'none'}">${blockDefense()}</div>\n    <div class="tabpanel" data-tab-panel="photos" style="display:${activeTab === 'photos' ? 'block' : 'none'}">${blockPhotos()}</div>\n    <div class="tabpanel" data-tab-panel="graves" style="display:${activeTab === 'graves' ? 'block' : 'none'}">${blockGraves()}</div>\n    <div class="tabpanel" data-tab-panel="dates" style="display:${activeTab === 'dates' ? 'block' : 'none'}">${blockDates()}</div>\n    <div class="tabpanel" data-tab-panel="storage" style="display:${activeTab === 'storage' ? 'block' : 'none'}">${blockStorageBox()}</div>\n    <div class="tabpanel" data-tab-panel="rewards" style="display:${activeTab === 'rewards' ? 'block' : 'none'}">${blockRewardBox()}</div>\n    <div class="tabpanel" data-tab-panel="quests" style="display:${activeTab === 'quests' ? 'block' : 'none'}">${blockQuests()}</div>\n    <div class="tabpanel" data-tab-panel="rally" style="display:${activeTab === 'rally' ? 'block' : 'none'}">${blockRally()}</div>\n    <div class="tabpanel" data-tab-panel="location" style="display:${activeTab === 'location' ? 'block' : 'none'}">${blockLocation()}</div>\n    <div class="tabpanel" data-tab-panel="run" style="display:${activeTab === 'run' ? 'block' : 'none'}">${blockRun()}</div>\n    <div class="tabpanel" data-tab-panel="collection" style="display:${activeTab === 'collection' ? 'block' : 'none'}">${blockCollection()}</div>\n    <div class="tabpanel" data-tab-panel="jackals" style="display:${activeTab === 'jackals' ? 'block' : 'none'}">${blockJackals()}</div>\n    <div class="tabpanel" data-tab-panel="layouts" style="display:${activeTab === 'layouts' ? 'block' : 'none'}">${blockLayouts()}</div>\n    <div class="tabpanel" data-tab-panel="stats" style="display:${activeTab === 'stats' ? 'block' : 'none'}">${blockStats()}</div>\n    <div class="tabpanel" data-tab-panel="vip" style="display:${activeTab === 'vip' ? 'block' : 'none'}">${blockVip()}${blockFreeCont()}</div>\n    <div class="tabpanel" data-tab-panel="compare" style="display:${activeTab === 'compare' ? 'block' : 'none'}">${blockCompare()}</div>\n    <div class="tabpanel" data-tab-panel="raw" style="display:${activeTab === 'raw' ? 'block' : 'none'}">${blockRaw()}</div>\n    <div class="tabpanel" data-tab-panel="jdiff" style="display:${activeTab === 'jdiff' ? 'block' : 'none'}">${blockJd()}</div>\n  `;
+  app.innerHTML = `\n    ${blockHealth()}\n    ${uiTabbarHtml()}\n    <div class="tabpanel" data-tab-panel="account" style="display:${activeTab === 'account' ? 'block' : 'none'}">${blockCurrency()}${blockRestroom()}</div>\n    <div class="tabpanel" data-tab-panel="fighters" style="display:${activeTab === 'fighters' ? 'block' : 'none'}">${blockCharacters()}${blockSkins()}</div>\n    <div class="tabpanel" data-tab-panel="research" style="display:${activeTab === 'research' ? 'block' : 'none'}">${blockBlueprints()}</div>\n    <div class="tabpanel" data-tab-panel="decals" style="display:${activeTab === 'decals' ? 'block' : 'none'}">${blockSkillDecals()}</div>\n    <div class="tabpanel" data-tab-panel="stews" style="display:${activeTab === 'stews' ? 'block' : 'none'}">${blockStews()}</div>\n    <div class="tabpanel" data-tab-panel="bags" style="display:${activeTab === 'bags' ? 'block' : 'none'}">${blockBags()}</div>\n    <div class="tabpanel" data-tab-panel="boxes" style="display:${activeTab === 'boxes' ? 'block' : 'none'}">${blockBoxes()}</div>\n    <div class="tabpanel" data-tab-panel="hub" style="display:${activeTab === 'hub' ? 'block' : 'none'}">${blockHub()}</div>\n    <div class="tabpanel" data-tab-panel="defense" style="display:${activeTab === 'defense' ? 'block' : 'none'}">${blockDefense()}</div>\n    <div class="tabpanel" data-tab-panel="photos" style="display:${activeTab === 'photos' ? 'block' : 'none'}">${blockPhotos()}</div>\n    <div class="tabpanel" data-tab-panel="graves" style="display:${activeTab === 'graves' ? 'block' : 'none'}">${blockGraves()}</div>\n    <div class="tabpanel" data-tab-panel="dates" style="display:${activeTab === 'dates' ? 'block' : 'none'}">${blockDates()}</div>\n    <div class="tabpanel" data-tab-panel="storage" style="display:${activeTab === 'storage' ? 'block' : 'none'}">${blockStorageBox()}</div>\n    <div class="tabpanel" data-tab-panel="rewards" style="display:${activeTab === 'rewards' ? 'block' : 'none'}">${blockRewardBox()}</div>\n    <div class="tabpanel" data-tab-panel="quests" style="display:${activeTab === 'quests' ? 'block' : 'none'}">${blockQuests()}</div>\n    <div class="tabpanel" data-tab-panel="rally" style="display:${activeTab === 'rally' ? 'block' : 'none'}">${blockRally()}</div>\n    <div class="tabpanel" data-tab-panel="location" style="display:${activeTab === 'location' ? 'block' : 'none'}">${blockLocation()}</div>\n    <div class="tabpanel" data-tab-panel="run" style="display:${activeTab === 'run' ? 'block' : 'none'}">${blockRun()}</div>\n    <div class="tabpanel" data-tab-panel="collection" style="display:${activeTab === 'collection' ? 'block' : 'none'}">${blockCollection()}</div>\n    <div class="tabpanel" data-tab-panel="jackals" style="display:${activeTab === 'jackals' ? 'block' : 'none'}">${blockJackals()}</div>\n    <div class="tabpanel" data-tab-panel="layouts" style="display:${activeTab === 'layouts' ? 'block' : 'none'}">${blockLayouts()}</div>\n    <div class="tabpanel" data-tab-panel="stats" style="display:${activeTab === 'stats' ? 'block' : 'none'}">${blockStats()}</div>\n    <div class="tabpanel" data-tab-panel="vip" style="display:${activeTab === 'vip' ? 'block' : 'none'}">${blockVip()}${blockFreeCont()}</div>\n    <div class="tabpanel" data-tab-panel="compare" style="display:${activeTab === 'compare' ? 'block' : 'none'}">${blockCompare()}</div>\n    <div class="tabpanel" data-tab-panel="raw" style="display:${activeTab === 'raw' ? 'block' : 'none'}">${blockRaw()}</div>\n    <div class="tabpanel" data-tab-panel="jdiff" style="display:${activeTab === 'jdiff' ? 'block' : 'none'}">${blockJd()}</div>\n  `;
   // attach listeners; the order is not significant, each wire* only touches its own tab's DOM
   wireHealth();
   wireCurrency();
+  wireRestroom();
   wireCharacters();
   wireBlueprints();
   wireSkillDecals();
@@ -10481,6 +10484,8 @@ function presentProblems(p) {
   if (p.type === 'ITEM' && ITEM_INDEX[p.val0]) bad.push('type ITEM instead of the item\'s own type');
   return bad;
 }
+// The Reward Box list of a save's soul.present: the bare list, or the presents of the newer {new_arrivals, sorted, presents} wrapper.
+function rewardBoxList(x) { return Array.isArray(x) ? x : x && typeof x === 'object' && Array.isArray(x.presents) ? x.presents : []; }
 // Repair malformed presents in place (adds pid, stringifies val fields, uses the item's own itemtype); returns how many were fixed.
 // Rebuilt as a fresh object so stray fields like the old 'uid' are dropped; 'LOGIN' is the source the editor uses for its own rewards.
 function normalizePresents(list) {
@@ -11826,6 +11831,7 @@ const DT_LABELS = {
   'soul.vip.last_use_day': 'Death Metal (VIP) last used',
   'soul.mail[].created': 'Mail received',
   'soul.present[].created': 'Reward box items received',
+  'soul.present.presents[].created': 'Reward box items received',
   'soul.skl.psskl[].updated': 'Decals obtained / updated',
   'soul.deathbox[].created': 'Death boxes created',
   'soul.deathbox[].opentime': 'Death boxes open at',
@@ -12854,7 +12860,7 @@ function fightersOverCap() {
     // ENEMY / DUMMY fighters are skipped as well (they are not the player's own fighters)
     // CONCILIATE fighters (taken from other players) keep the stats and upgrades of their own limit break while the
     // game stores them at Limit Break 0 (seen in game saves: 30-45 stats, +3 slots / +9 bag), so they're not checked
-    if (!c || !c.bodylvl || c.state === 'ENEMY' || c.state === 'DUMMY' || c.state === 'CONCILIATE') continue;
+    if (!c || !c.bodylvl || c.abid || c.state === 'ENEMY' || c.state === 'DUMMY' || c.state === 'CONCILIATE') continue;
     const R = fighterRanges(c.type || 'BAL', c.grade != null ? c.grade : 1, c.limit_break || 0);
     // lim = how much can be BOUGHT above the type's base; has = how much the fighter actually has stored
     const lim = { skill: R.skillCap - R.skillBase, bag: R.bagCap - R.bagBase, rage: R.rageCap - R.rageBase };
@@ -13011,7 +13017,7 @@ function fixStatsOverCap() {
 // of 509 game-made fighters checked); fighters over their limits are left to that check, whose fix sets the level
 function levelMismatches() {
   const skip = new Set(fightersOverCap().concat(statsOverCap()).map(o => o.c));
-  return arr(SAVE && SAVE.soul && SAVE.soul.chrs).filter(c => c && c.bodylvl && c.state !== 'ENEMY' && !skip.has(c) && Number(c.lvl) !== computedLevel(c));
+  return arr(SAVE && SAVE.soul && SAVE.soul.chrs).filter(c => c && c.bodylvl && !c.abid && c.state !== 'ENEMY' && !skip.has(c) && Number(c.lvl) !== computedLevel(c));
 }
 // Recomputes level for every mismatched fighter; returns the count.
 function fixLevelMismatches() { const list = levelMismatches(); for (const c of list) recomputeLevel(c); return list.length; }
@@ -13126,6 +13132,19 @@ function bankLimitMismatches() {
 // Each item: {level, text (HTML, caller-escaped), tab (tab id to jump to), fix: {label, run()} optional}.
 // run() mutates SAVE (or arms a download-time rule) and returns a message. Every check is wrapped by safe() so a
 // failing check becomes a note instead of breaking the rest. Side effects: replaces the HEALTH global only.
+// Fighters held in the restroom (a prison row names them by abid) whose state is a freezer / defense one (GUARD or FREE).
+// The game saves every prisoner it holds as DUMMY. Other odd states are left alone.
+function prisonersWrongState() {
+  const held = new Set(arr(SAVE && SAVE.prison).map(p => p && p.abid).filter(Boolean));
+  return arr(SAVE && SAVE.soul && SAVE.soul.chrs).filter(c => c && c.abid && held.has(c.abid) && (c.state === 'GUARD' || c.state === 'FREE'));
+}
+// Sets them to DUMMY and drops them from the defense lineup. Returns how many were changed.
+function fixPrisonersWrongState() {
+  const bad = prisonersWrongState(), ids = new Set(bad.map(c => c.cid));
+  for (const c of bad) c.state = 'DUMMY';
+  SAVE.fortsetting = arr(SAVE.fortsetting).filter(e => !ids.has(e.cid));
+  return bad.length;
+}
 function runSaveCheck() {
   const out = [];
   // add(): push one finding. safe(): run a check, converting exceptions into a 'couldn't run' note.
@@ -13173,13 +13192,18 @@ function runSaveCheck() {
 
   // weapons / armor with more durability or ammo than the part allows
   safe('durability', () => {
-    const over = partsOverMax();
-    if (!over.length) return;
+    const all = partsOverMax();
+    if (!all.length) return;
     const what = { dur: 'durability', rest: 'ammo', spare: 'spare ammo' };
     const lbl = o => `${escapeHtml(o.rec.name || o.inst.ptid)} (${escapeHtml(o.where)}: ${o.why.map(w => w === 'dur' ? `durability ${o.inst.dur} of ${o.md}` : w === 'rest' ? `ammo ${o.inst.rest} of ${o.rec.capacity}` : `spare ammo ${o.inst.spare} of ${o.rec.spare}`).join(', ')})`;
-    add('warning', `${over.length} weapon${over.length === 1 ? '' : 's'}/armor ${over.length === 1 ? 'has' : 'have'} more ${[ ...new Set(over.flatMap(o => o.why)) ].map(w => what[w]).join(' or ')} than the part allows: ${over.slice(0, 4).map(lbl).join('; ')}${over.length > 4 ? '; …' : ''}. The game never goes above the part's maximum.`, 'storage', {
-      label: 'Set them to the maximum', run: () => { const k = fixPartsOverMax(); return `${k} weapon${k === 1 ? '' : 's'}/armor set to the part's maximum.`; }
-    });
+    const fix = { label: 'Set them to the maximum', run: () => { const k = fixPartsOverMax(); return `${k} weapon${k === 1 ? '' : 's'}/armor set to the part's maximum.`; } };
+    const list = over => `${over.slice(0, 4).map(lbl).join('; ')}${over.length > 4 ? '; …' : ''}`;
+    // too much durability: the game never makes it
+    const dur = all.filter(o => o.why.includes('dur'));
+    if (dur.length) add('warning', `${dur.length} weapon${dur.length === 1 ? '' : 's'}/armor ${dur.length === 1 ? 'has' : 'have'} more ${[ ...new Set(dur.flatMap(o => o.why)) ].map(w => what[w]).join(' or ')} than the part allows: ${list(dur)}. The game never goes above the part's maximum.`, 'storage', fix);
+    // too much ammo only: the game's updates change ammo sizes (e.g. Mad Police went from a 45-round magazine and 1,065 spare to 110 and 1,000), and a part made before an update keeps its old amounts
+    const ammo = all.filter(o => !o.why.includes('dur'));
+    if (ammo.length) add('note', `${ammo.length} weapon${ammo.length === 1 ? '' : 's'} ${ammo.length === 1 ? 'has' : 'have'} more ${[ ...new Set(ammo.flatMap(o => o.why)) ].map(w => what[w]).join(' or ')} than the loaded masters.db allows: ${list(ammo)}. This is usually normal: the game's updates change ammo sizes, and a weapon made before an update keeps its old amounts. Only fix it if you know the game rejects it.`, 'storage', fix);
   });
 
   // stat levels above the cap for the limit break
@@ -13554,6 +13578,17 @@ function runSaveCheck() {
         activeCharIdx = 0;
         return `Removed ${ids.size} broken fighter${ids.size === 1 ? '' : 's'}. Your real fighters are untouched.`;
       }
+    });
+  });
+
+  // prisoners whose fighter record is not a prisoner's: the game keeps a captured fighter as a DUMMY copy and never
+  // puts it on defense (or in the freezer). Seen in one account only, where three prisoners were GUARD, and the game
+  // gave an error when releasing them.
+  safe('prisoner state', () => {
+    const bad = prisonersWrongState();
+    if (!bad.length) return;
+    add('problem', `${bad.length} prisoner${bad.length === 1 ? '' : 's'} in your restroom ${bad.length === 1 ? 'is' : 'are'} saved as ${[ ...new Set(bad.map(c => c.state)) ].map(s => escapeHtml(s)).join('/')} fighters (${escapeHtml(bad.map(c => c.name || '?').join(', '))}). A captured fighter is a prisoner copy (state DUMMY) and is never a defender or in the freezer, so the game can fail when you release ${bad.length === 1 ? 'it' : 'them'}.`, 'fighters', {
+      label: 'Make them prisoners again', run: () => { const n = fixPrisonersWrongState(); return `${n} prisoner${n === 1 ? '' : 's'} set back to the prisoner state (DUMMY) and taken out of the defense lineup.`; }
     });
   });
 
@@ -17194,6 +17229,147 @@ function renderLucky() {
     toast('Lucky run planned, download to apply');
     renderAll();
   });
+}
+// ==== Restroom (the prison): size and releasing prisoners ====
+// Size: master_prison has 6 levels, and level n is n cells. The game decides how many cells to show from how many rows
+// soul.prison[uid] (SAVE.prison here) holds, NOT from what is in them (tested in game: a list cut to 1, 3 or 4 rows showed
+// 1, 3 or 4 cells with the rest blocked off; a list of all 6 rows with cells zeroed still showed 6; an account with no
+// rows shows 1 cell). So the size is the number of rows, from 1 to 6. A built, empty cell row has conciliate_second
+// 14700, expire_time -1 and a log_max_spirit. Raising the size here is free and instant (no Kill Coins, no build
+// wait); lowering removes the last rows and only takes back empty cells.
+// Release: what the game does when it frees a prisoner (diffed before/after saves): the prisoner's fighter record and
+// body row go, its death bag key stays as {}, the cell goes back to built-and-empty (log_max_spirit and
+// conciliate_second kept, last_collect_time = now, expire_time -1), and the kidnap record in root.abduct is kept. The
+// SPLithium held in the cell is added to the account, up to the tank's cap.
+const RESTROOM_MAX = 6;
+const RESTROOM_DEFAULT = { conciliate_second: 14700, log_max_spirit: 12250 };
+
+// A cell counts as built when its conciliation time is set.
+const restroomBuilt = p => !!p && Number(p.conciliate_second) > 0;
+// The size is the number of rows (the game always shows at least one cell).
+function restroomLevel() { return Math.max(1, Math.min(RESTROOM_MAX, arr(SAVE && SAVE.prison).length)); }
+function restroomPrices() {
+  const rows = (AP && AP.restroomLevels) || [];
+  return rows.length ? rows : [ 1, 2, 3, 4, 5, 6 ].map(n => ({ number: n, price: [ 0, 32000, 64000, 128000, 256000, 512000 ][n - 1] }));
+}
+const restroomNow = () => Math.floor(Date.now() / 60000) * 60;
+
+// The first built, empty cell of the save, to copy its settings; falls back to typical values.
+function restroomTemplate() {
+  const built = arr(SAVE.prison).filter(restroomBuilt);
+  const t = built.find(p => !p.abid) || built[0];
+  return {
+    conciliate_second: t ? t.conciliate_second : RESTROOM_DEFAULT.conciliate_second,
+    log_max_spirit: built.length ? Math.max(...built.map(p => Number(p.log_max_spirit) || 0)) || RESTROOM_DEFAULT.log_max_spirit : RESTROOM_DEFAULT.log_max_spirit,
+    last_collect_time: t && t.last_collect_time > 0 && t.last_collect_time < 4e9 ? t.last_collect_time : restroomNow()
+  };
+}
+function restroomEmptyRow(slot, built, tpl) {
+  return {
+    uid: Number(RAW_SAV_MAIN_UID) || 0, slot, abid: '', log_abid: '', spirit: 0, spirit_fee: 0, log_spirit: 0,
+    log_max_spirit: built ? tpl.log_max_spirit : 0, money_ransom: 0,
+    conciliate_second: built ? tpl.conciliate_second : 0,
+    last_collect_time: built ? tpl.last_collect_time : 0,
+    expire_time: built ? -1 : 0,
+    state: 'EMPTY', abduct: null
+  };
+}
+// Sets the restroom size (1-6 cells) by adding or removing rows. Returns null when done, else a message saying why not.
+function setRestroomLevel(level) {
+  level = Math.floor(Number(level));
+  if (isNaN(level) || level < 1 || level > RESTROOM_MAX) return `The restroom size is 1 to ${RESTROOM_MAX} cells.`;
+  SAVE.prison = arr(SAVE.prison);
+  const held = SAVE.prison.filter(p => p && p.slot > level && p.abid);
+  if (held.length) return `${held.length} cell${held.length === 1 ? ' still holds a prisoner' : 's still hold prisoners'} in the cells above size ${level}. Release ${held.length === 1 ? 'it' : 'them'} first.`;
+  const tpl = restroomTemplate();
+  SAVE.prison = SAVE.prison.filter(p => p && p.slot <= level);
+  for (let slot = 1; slot <= level; slot++) {
+    if (!SAVE.prison.some(p => p.slot === slot)) SAVE.prison.push(restroomEmptyRow(slot, true, tpl));
+  }
+  SAVE.prison.sort((a, b) => a.slot - b.slot);
+  return null;
+}
+
+// The prisoner's fighter record for a cell (matched by abid), or null.
+const restroomFighter = p => p && p.abid ? arr(SAVE.soul.chrs).find(c => c && c.abid === p.abid) || null : null;
+function restroomRelease(slot) {
+  const row = arr(SAVE.prison).find(p => p && p.slot === slot && p.abid);
+  if (!row) return 'That cell is empty.';
+  const c = restroomFighter(row);
+  if (c) {
+    // the fighter's carried items go with it, and its death bag key is left as {} (as for a deleted fighter)
+    if (FIGHTER_DELETES.root !== RAW_SAV_ROOT) FIGHTER_DELETES = { root: RAW_SAV_ROOT, cids: new Set, eids: new Set };
+    for (const p of arr(c.pspts)) FIGHTER_DELETES.eids.add(p.eptid);
+    for (const m of arr(c.psmsrs)) FIGHTER_DELETES.eids.add(m.emsrid);
+    for (const b of arr(c.psbsts)) FIGHTER_DELETES.eids.add(b.ebstid);
+    for (const it of arr(c.psitems)) FIGHTER_DELETES.eids.add(it.eitemid);
+    const rawChrs = arr(RAW_SAV_ROOT.soul && RAW_SAV_ROOT.soul.chr && RAW_SAV_ROOT.soul.chr.chrs && RAW_SAV_ROOT.soul.chr.chrs[RAW_SAV_MAIN_UID]);
+    if (rawChrs.some(x => x.cid === c.cid)) FIGHTER_DELETES.cids.add(c.cid);
+    SAVE.soul.chrs = SAVE.soul.chrs.filter(x => x !== c);
+    SAVE.fortsetting = arr(SAVE.fortsetting).filter(e => e.cid !== c.cid);
+    if (activeCharIdx >= SAVE.soul.chrs.length) activeCharIdx = 0;
+  }
+  // the SPLithium waiting in the cell is added to the account, up to the tank's cap
+  const cap = bankCapacityForLevel(SAVE.soul.spirit_tank_level || 1, 'spirit_tank_level');
+  const have = Number(SAVE.soul.spirit) || 0, add = Math.max(0, Number(row.spirit) || 0);
+  const gained = Math.max(0, Math.min(add, cap - have));
+  SAVE.soul.spirit = have + gained;
+  Object.assign(row, { abid: '', log_abid: '', spirit: 0, spirit_fee: 0, log_spirit: 0, money_ransom: 0, expire_time: -1, last_collect_time: restroomNow(), state: 'EMPTY', abduct: null });
+  return { name: c ? c.name : '', gained, lost: add - gained };
+}
+
+function blockRestroom() {
+  if (!SAVE) return '';
+  const rows = arr(SAVE.prison).filter(p => p && p.abid).sort((a, b) => a.slot - b.slot);
+  const lvl = restroomLevel(), prices = restroomPrices();
+  const opts = Array.from({ length: RESTROOM_MAX }, (_, i) => {
+    const n = i + 1, pr = prices.find(r => Number(r.number) === n);
+    return `<option value="${n}" ${n === lvl ? 'selected' : ''}>${n} cell${n === 1 ? '' : 's'}${pr && Number(pr.price) ? ` (game price ${Number(pr.price).toLocaleString()} KC)` : ''}</option>`;
+  }).join('');
+  const cap = bankCapacityForLevel(SAVE.soul.spirit_tank_level || 1, 'spirit_tank_level');
+  const list = rows.length ? `<table class="stewTable" style="margin-top:10px;"><thead><tr><th>Cell</th><th>Prisoner</th><th>State</th><th>SPLithium in cell</th><th>Ransom</th><th></th></tr></thead><tbody>${rows.map(p => {
+    const c = restroomFighter(p), a = p.abduct || {};
+    return `<tr><td>${p.slot}</td><td>${escapeHtml(c ? c.name || '?' : a.charaname || '(no fighter record)')}</td><td>${escapeHtml(p.state || a.state || '')}</td><td>${Number(p.spirit || 0).toLocaleString()}</td><td>${a.ransom != null ? Number(a.ransom).toLocaleString() : ''}</td><td><button class="subtle" data-restroom-release="${p.slot}">Release</button></td></tr>`;
+  }).join('')}</tbody></table>` : `<div class="capNote">No prisoners right now.</div>`;
+  return `<section class="block">
+    <div class="block-head"><div><div class="eyebrow">Account</div><h2>Restroom</h2></div></div>
+    <div class="block-body">
+      <div class="field" style="max-width:380px;"><label>Restroom size</label><select id="restroom-level">${opts}</select></div>
+      <div class="capNote">Raising the size is free here and instant (no Kill Coins, no building time). Lowering removes the last cells; if one of them holds a prisoner you are asked whether to release it first. The game always shows at least one cell. Taking cells away is not something the game does itself, so keep a backup.</div>
+      ${list}
+      <div class="capNote">Release frees the prisoner like the game does and adds the SPLithium in its cell to your account, up to your tank's cap (${cap.toLocaleString()}). You can release at any time.</div>
+    </div>
+  </section>`;
+}
+function wireRestroom() {
+  const sel = document.getElementById('restroom-level');
+  if (sel) sel.addEventListener('change', () => {
+    const level = Number(sel.value), reset = () => { sel.value = String(restroomLevel()); };
+    // cells that would be removed but hold a prisoner: offer to release them first
+    const held = arr(SAVE.prison).filter(p => p && p.slot > level && p.abid);
+    let released = 0, gained = 0;
+    if (held.length) {
+      const names = held.map(p => { const c = restroomFighter(p); return `cell ${p.slot}: ${c ? c.name || '?' : (p.abduct && p.abduct.charaname) || 'prisoner'}`; }).join('\n');
+      if (!confirm(`${held.length} of the cells to be removed ${held.length === 1 ? 'holds a prisoner' : 'hold prisoners'}:\n\n${names}\n\nRelease ${held.length === 1 ? 'it' : 'them'} first (the SPLithium in the cell${held.length === 1 ? '' : 's'} is added to your account, up to the tank's cap) and then remove the cells?`)) { reset(); return; }
+      for (const p of held) {
+        const r = restroomRelease(p.slot);
+        if (typeof r === 'string') { toast(r, true); renderAll(); return; }
+        released++; gained += r.gained || 0;
+      }
+    }
+    const msg = setRestroomLevel(level);
+    if (msg) { toast(msg, true); renderAll(); return; }
+    renderAll();
+    toast(`Restroom set to ${restroomLevel()} cell${restroomLevel() === 1 ? '' : 's'}.${released ? ` Released ${released} prisoner${released === 1 ? '' : 's'}${gained ? ` (+${gained.toLocaleString()} SPLithium)` : ''}.` : ''}`);
+  });
+  document.querySelectorAll('[data-restroom-release]').forEach(btn => btn.addEventListener('click', () => {
+    const slot = Number(btn.dataset.restroomRelease), p = arr(SAVE.prison).find(x => x && x.slot === slot), c = restroomFighter(p);
+    if (!confirm(`Release ${c ? c.name || 'this prisoner' : 'this prisoner'} from cell ${slot}?\n\nThe prisoner is removed from your save and the SPLithium in the cell is added to your account (up to the tank's cap).`)) return;
+    const r = restroomRelease(slot);
+    if (typeof r === 'string') { toast(r, true); return; }
+    renderAll();
+    toast(`${r.name || 'Prisoner'} released.${r.gained ? ` +${r.gained.toLocaleString()} SPLithium.` : ''}${r.lost ? ` ${r.lost.toLocaleString()} SPLithium did not fit in the tank.` : ''}`);
+  }));
 }
 // ==== Startup / bootstrap ====
 // This file loads last so every function and element it wires up already exists.
