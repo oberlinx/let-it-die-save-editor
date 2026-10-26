@@ -731,8 +731,9 @@ function realFreezerInfo() {
 // brokenFighters(): non-DUMMY fighters that would likely break the game: cid not a UUID, no body, or no freezer hanger.
 function brokenFighters() {
   const slotCids = new Set(arr(SAVE && SAVE.soul && SAVE.soul.chrslots).map(s => s && s.cid));
+  // a kidnapped fighter (abid) is in the prison, not the freezer, so having no hanger is normal for it
   // the game uses UUID cids; the older editor stub ('char-xxxx') and missing body/hanger are the signs of a fighter the game may not boot with
   const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  return arr(SAVE && SAVE.soul && SAVE.soul.chrs).filter(c => c && c.state !== 'DUMMY' && (!uuid.test(c.cid || '') || !c.body || !slotCids.has(c.cid)));
+  return arr(SAVE && SAVE.soul && SAVE.soul.chrs).filter(c => c && c.state !== 'DUMMY' && !c.abid && (!uuid.test(c.cid || '') || !c.body || !slotCids.has(c.cid)));
 }
 

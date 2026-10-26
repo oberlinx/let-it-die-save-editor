@@ -149,7 +149,8 @@ function defenseProblems() {
     if (why) out.bad.push({ e, c, why });
     else { seenPos.add(pos); seenCid.add(e.cid); }
   }
-  for (const c of arr(SAVE && SAVE.soul && SAVE.soul.chrs)) if (c && c.state === 'GUARD' && !list.some(e => e.cid === c.cid)) out.stray.push(c);
+  // a kidnapped defender (abid) is in the prison and is not in the lineup, so it is not a stray
+  for (const c of arr(SAVE && SAVE.soul && SAVE.soul.chrs)) if (c && c.state === 'GUARD' && !c.abid && !list.some(e => e.cid === c.cid)) out.stray.push(c);
   out.alarms = list.filter(e => e.is_equip_whistle).length;
   return out;
 }
@@ -158,7 +159,7 @@ function fixDefenseProblems() {
   const d = defenseProblems(), list = defLineup();
   for (const b of d.bad) { const i = list.indexOf(b.e); if (i >= 0) list.splice(i, 1); }
   // the game puts a defender taken off the lineup back in the freezer (including one whose place was removed above)
-  for (const c of arr(SAVE.soul.chrs)) if (c && c.state === 'GUARD' && !list.some(e => e.cid === c.cid)) c.state = 'FREE';
+  for (const c of arr(SAVE.soul.chrs)) if (c && c.state === 'GUARD' && !c.abid && !list.some(e => e.cid === c.cid)) c.state = 'FREE';
   let kept = false;
   for (const e of list) { if (e.is_equip_whistle && kept) e.is_equip_whistle = 0; else if (e.is_equip_whistle) kept = true; }
   list.sort((a, b) => a.wave - b.wave || a.order - b.order);

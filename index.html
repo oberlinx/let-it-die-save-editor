@@ -4224,9 +4224,10 @@ function realFreezerInfo() {
 // brokenFighters(): non-DUMMY fighters that would likely break the game: cid not a UUID, no body, or no freezer hanger.
 function brokenFighters() {
   const slotCids = new Set(arr(SAVE && SAVE.soul && SAVE.soul.chrslots).map(s => s && s.cid));
+  // a kidnapped fighter (abid) is in the prison, not the freezer, so having no hanger is normal for it
   // the game uses UUID cids; the older editor stub ('char-xxxx') and missing body/hanger are the signs of a fighter the game may not boot with
   const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  return arr(SAVE && SAVE.soul && SAVE.soul.chrs).filter(c => c && c.state !== 'DUMMY' && (!uuid.test(c.cid || '') || !c.body || !slotCids.has(c.cid)));
+  return arr(SAVE && SAVE.soul && SAVE.soul.chrs).filter(c => c && c.state !== 'DUMMY' && !c.abid && (!uuid.test(c.cid || '') || !c.body || !slotCids.has(c.cid)));
 }
 
 // ==== Fighters tab (main block) ====
@@ -13057,7 +13058,8 @@ function defenseProblems() {
     if (why) out.bad.push({ e, c, why });
     else { seenPos.add(pos); seenCid.add(e.cid); }
   }
-  for (const c of arr(SAVE && SAVE.soul && SAVE.soul.chrs)) if (c && c.state === 'GUARD' && !list.some(e => e.cid === c.cid)) out.stray.push(c);
+  // a kidnapped defender (abid) is in the prison and is not in the lineup, so it is not a stray
+  for (const c of arr(SAVE && SAVE.soul && SAVE.soul.chrs)) if (c && c.state === 'GUARD' && !c.abid && !list.some(e => e.cid === c.cid)) out.stray.push(c);
   out.alarms = list.filter(e => e.is_equip_whistle).length;
   return out;
 }
@@ -13066,7 +13068,7 @@ function fixDefenseProblems() {
   const d = defenseProblems(), list = defLineup();
   for (const b of d.bad) { const i = list.indexOf(b.e); if (i >= 0) list.splice(i, 1); }
   // the game puts a defender taken off the lineup back in the freezer (including one whose place was removed above)
-  for (const c of arr(SAVE.soul.chrs)) if (c && c.state === 'GUARD' && !list.some(e => e.cid === c.cid)) c.state = 'FREE';
+  for (const c of arr(SAVE.soul.chrs)) if (c && c.state === 'GUARD' && !c.abid && !list.some(e => e.cid === c.cid)) c.state = 'FREE';
   let kept = false;
   for (const e of list) { if (e.is_equip_whistle && kept) e.is_equip_whistle = 0; else if (e.is_equip_whistle) kept = true; }
   list.sort((a, b) => a.wave - b.wave || a.order - b.order);
