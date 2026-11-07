@@ -105,6 +105,7 @@ function reviewFileName(ext, stamp) { return `brggame_${stamp || reviewStamp()}.
 //  12b. applyStews                        the edited stew queue (kept out of RAW_SAV_ROOT until download).
 //  12c. applyMasteryCap                   Haters' copies of weapon mastery capped at the game's top level (Save check fix).
 //  13. applyShutdownReset                 zero chosen fighters' force-shutdown (force-close) counts.
+//  13b. applyRunCarry                     the edited Kill Coins / SPLithium / Bloodnium the fighter in the run carries.
 //  14. applyRewind                        put a crashed run back on its last boss floor.
 //  15. applyRunEnd                        end the run entirely (fighter goes home, run data cleared).
 //
@@ -124,7 +125,7 @@ function buildDownloadRoot() {
   // buildRawSavRootFromSave shares some objects with SAVE (e.g. soul.present IS SAVE.presents), so the result is
   // deep-copied before the transforms run: otherwise a transform (Dates rules, ...) would edit SAVE itself, and the
   // edit would stick even after "Undo" and show up in every later build.
-  return applyRunEnd(applyRewind(applyShutdownReset(applyMasteryCap(applyStews(applyFreeCont(applyJackals(applyLucky(applyBossLock(applyFloorMove(applyStampRally(applyStampMark(applyAccountChoice(restoreEmptyShapes(applyDateRules(JSON.parse(JSON.stringify(buildRawSavRootFromSave(SAVE, RAW_SAV_ROOT, RAW_SAV_MAIN_UID)))), RAW_SAV_ROOT))))))))))))));
+  return applyRunEnd(applyRewind(applyRunCarry(applyShutdownReset(applyMasteryCap(applyStews(applyFreeCont(applyJackals(applyLucky(applyBossLock(applyFloorMove(applyStampRally(applyStampMark(applyAccountChoice(restoreEmptyShapes(applyDateRules(JSON.parse(JSON.stringify(buildRawSavRootFromSave(SAVE, RAW_SAV_ROOT, RAW_SAV_MAIN_UID)))), RAW_SAV_ROOT)))))))))))))));
 }
 
 // Friendly labels for soul (account) keys shown in the review list; unknown keys fall back to reviewKeyLabel().
@@ -469,6 +470,9 @@ function reviewDiff(A, B, rawA, rawB) {
   for (const k of [ 'all_quests', 'prison', 'playlog', 'hitchart', 'teams', 'dests' ]) if (JSON.stringify(A[k]) !== JSON.stringify(B[k])) note(k);
   if (JSON.stringify(rawA.force_shutdown_counts || {}) !== JSON.stringify(rawB.force_shutdown_counts || {})) note('force_shutdown_counts');
   if (DATE_RULES.length) ot.lines.push('Dates fixed by the Dates tab rules');
+  // carried currency edited on the Current Run tab (compares the fighter in the run before and after)
+  { const fa = runFighterOf(rawA), fb = runFighterOf(rawB);
+    if (fa && fb && !(RUN_END.root === RAW_SAV_ROOT && RUN_END.on)) for (const [ k, label ] of RUN_CARRY_FIELDS) if ((Number(fa[k]) || 0) !== (Number(fb[k]) || 0)) ot.lines.push(`${label} carried by ${fb.name || 'the fighter'}: ${(Number(fa[k]) || 0).toLocaleString()} → ${(Number(fb[k]) || 0).toLocaleString()}`); }
   if (REWIND.root === RAW_SAV_ROOT && REWIND.on && !(RUN_END.root === RAW_SAV_ROOT && RUN_END.on)) { const rw = rewindInfo(RAW_SAV_ROOT); if (rw) ot.lines.push(`Run put back on its last boss floor (${rw.floor.no}F, boss beaten; ${rw.dropped} floor${rw.dropped === 1 ? '' : 's'} after it dropped)`); }
   if (RUN_END.root === RAW_SAV_ROOT && RUN_END.on) { const ri = runEndInfo(RAW_SAV_ROOT); if (ri) ot.lines.push(`Run ended: the run's floor data (${ri.floors} floors), its force-close count and ${ri.made.toLocaleString()} items it left on floors, in chests and on Jackals cleared`); }
   if (!stampFlagIn(rawA) && stampFlagIn(rawB)) ot.lines.push("Game's one-time Funshot setup marked as done (so it won't re-count research)");

@@ -51,6 +51,91 @@ function runEntryTimes(root, user) {
   }
   return { t, exact: false, by };
 }
+// ==== Edit what the fighter carries (Current Run tab) ====
+// The fighter in the run carries Kill Coins, SPLithium and Bloodnium (chr.money / chr.spirit / chr.bloodnium). The game lets
+// a fighter carry more than the bank can hold; whatever does not fit is lost when the fighter returns, so the editor does not
+// cap these at the bank limit. It warns instead (runCarryHtml, and a Save check note). Edits are kept here, out of RAW_SAV_ROOT,
+// and written into the download by applyRunCarry (keyed to the loaded save like the other pending edits).
+const RUN_CARRY_FIELDS = [ [ 'money', 'Kill Coins' ], [ 'spirit', 'SPLithium' ], [ 'bloodnium', 'Bloodnium' ] ];
+// Only a typo guard: the game's own numbers are 32-bit, and nothing near this is useful. Bloodnium uses the game's own maximum.
+const RUN_CARRY_MAX = 999999999;
+let RUN_CARRY = { root: null, edits: {} };
+function runCarrySync() { if (RUN_CARRY.root !== RAW_SAV_ROOT) RUN_CARRY = { root: RAW_SAV_ROOT, edits: {} }; return RUN_CARRY; }
+function runCarryMax(key) { return key === 'bloodnium' ? bloodniumMax() : RUN_CARRY_MAX; }
+// The fighter in the run (state USE) in a save root, or null. soul.chr.chrs is a list or an object keyed by the main uid.
+function runFighterOf(root) {
+  const s = root && root.soul;
+  if (!s) return null;
+  const uid = String(RAW_SAV_MAIN_UID || (root.user && root.user.uid) || '');
+  const cl = s.chr && s.chr.chrs, list = Array.isArray(cl) ? cl : cl && typeof cl === 'object' ? arr(cl[uid]) : [];
+  return list.find(x => x && x.state === 'USE') || null;
+}
+// Carried amounts can be edited only in a proper saved run, or a crashed run that Rewind has put back on a boss floor;
+// never when End the run is ticked (the coins go to the bank then), without a run, or on a crash nothing has fixed yet.
+function runCarryActive() {
+  const r = RAW_SAV_ROOT, s = r && r.soul;
+  if (!s || !s.pause) return false;
+  if (RUN_END.root === r && RUN_END.on) return false;
+  if (/_CRASH$/.test(String(s.pause)) && !(REWIND.root === r && REWIND.on)) return false;
+  return !!runFighterOf(r);
+}
+// What the fighter will carry in the download: {money, spirit, bloodnium, edited:{...}} (the edits count only while editing is active).
+function runCarryEffective(c) {
+  const num = v => Number(v) || 0, e = runCarrySync().edits, on = runCarryActive();
+  const out = { money: c ? num(c.money) : 0, spirit: c ? num(c.spirit) : 0, bloodnium: c ? num(c.bloodnium) : 0, edited: {} };
+  if (on) for (const [ k ] of RUN_CARRY_FIELDS) if (e[k] != null) { out[k] = e[k]; out.edited[k] = true; }
+  return out;
+}
+// Download-pipeline step: write the edited carried amounts into the fighter in the run. Does nothing without edits or when
+// editing is not active (so End the run still banks the loaded amounts).
+function applyRunCarry(root) {
+  if (RUN_CARRY.root !== RAW_SAV_ROOT || !root || !Object.keys(RUN_CARRY.edits).length || !runCarryActive()) return root;
+  const c = runFighterOf(root);
+  if (!c) return root;
+  for (const [ k ] of RUN_CARRY_FIELDS) if (RUN_CARRY.edits[k] != null) c[k] = RUN_CARRY.edits[k];
+  return root;
+}
+// Text of the loss warning for one currency row of runBanking(), or ''. who = the fighter's name.
+function runCarryWarning(r, who) {
+  if (!r || !r.lost) return '';
+  const w = escapeHtml(who), kc = r.name === 'Kill Coins', spl = r.name === 'SPLithium';
+  const store = kc ? 'Bank' : spl ? 'SPLithium tank' : 'account';
+  const levelField = kc ? 'safe_level' : 'spirit_tank_level';
+  const top = kc || spl ? bankCapacityForLevel(bankMaxLevel(levelField), levelField) : 0;
+  let t = `<b>${runN(r.lost)} would be lost</b> when ${w} returns: the ${store} holds up to ${runN(r.limit)} and has ${runN(r.bank)} in it, so it takes ${runN(Math.max(0, r.limit - r.bank))} of the ${runN(r.carried)} carried.`;
+  if ((kc || spl) && top) t += r.bank + r.carried > top ? ` Even the top level (${runN(top)}) couldn't hold all of it.` : ` Raise the ${kc ? 'Bank' : 'SPLithium tank'} level on the Account tab first to keep more.`;
+  return t;
+}
+// The "carried" editor: three number boxes with the loss warning under each. '' when editing is not active.
+function runCarryHtml(d, bk) {
+  if (!runCarryActive()) return '';
+  const inp = 'background:var(--bg); border:1px solid var(--panel-border); color:var(--text); padding:7px 8px; font-family:var(--mono); width:100%;';
+  const byName = {}; for (const r of bk) byName[r.name] = r;
+  const cells = RUN_CARRY_FIELDS.map(([ k, label ]) => {
+    const loaded = k === 'money' ? d.money : k === 'spirit' ? d.splCarried : d.blood, now = k === 'money' ? d.cMoney : k === 'spirit' ? d.cSpirit : d.cBlood;
+    const warn = runCarryWarning(byName[label], d.who);
+    return `<div class="field"><label>${label} carried</label><input type="text" inputmode="numeric" data-run-carry="${k}" value="${runN(now)}" style="${inp}">
+      <div class="capNote" style="margin:4px 0 0;">${d.edited[k] ? `Edited. As loaded: ${runN(loaded)}` : `As loaded: ${runN(loaded)}`}${d.edited[k] ? ` <button class="subtle" data-run-carry-reset="${k}" style="padding:1px 8px;">Reset</button>` : ''}</div>
+      ${warn ? `<div class="warnNote" style="margin:6px 0 0;">${warn}</div>` : ''}</div>`;
+  }).join('');
+  return `<h3>Edit what ${escapeHtml(d.who)} carries</h3><div class="capNote" style="margin-top:0;">What the fighter is carrying in this run. The game lets a fighter carry more than the bank holds, but whatever doesn't fit is <b>lost when the fighter returns</b>, so each box warns you instead of stopping you. Changes go into the save when you download it.</div><div class="grid" style="margin-bottom:6px;">${cells}</div>`;
+}
+// Wires the carried boxes: digits only (commas allowed), junk puts the old value back, over the typo guard is clamped.
+function wireRunCarry() {
+  document.querySelectorAll('[data-run-carry]').forEach(inp => inp.addEventListener('change', () => {
+    const k = inp.dataset.runCarry, c = runFighterOf(RAW_SAV_ROOT), cur = runCarryEffective(c)[k];
+    const txt = inp.value.replace(/[,\s]/g, '');
+    let v = /^\d+$/.test(txt) ? parseInt(txt, 10) : NaN;
+    if (isNaN(v)) { inp.value = runN(cur); toast('Numbers only (0 or more). Value unchanged.', true); return; }
+    const mx = runCarryMax(k);
+    if (v > mx) { v = mx; toast(`Clamped to ${mx.toLocaleString()}`); }
+    const e = runCarrySync().edits, loaded = Number(c && c[k]) || 0;
+    if (v === loaded) delete e[k]; else e[k] = v;
+    runSaveCheck(); renderAll();
+  }));
+  document.querySelectorAll('[data-run-carry-reset]').forEach(b => b.addEventListener('click', () => { delete runCarrySync().edits[b.dataset.runCarryReset]; runSaveCheck(); renderAll(); }));
+}
+
 // Collect everything the Current Run tab shows from RAW_SAV_ROOT (never the friendlier SAVE copy).
 // Returns null when the save is not mid-run (no soul.pause). Otherwise a flat summary object: fighter,
 // floor/position, earnings, times, account deltas (bank/SPLithium/Bloodnium now vs at run start),
@@ -62,8 +147,10 @@ function runData() {
   if (!s || !s.pause) return null;
   const uid = String(RAW_SAV_MAIN_UID || (root.user && root.user.uid) || '');
   // the active fighter is the one whose state is 'USE'
-  const cl = s.chr && s.chr.chrs, list = Array.isArray(cl) ? cl : cl && typeof cl === 'object' ? arr(cl[uid]) : [];
-  const c = list.find(x => x && x.state === 'USE') || null;
+  const c = runFighterOf(root);
+  // the bank numbers come from the editor's live save, so a Bank level raised on the Account tab shows here straight away
+  const lv = (SAVE && SAVE.soul) || s, live = k => (lv[k] != null ? lv[k] : s[k]);
+  const eff = runCarryEffective(c);
   let br = {};
   // Stored as a JSON string by the game; a malformed one must not break the whole tab, so fall back to empty.
   try { br = JSON.parse((c && c.bloodnium_result) || '{}') || {}; } catch (e) {}
@@ -97,13 +184,15 @@ function runData() {
     name: c ? c.name || '' : '', cls: c ? [ c.type, c.grade != null ? 'Grade ' + c.grade : '', c.limit_break ? 'LB ' + c.limit_break : '' ].filter(Boolean).join(' · ') : '',
     pause: s.pause, crashed: /_CRASH$/.test(s.pause), where, stage: s.stgid || '', flrid: s.flrid || '',
     deepest: maxF ? maxF.no + 'F' : br.max_floor_id || '', money: c ? num(c.money) : 0, blood: c ? num(c.bloodnium) : 0,
+    // what the fighter will carry in the download (the edited amounts, or the loaded ones); money / blood / splCarried stay as loaded
+    cMoney: eff.money, cSpirit: eff.spirit, cBlood: eff.bloodnium, edited: eff.edited, who: c ? c.name || 'the fighter' : 'the fighter',
     bloodFloors: num(br.bloodnium), bloodMsr: num(br.msr_bloodnium), enemies: num(br.enemy_count),
     // The first floor may lack a time, so use the first floor that has one.
     began: floors.length ? floors[0].entered || (floors.find(x => x.entered) || {}).entered || 0 : 0, beganExact: et.exact, started: num(br.start_time), elapsed: num(br.elapsed_time), floorStart: num(s.area_start_time),
     exp: c ? num(c.gain_exp) - num(c.start_exp) : 0, expNow: c ? num(c.gain_exp) : 0, hp: c ? num(c.hp) : 0,
-    bank: num(s.free_money), bankStart: num(s.replica_money), spl: num(s.spirit), splStart: num(s.replica_spirit),
-    bp: num(s.bloodnium_point), bpStart: num(s.replica_bloodnium_point), bankCap: bankCapacityForLevel(s.safe_level != null ? s.safe_level : 1),
-    splCarried: c ? num(c.spirit) : 0, splCap: bankCapacityForLevel(s.spirit_tank_level != null ? s.spirit_tank_level : 1, 'spirit_tank_level'), bloodCap: bloodniumMax(),
+    bank: num(live('free_money')), bankStart: num(s.replica_money), spl: num(live('spirit')), splStart: num(s.replica_spirit),
+    bp: num(live('bloodnium_point')), bpStart: num(s.replica_bloodnium_point), bankCap: bankCapacityForLevel(live('safe_level') != null ? live('safe_level') : 1),
+    splCarried: c ? num(c.spirit) : 0, splCap: bankCapacityForLevel(live('spirit_tank_level') != null ? live('spirit_tank_level') : 1, 'spirit_tank_level'), bloodCap: bloodniumMax(),
     fsc, floors, owners, made: Object.values(owners).reduce((a, b) => a + b, 0), upcoming: arr(s.hvntrinfo),
     pos: [ s.pause_x, s.pause_y, s.pause_z ].map(v => Math.round(num(v))).join(', ')
   };
@@ -131,8 +220,8 @@ const runN = v => Number(v || 0).toLocaleString();
 // carries some. A limit of 0 means the level table is missing from masters.db, so the limit and room are unknown.
 function runBanking(d) {
   const row = (name, bank, carried, limit) => { const after = bank + carried; return { name, bank, carried, after, limit, room: limit ? Math.max(0, limit - after) : 0, lost: limit ? Math.max(0, after - limit) : 0 }; };
-  const R = [ row('Kill Coins', d.bank, d.money, d.bankCap), row('Bloodnium', d.bp, d.blood, d.bloodCap) ];
-  if (d.splCarried > 0) R.splice(1, 0, row('SPLithium', d.spl, d.splCarried, d.splCap));
+  const R = [ row('Kill Coins', d.bank, d.cMoney, d.bankCap), row('Bloodnium', d.bp, d.cBlood, d.bloodCap) ];
+  if (d.cSpirit > 0 || d.splCarried > 0) R.splice(1, 0, row('SPLithium', d.spl, d.cSpirit, d.splCap));
   return R;
 }
 // How fast the run is earning, from its play time (breaks are not counted: the save only records time played). Returns
@@ -161,7 +250,9 @@ function runRows(d) {
   add('Where', 'Floor', d.where); add('Where', 'State', d.crashed ? `Closed without pausing (${d.pause})` : `Paused (${d.pause})`);
   add('Where', 'Deepest floor this run', d.deepest); add('Where', 'Floors visited', d.floors.length);
   add('Where', 'Position', d.pos);
-  add('Earned', 'Kill Coins carried', d.money); add('Earned', 'Bloodnium carried', d.blood);
+  add('Earned', 'Kill Coins carried', d.cMoney); add('Earned', 'Bloodnium carried', d.cBlood);
+  if (d.cSpirit > 0 || d.splCarried > 0) add('Earned', 'SPLithium carried', d.cSpirit);
+  if (d.edited.money || d.edited.spirit || d.edited.bloodnium) add('Earned', 'Carried amounts edited (as loaded)', `Kill Coins ${d.money}, SPLithium ${d.splCarried}, Bloodnium ${d.blood}`);
   add('Earned', 'Bloodnium from floors and kills', d.bloodFloors); add('Earned', 'Bloodnium from mushrooms', d.bloodMsr);
   add('Earned', 'Enemies killed', d.enemies); add('Earned', 'EXP gained', d.exp);
   add('Time', 'Play time in the run', runDur(d.elapsed)); add('Time', d.beganExact ? 'Run began (first floor entered)' : 'Run began (about)', d.began ? dtFmt(d.began) : ''); add('Time', 'Run last started or resumed', d.started ? dtFmt(d.started) : '');
@@ -455,7 +546,7 @@ function runCsv(d) {
 // Section shell for the Current Run tab; renderRun fills #run-body.
 function blockRun() {
   return `<section class="block">
-    <div class="block-head"><div><div class="eyebrow">Read only</div><h2>Current Run</h2></div></div>
+    <div class="block-head"><div><div class="eyebrow">In your run</div><h2>Current Run</h2></div></div>
     <div class="block-body"><div class="toolbar" style="margin-bottom:10px;"><button class="action" id="run-csv">Export to CSV</button><span class="capNote" style="margin:0;">Everything on this tab, the map rewards and every floor visited, as a spreadsheet file.</span></div><div id="run-body" class="run"></div></div>
   </section>`;
 }
@@ -471,14 +562,15 @@ function renderRun() {
     <span class="runBadge ${d.crashed ? 'bad' : 'ok'}">${d.crashed ? 'Closed without pausing' : 'Paused'}</span>${d.cls ? `<span class="runWhere" style="font-size:13px;">${escapeHtml(d.cls)}</span>` : ''}</div>`;
   h += `<div class="runTiles">
     ${tile('Floor', escapeHtml(d.where.match(/(\d+)F/) ? d.where.match(/(\d+)F/)[1] + 'F' : '—'), `deepest ${escapeHtml(d.deepest || '—')} · ${runN(d.floors.length)} floors visited`, '#1fb5ad')}
-    ${tile('Kill Coins carried', runN(d.money), `Bank ${runN(d.bank)} of ${runN(d.bankCap)}`, '#e0b341')}
-    ${tile('Bloodnium carried', runN(d.blood), `${runN(d.bloodFloors)} floors/kills · ${runN(d.bloodMsr)} mushrooms`, '#c0392b')}
+    ${tile('Kill Coins carried', runN(d.cMoney), d.edited.money ? `edited, was ${runN(d.money)}` : `Bank ${runN(d.bank)} of ${runN(d.bankCap)}`, '#e0b341')}
+    ${tile('Bloodnium carried', runN(d.cBlood), d.edited.bloodnium ? `edited, was ${runN(d.blood)}` : `${runN(d.bloodFloors)} floors/kills · ${runN(d.bloodMsr)} mushrooms`, '#c0392b')}
     ${tile('Enemies killed', runN(d.enemies), '', '#8e6bd6')}
     ${tile('Play time in run', runDur(d.elapsed), d.began ? 'began ' + escapeHtml(dtFmt(d.began)) : d.started ? 'resumed ' + escapeHtml(dtFmt(d.started)) : '', '#4f8fd6')}
     ${tile('EXP gained', runN(d.exp), `now ${runN(d.expNow)}`, '#4fb37a')}
     ${tile('Force-closes', runN(d.fsc), d.fsc >= 3 ? '<span class="down">Bloodnium penalty</span>' : 'no penalty', d.fsc >= 3 ? '#d6392c' : '#666')}
   </div>`;
   const bk = runBanking(d), rt = runRates(d), chg = runBankChanges(d);
+  h += runCarryHtml(d, bk);
   h += `<h3>If you bank this run</h3><table class="runTable"><thead><tr><th></th><th style="text-align:right;">In the bank</th><th style="text-align:right;">Carried</th><th style="text-align:right;">After banking</th><th style="text-align:right;">Limit</th><th style="text-align:right;">Room left</th></tr></thead><tbody>
     ${bk.map(r => `<tr><td>${r.name}</td><td class="n">${runN(r.bank)}</td><td class="n">${runN(r.carried)}</td><td class="n">${r.lost ? `<span class="down">${runN(r.after)}</span>` : runN(r.after)}</td><td class="n">${r.limit ? runN(r.limit) : '<span class="muted">—</span>'}</td><td class="n">${r.lost ? `<span class="down">${runN(r.lost)} would be lost</span>` : r.limit ? runN(r.room) : '<span class="muted">—</span>'}</td></tr>`).join('')}
   </tbody></table>${chg ? `<p class="muted" style="margin:6px 0 0;">Changed since the run started: ${escapeHtml(chg)}</p>` : ''}`;
@@ -503,6 +595,7 @@ function renderRun() {
   h += `<details class="subDetails" style="margin-top:16px;"><summary>▸ Floors visited (${d.floors.length})</summary><div class="subDetailsBody"><p class="muted" style="margin:0 0 8px;">Enemy spots = where regular enemies / zombie (Hater) fighters can appear on that floor, from the floor's saved layout. The save does not record kills per floor.</p><table class="runTable"><thead><tr><th>#</th><th>Floor</th><th>Map used</th><th>Entered this run</th><th style="text-align:right;" title="Places where enemies can appear on the floor, from its saved layout: regular enemies / zombies (Hater fighters). Not a kill count.">Enemy spots</th>${hasHaters ? '<th style="text-align:right;">Haters</th>' : ''}<th>First ever cleared</th></tr></thead><tbody>${d.floors.slice().reverse().map(x => `<tr><td class="muted">${x.n}</td><td>${escapeHtml(x.label)}${x.boss ? ' <span class="runBadge ok" style="font-size:10.5px; padding:1px 7px;">boss</span>' : ''}</td><td class="muted">${escapeHtml(x.ref)}</td><td>${x.entered ? escapeHtml(dtFmt(x.entered)) : '<span class="muted">—</span>'}</td><td class="n">${x.spots ? `${x.spots.zako} / ${x.spots.zmb}` : '<span class="muted">—</span>'}</td>${hasHaters ? `<td class="n">${x.haters || '<span class="muted">0</span>'}</td>` : ''}<td class="muted">${x.cleared ? escapeHtml(dtFmt(x.cleared)) : '—'}</td></tr>`).join('')}</tbody></table></div></details>`;
   h += `<div class="capNote" style="margin-top:12px;">Read from the save as loaded. "Run began" is when the game built the run's first floor; "last started or resumed" is when it last picked the run up. "First ever cleared" is the game's record of the first time each floor was cleared, in any run. Changes made on the Location tab (moving or ending the run) apply on download and aren't shown here.</div>`;
   host.innerHTML = h;
+  wireRunCarry();
   const js = document.getElementById('run-jkl-spoil');
   // the run rewards checkbox shares the Location tab's spoiler setting (LOC_SPOIL), which also gates the CSV export
   const rs = document.getElementById('run-rwd-spoil');

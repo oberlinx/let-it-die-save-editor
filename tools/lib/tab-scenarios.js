@@ -145,6 +145,24 @@ const SCENARIOS = [
     check: () => { const s = RAW_SAV_ROOT.soul; return Number(s.free_continue_max_count) === FREE_CONT_MAX && Number(s.free_continue_count) === FREE_CONT_MAX ? '' : `free continues are ${s.free_continue_count} of ${s.free_continue_max_count} a day after the download`; }
   },
   {
+    name: 'Current Run: carried Kill Coins, SPLithium and Bloodnium',
+    tab: 'run',
+    // only on a save in a run that can be edited (a proper saved run); a crashed run or the Waiting Room has no boxes
+    applies: () => !!document.querySelector('[data-run-carry="money"]'),
+    apply: async () => {
+      const want = { money: '1,234,567', spirit: '4,321', bloodnium: '555' };
+      for (const k of Object.keys(want)) {
+        const box = document.querySelector(`[data-run-carry="${k}"]`);
+        box.value = want[k]; box.dispatchEvent(new Event('change')); await __T.sleep(40);
+      }
+      return { label: 'Kill Coins 1,234,567, SPLithium 4,321, Bloodnium 555', pending: true, allow: 'carrying more than the bank can hold' };
+    },
+    check: () => {
+      const c = runFighterOf(RAW_SAV_ROOT);
+      return c && Number(c.money) === 1234567 && Number(c.spirit) === 4321 && Number(c.bloodnium) === Math.min(555, bloodniumMax()) ? '' : `the fighter carries ${c && c.money} Kill Coins, ${c && c.spirit} SPLithium and ${c && c.bloodnium} Bloodnium after the download`;
+    }
+  },
+  {
     name: 'Stews: stack the rarity',
     tab: 'stews',
     applies: () => !!document.querySelector('[data-stew="stack"]') && arr(AP.stewOdds).length > 0,

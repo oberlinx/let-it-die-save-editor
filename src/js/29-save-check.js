@@ -567,6 +567,18 @@ function runSaveCheck() {
     });
   });
 
+  // carried currency the bank can't hold: the game lets a fighter carry more, but the excess is lost when it returns.
+  // Only for a run that can be edited (a proper saved run, or a crashed one Rewind has put on a boss floor): a crashed run has
+  // its own warning above and End the run states its own loss.
+  safe('carried over the bank', () => {
+    if (!runCarryActive()) return;
+    const d = runData();
+    if (!d) return;
+    const over = runBanking(d).filter(r => r.lost > 0);
+    if (!over.length) return;
+    add('note', `${escapeHtml(d.who)} is carrying more than the bank can hold, and the game loses what doesn't fit when the fighter returns: ${over.map(r => `${r.name} ${r.lost.toLocaleString()} (${r.carried.toLocaleString()} carried, room for ${Math.max(0, r.limit - r.bank).toLocaleString()})`).join('; ')}. Raising the Bank level on the Account tab first keeps more of it. The Current Run tab shows the numbers.`, 'run');
+  });
+
   // a run planned further ahead than the game plans it (an earlier boss floor lock wrote every remaining boss floor)
   safe('pre-planned run', () => {
     const rs = RAW_SAV_ROOT && RAW_SAV_ROOT.soul;

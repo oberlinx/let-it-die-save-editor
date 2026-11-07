@@ -275,6 +275,7 @@ function uiPending() {
   if (luckyPending()) out.push({ text: 'Lucky run planned', cancel: () => { LUCKY.seed = 0; } });
   if (RUN_END.root === r && RUN_END.on) out.push({ text: 'End the run (fighter goes home)', cancel: () => { RUN_END.on = false; } });
   if (REWIND.root === r && REWIND.on) out.push({ text: 'Rewind the run', cancel: () => { REWIND.on = false; } });
+  if (RUN_CARRY.root === r && Object.keys(RUN_CARRY.edits).length && runCarryActive()) out.push({ text: 'Carried Kill Coins / SPLithium / Bloodnium edited', cancel: () => { RUN_CARRY.edits = {}; } });
   if (FREE_CONT.root === r && FREE_CONT.on) out.push({ text: `Free continues (${FREE_CONT.perDay} a day)`, cancel: () => { FREE_CONT.on = false; } });
   return out;
 }
