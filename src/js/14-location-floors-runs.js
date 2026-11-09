@@ -546,7 +546,7 @@ function blkExtraPlanned(from) {
 // the boss choices a lock mode offers
 function blkWhichOptions(mode) {
   const m = BLK_MODES[mode];
-  if (!m) return [];
+  if (!m || m.random) return [];
   const out = [];
   for (const kind of [ 'boss', 'mboss' ]) if (m.kinds.includes(kind)) for (const n of [ 1, 2, 3, 4 ]) out.push({ v: kind + ':' + n, label: (kind === 'boss' ? 'Don ' : 'Mid-boss ') + BLK_BOSS_NAMES[kind][n] });
   return out;
@@ -558,8 +558,20 @@ const BLK_MODES = {
   don: { kinds: [ 'boss' ], fallback: [ 'mboss' ], label: 'Don only (main bosses)', noun: 'Don' },
   mboss: { kinds: [ 'mboss' ], label: 'Mid-boss only', noun: 'mid-boss' },
   pit: { kinds: [ 'pit' ], label: 'Screamer Pit only', noun: 'Screamer Pit' },
-  boss: { kinds: [ 'boss', 'mboss' ], label: 'Don or mid-boss (no Screamer Pits)', noun: 'Don or mid-boss' }
+  boss: { kinds: [ 'boss', 'mboss' ], label: 'Don or mid-boss (no Screamer Pits)', noun: 'Don or mid-boss' },
+  // random: every upcoming boss floor (planned ones too) is redrawn as a Don, a mid-boss or a Screamer Pit with even odds
+  // between the kinds the floor offers, then an even pick of that kind's arenas there (blkPickRandom), ignoring the game's weights
+  random: { kinds: [ 'boss', 'mboss', 'pit' ], random: true, label: 'Completely random: Don, mid-boss or Screamer Pit (even odds)', noun: 'boss' }
 };
+// blkPickRandom(rows): even pick of an arena kind among those in rows, then an even pick of that kind's arenas. Arenas the
+// game gives weight 0 on the floor are left out (unless all are 0), so it never picks one the game would never roll there.
+function blkPickRandom(rows) {
+  const live = rows.filter(r => Number(r.freq) > 0), pool = live.length ? live : rows;
+  const kinds = [ ...new Set(pool.map(r => blkKind(r.refareaid).kind)) ];
+  if (!kinds.length) return null;
+  const k = kinds[Math.floor(Math.random() * kinds.length)], of = pool.filter(r => blkKind(r.refareaid).kind === k);
+  return of[Math.floor(Math.random() * of.length)];
+}
 // Who each Heaven boss arena holds: master_stage_mboss puts MBOSS1-4 at the mid-boss points and STAGE_BOSS1-4 (their
 // boss-enhanced versions) at the Don points; master_mboss names them by type (hearing / sight / predation / U10), and
 // the game's quest text names them in that order: "the 3 Shock Terrors COEN, JIN-DIE, and GOTO-9, along with U-10" and
@@ -687,9 +699,9 @@ function blkPlan() {
     const oldK = old && blkKind(old.refareaid);
     // (after Reroll again, those are redrawn too: a new arena of the same kind and new rewards)
     const keep = old && (!want.length || (one ? want.some(r => r.refareaid === old.refareaid) : kinds.includes(oldK.kind)));
-    if (keep && !(BOSS_LOCK.redraw && want.length)) { items.push({ floor: f, old, entry: null, fallback }); continue; }
+    if (keep && !((mode.random || BOSS_LOCK.redraw) && want.length)) { items.push({ floor: f, old, entry: null, fallback }); continue; }
     if (!old && !BOSS_LOCK.extend) continue;
-    const r = blkPick(want.length ? want : rows);
+    const r = mode.random && want.length ? blkPickRandom(want) : blkPick(want.length ? want : rows);
     // a floor the game hasn't planned yet gets a rare (yellow on the map) Legendary Chest as often as the game gives one
     // an entry that is replaced keeps its is_rare flag so the Legendary Chest colour on the map doesn't change
     items.push({ floor: f, old, entry: r && blkEntry(f, r.refareaid, old ? Number(old.is_rare) === 1 : Math.random() < HVN_RARE_CHANCE, BOSS_LOCK.rewards, !!old), fallback, redrawn: !!keep });
@@ -752,7 +764,7 @@ function renderBossLock() {
   blkSync();
   const s = RAW_SAV_ROOT.soul || {};
   let h = `<h3 style="margin:18px 0 6px;">Lock boss floors</h3>
-    <div class="capNote" style="margin:0 0 10px;">Makes the run's upcoming Heaven boss floors all Dons, all mid-bosses or all Screamer Pits, for the rest of the run (confirmed in game). Keep a backup of your save.</div>`;
+    <div class="capNote" style="margin:0 0 10px;">Makes the run's upcoming Heaven boss floors all Dons, all mid-bosses or all Screamer Pits, for the rest of the run (confirmed in game), or completely random. Keep a backup of your save.</div>`;
   if (!s.pause || s.stgid !== 'S_HVN') { host.innerHTML = h + `<div class="capNote" style="margin-top:0;">Only works on a fighter paused mid-run in Heaven (the game clears the planned boss floors between runs). Quit the game anywhere in Heaven, then load that save here.</div>`; return; }
   if (!arr(AP && AP.hvnBossAreas).length || !arr(AP && AP.hvnBossKis).length) { host.innerHTML = h + `<div class="capNote" style="margin-top:0;">This masters.db doesn't have the Heaven boss arena tables.</div>`; return; }
   if (RUN_END.root === RAW_SAV_ROOT && RUN_END.on) { host.innerHTML = h + `<div class="capNote" style="margin-top:0;">Off while the run is set to end (ending the run clears the planned boss floors).</div>`; return; }
@@ -788,7 +800,7 @@ function renderBossLock() {
       return `<tr><td>${escapeHtml(hvnFloorLabel(it.floor))}</td><td>${it.old ? escapeHtml(was) + (beyond.has(it.floor.id) ? preplanTag() : '') : was}</td><td>${now}</td><td>${p.rewards === 'hidden' ? '<span class="id">hidden (spoiler free)</span>' : blkRewardText(it.entry || it.old, nm)}</td></tr>`;
     }).join('');
     h += '</tbody></table>';
-    h += `<div class="capNote">Not changed: the floor you're on (already built), NEO map B floors (one fixed arena), and${p.redraw ? '' : ' (until you press Reroll again)'} planned floors that are already ${escapeHtml(BLK_MODES[p.mode].noun)} floors.${p.mode === 'don' ? ' Regular Heaven has no Dons below 100F (the game only offers a mid-boss or a Screamer Pit there), so those floors become mid-boss floors.' : ''}${p.mode === 'don' || p.mode === 'boss' ? ' Dons have no boss drop: their floors get a Legendary Chest and three large chests, as the game writes them.' : ''}${from !== s.flrid ? ' Applied after the floor move above, so it replaces the moved floors\' rerolled rewards.' : ''} Floors the game hadn't planned get a Legendary Chest that's rare (yellow on the map) as often as the game makes one.</div>`;
+    h += `<div class="capNote">Not changed: the floor you're on (already built), NEO map B floors (one fixed arena)${BLK_MODES[p.mode].random ? '.' : `, and${p.redraw ? '' : ' (until you press Reroll again)'} planned floors that are already ${escapeHtml(BLK_MODES[p.mode].noun)} floors.`}${BLK_MODES[p.mode].random ? ' Completely random: every other boss floor, planned ones included, is drawn again as a Don, a mid-boss or a Screamer Pit with even odds between the kinds that floor offers (the game\'s own odds are ignored). Regular Heaven has no Dons below 100F, so those floors are a mid-boss or a Screamer Pit, each half the time. Each arena is one the game itself uses on that floor.' : ''}${p.mode === 'don' ? ' Regular Heaven has no Dons below 100F (the game only offers a mid-boss or a Screamer Pit there), so those floors become mid-boss floors.' : ''}${p.mode === 'don' || p.mode === 'boss' || p.mode === 'random' ? ' Dons have no boss drop: their floors get a Legendary Chest and three large chests, as the game writes them.' : ''}${from !== s.flrid ? ' Applied after the floor move above, so it replaces the moved floors\' rerolled rewards.' : ''} Floors the game hadn't planned get a Legendary Chest that's rare (yellow on the map) as often as the game makes one.</div>`;
     if (p.items.some(it => /_KIS_RUSH/.test((arr(AP.hvnBossKis).find(r => r.areaid === (it.entry || it.old || {}).refareaid) || {}).kis || ''))) h += `<div class="capNote">Screamer Pit chests (treasure enemies) can hold any faction's metal, on every route: the game's own pit table mixes all four (a W.E pit can drop D.O.D. ARMS, Candle Wolf or M.I.L.K. metal). The large boxes, featured reward and boss drop stay the route's own faction.</div>`;
   }
   host.innerHTML = h;

@@ -46,6 +46,27 @@ const SCENARIOS = [
     }
   },
   {
+    name: 'Boss floor lock (completely random, every remaining floor)',
+    applies: ed => { const s = ed.run('RAW_SAV_ROOT.soul'); return !!(s && s.pause && s.stgid === 'S_HVN' && ed.run('AP').hvnBossAreas && ed.run('AP').hvnBossAreas.length); },
+    apply(ed) {
+      ed.run('blkSync()');
+      const B = ed.run('BOSS_LOCK');
+      B.mode = 'random'; B.which = ''; B.extend = true; B.rewards = 'roll'; B.plan = null;
+      const p = ed.run('blkPlanFresh()');
+      const want = p ? p.items.filter(it => it.entry).map(it => ({ id: it.floor.id, ref: it.entry.refareaid })) : [];
+      // every arena written must be one the game itself offers on that floor
+      const areas = ed.run('AP').hvnBossAreas;
+      const bad = want.filter(w => !areas.some(r => r.flrid === w.id && r.refareaid === w.ref));
+      return { label: `${want.length} floor${want.length === 1 ? '' : 's'} written`, want, bad, skip: !want.length && 'nothing to write' };
+    },
+    check(ctx, built) {
+      if (ctx.bad.length) return `${ctx.bad.length} floor${ctx.bad.length === 1 ? ' got an arena' : 's got arenas'} the game doesn't use there (first ${ctx.bad[0].id})`;
+      const L = hvnList(built);
+      const miss = ctx.want.filter(w => !L.some(e => e.flrid === w.id && e.refareaid === w.ref));
+      return miss.length ? `${miss.length} planned floor${miss.length === 1 ? ' is' : 's are'} missing from the download (first ${miss[0].id})` : '';
+    }
+  },
+  {
     name: 'Remove pre-planned floors',
     applies: ed => { const s = ed.run('RAW_SAV_ROOT.soul'); return !!(s && s.pause && s.stgid === 'S_HVN') && ed.run('blkExtraPlanned(blkFrom())').length > 0; },
     apply(ed) {
