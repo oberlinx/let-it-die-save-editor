@@ -12,6 +12,11 @@ When you test one in game, keep a backup of your save, then note the date, the s
 | Defense lineup, alarm and kidnap protection edits | Defense tab | Defenders are on defense in game, the alarm works, and kidnap protection holds | `31-compare-and-copy.js` ("Not yet confirmed in game") |
 | Adding new Death Boxes | Death Boxes tab | New boxes appear and open with what was set | `27-lost-bags-death-boxes.js` |
 | Holding more than 3 quests at once | Quests tab | All of them track progress and pay out | `12-quests.js` |
+| Boss floor lock: Completely random | Location tab | Every upcoming boss floor is a Don, mid-boss or Screamer Pit as drawn, and the run plays them | `14-location-floors-runs.js` |
+| Stews: Rebalance (pity) | Stews tab | After Apply, the next stews follow the preview: good pulls, top pulls and NEW decals at the spacing set | `25-stews.js` |
+| Restroom: releasing a prisoner while lowering the size | Account tab, Restroom | Lowering the size over a cell with a prisoner and choosing to release it first frees them and shows the smaller restroom | `38-restroom.js` |
+| Carried SPLithium edit | Current Run tab | The fighter starts the run with the SPLithium you set (Kill Coins and Bloodnium are confirmed) | `18-current-run.js` |
+| Carried amounts on a crashed run put back on a boss floor | Current Run tab with Location's rewind | The rewound run loads with the edited Kill Coins, SPLithium and Bloodnium | `18-current-run.js` |
 
 ## Confirmed in game
 
@@ -29,6 +34,10 @@ When you test one in game, keep a backup of your save, then note the date, the s
 | Jackal loot | 2026-10-08 | Holds only until the game builds the next floor |
 | Taking, completing and dropping quests | yes | Progress counts and rewards pay out |
 | Free Continues per day | yes | |
+| Edit the Kill Coins and Bloodnium a fighter carries in a saved run | 2026-11-07 | A save paused on an 80F boss floor with 5,000,000 Kill Coins and 99,999 Bloodnium carried loaded fine. On return the bank filled to about its 2.5 million limit and the rest was lost, which is what the editor's warning says |
+| Store purchases left refill (Current Run tab) | 2026-11-11 | A save with 2 of 3 store purchases left, set to 3 with the editor, showed 3/3 in the store. The count is the save flag `SGF_PRAR_RESEARCH_BUYABLE_COUNT` (gameflg) |
+| Restroom size 1-6 | 2026-10-26 | Lowering 6 to 1 and back up with the dropdown worked |
+| Release a prisoner | 2026-10-26 | A save with three prisoners: the game released all three with no error |
 | Rewards tab: ammo values (loaded and spare) | yes | Checked by claiming test rewards |
 | Mystery Bags order (the game takes the first entry) | yes | |
 | Funshots counted twice by the game's one-time setup | seen in game | Why the Save check warns before that setup has run |
