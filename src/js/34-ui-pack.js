@@ -276,6 +276,7 @@ function uiPending() {
   if (RUN_END.root === r && RUN_END.on) out.push({ text: 'End the run (fighter goes home)', cancel: () => { RUN_END.on = false; } });
   if (REWIND.root === r && REWIND.on) out.push({ text: 'Rewind the run', cancel: () => { REWIND.on = false; } });
   if (RUN_CARRY.root === r && Object.keys(RUN_CARRY.edits).length && runCarryActive()) out.push({ text: 'Carried Kill Coins / SPLithium / Bloodnium edited', cancel: () => { RUN_CARRY.edits = {}; } });
+  if (STORE_REFILL.root === r && STORE_REFILL.on && runStoreActive()) out.push({ text: `Store refilled to ${STORE_MAX} purchases`, cancel: () => { STORE_REFILL.on = false; } });
   if (FREE_CONT.root === r && FREE_CONT.on) out.push({ text: `Free continues (${FREE_CONT.perDay} a day)`, cancel: () => { FREE_CONT.on = false; } });
   return out;
 }

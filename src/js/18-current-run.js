@@ -136,6 +136,46 @@ function wireRunCarry() {
   document.querySelectorAll('[data-run-carry-reset]').forEach(b => b.addEventListener('click', () => { delete runCarrySync().edits[b.dataset.runCarryReset]; runSaveCheck(); renderAll(); }));
 }
 
+// ==== Store purchases left (Current Run tab) ====
+// The weapon and armor store allows 3 purchases and fills up again by itself every 5 floors after a boss. The game keeps the
+// number of purchases LEFT in gameflg.sv SGF_PRAR_RESEARCH_BUYABLE_COUNT (3 = full, 0 = locked). CONFIRMED IN GAME: putting it
+// back to 3 gave 3/3 in the store. For a run that has used its 3 before the next refill: pause at a solo shelter, load the save
+// here, tick Refill, download. The edit is kept here, out of RAW_SAV_ROOT, and written by applyStoreRefill at download.
+const STORE_VAR = 'SGF_PRAR_RESEARCH_BUYABLE_COUNT', STORE_MAX = 3;
+let STORE_REFILL = { root: null, on: false };
+function storeRefillSync() { if (STORE_REFILL.root !== RAW_SAV_ROOT) STORE_REFILL = { root: RAW_SAV_ROOT, on: false }; return STORE_REFILL; }
+// the flag entry in a save root, or null (a save that never used the store has none, and then nothing is shown)
+function storeEntry(root) { const sv = root && root.gameflg && root.gameflg.sv; return Array.isArray(sv) ? sv.find(x => x && x.var === STORE_VAR) || null : null; }
+function storeLeft(root) { const e = storeEntry(root); return e ? Math.max(0, Math.min(STORE_MAX, Number(e.value) || 0)) : null; }
+// Like the carried boxes: a proper saved run, or a crashed run that Rewind has put back on a boss floor (End the run does not matter here).
+function runStoreActive() {
+  const r = RAW_SAV_ROOT, s = r && r.soul;
+  if (!s || !s.pause || !storeEntry(r)) return false;
+  return !(/_CRASH$/.test(String(s.pause)) && !(REWIND.root === r && REWIND.on));
+}
+// Download-pipeline step: set the purchases-left flag back to 3 (value and modified time), only when ticked and below 3.
+function applyStoreRefill(root) {
+  if (STORE_REFILL.root !== RAW_SAV_ROOT || !STORE_REFILL.on || !root || !runStoreActive()) return root;
+  const e = storeEntry(root);
+  if (e && Number(e.value) < STORE_MAX) { e.value = STORE_MAX; e.modified = Math.floor(Date.now() / 1e3); }
+  return root;
+}
+function runStoreHtml() {
+  if (!runStoreActive()) return '';
+  const left = storeLeft(RAW_SAV_ROOT), on = storeRefillSync().on;
+  const full = left >= STORE_MAX && !on;
+  let ctl = '';
+  if (on) ctl = `<span class="runBadge ok">Will be ${STORE_MAX} of ${STORE_MAX} after download</span> <button class="subtle" data-run-store-reset style="padding:1px 8px;">Undo</button>`;
+  else if (full) ctl = '<span class="muted">The store is full, nothing to refill.</span>';
+  else ctl = `<button class="action" data-run-store-refill>Refill the store to ${STORE_MAX} purchases</button>`;
+  return `<h3>Store purchases left</h3><div class="capNote" style="margin-top:0;">The weapon and armor store allows ${STORE_MAX} purchases and fills up again by itself every 5 floors after a boss. If this run has used its ${STORE_MAX} and you don't want to wait, pause at a solo shelter, load the save here, refill, download and put it back (confirmed in game).</div>
+    <div class="field"><label>In the store now</label><div style="font-family:var(--mono); font-size:15px; margin:4px 0;">${on ? STORE_MAX : left} of ${STORE_MAX} purchases left${on ? ` <span class="muted">(was ${left})</span>` : ''}</div>${ctl}</div>`;
+}
+function wireRunStore() {
+  document.querySelectorAll('[data-run-store-refill]').forEach(b => b.addEventListener('click', () => { storeRefillSync().on = true; renderAll(); }));
+  document.querySelectorAll('[data-run-store-reset]').forEach(b => b.addEventListener('click', () => { storeRefillSync().on = false; renderAll(); }));
+}
+
 // Collect everything the Current Run tab shows from RAW_SAV_ROOT (never the friendlier SAVE copy).
 // Returns null when the save is not mid-run (no soul.pause). Otherwise a flat summary object: fighter,
 // floor/position, earnings, times, account deltas (bank/SPLithium/Bloodnium now vs at run start),
@@ -571,6 +611,7 @@ function renderRun() {
   </div>`;
   const bk = runBanking(d), rt = runRates(d), chg = runBankChanges(d);
   h += runCarryHtml(d, bk);
+  h += runStoreHtml();
   h += `<h3>If you bank this run</h3><table class="runTable"><thead><tr><th></th><th style="text-align:right;">In the bank</th><th style="text-align:right;">Carried</th><th style="text-align:right;">After banking</th><th style="text-align:right;">Limit</th><th style="text-align:right;">Room left</th></tr></thead><tbody>
     ${bk.map(r => `<tr><td>${r.name}</td><td class="n">${runN(r.bank)}</td><td class="n">${runN(r.carried)}</td><td class="n">${r.lost ? `<span class="down">${runN(r.after)}</span>` : runN(r.after)}</td><td class="n">${r.limit ? runN(r.limit) : '<span class="muted">—</span>'}</td><td class="n">${r.lost ? `<span class="down">${runN(r.lost)} would be lost</span>` : r.limit ? runN(r.room) : '<span class="muted">—</span>'}</td></tr>`).join('')}
   </tbody></table>${chg ? `<p class="muted" style="margin:6px 0 0;">Changed since the run started: ${escapeHtml(chg)}</p>` : ''}`;
@@ -596,6 +637,7 @@ function renderRun() {
   h += `<div class="capNote" style="margin-top:12px;">Read from the save as loaded. "Run began" is when the game built the run's first floor; "last started or resumed" is when it last picked the run up. "First ever cleared" is the game's record of the first time each floor was cleared, in any run. Changes made on the Location tab (moving or ending the run) apply on download and aren't shown here.</div>`;
   host.innerHTML = h;
   wireRunCarry();
+  wireRunStore();
   const js = document.getElementById('run-jkl-spoil');
   // the run rewards checkbox shares the Location tab's spoiler setting (LOC_SPOIL), which also gates the CSV export
   const rs = document.getElementById('run-rwd-spoil');

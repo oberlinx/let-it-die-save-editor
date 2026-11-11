@@ -163,6 +163,14 @@ const SCENARIOS = [
     }
   },
   {
+    name: 'Current Run: refill the store purchases',
+    tab: 'run',
+    // only on a run whose store has purchases used (the box is a button only below 3 of 3)
+    applies: () => !!document.querySelector('[data-run-store-refill]'),
+    apply: async () => { document.querySelector('[data-run-store-refill]').click(); await __T.sleep(40); return { label: 'store refilled to 3', pending: true }; },
+    check: () => storeLeft(RAW_SAV_ROOT) === 3 ? '' : `the store shows ${storeLeft(RAW_SAV_ROOT)} purchases left after the download`
+  },
+  {
     name: 'Stews: stack the rarity',
     tab: 'stews',
     applies: () => !!document.querySelector('[data-stew="stack"]') && arr(AP.stewOdds).length > 0,
